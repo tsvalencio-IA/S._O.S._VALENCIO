@@ -2312,6 +2312,27 @@
     const valorComissao = percentualComissao == null
       ? null
       : +(baseComissao * (percentualComissao / 100)).toFixed(2);
+    // Pagamentos reais vêm do módulo transacional. Comissão calculada não comprova quitação.
+    const controleComissao = podeVerValores && typeof W.thiaComissoesResumoV26 === 'function'
+      ? W.thiaComissoesResumoV26(func.id || func.uid) : null;
+    const idsAtendimento = new Set(lista.map(item => String(item.os?.id || '')));
+    const comissoesPeriodo = (controleComissao?.linhas || [])
+      .filter(l => idsAtendimento.has(String(l.osId || '')));
+    const somaComissao = campo => +(comissoesPeriodo.reduce((s,l) => s + num(l[campo] ?? 0), 0)).toFixed(2);
+    const pagoComissaoPeriodo = somaComissao('pago');
+    const previstoComissaoPeriodo = somaComissao('previsto');
+    const faltaComissaoPeriodo = somaComissao('falta');
+    const pendenteLiberado = +comissoesPeriodo.filter(l => !l.aguardandoExecucao && !l.semPercentual)
+      .reduce((s,l) => s + num(l.falta), 0).toFixed(2);
+    const relatorioPagamentos = controleComissao
+      ? `<br><strong>Pagamentos registrados para as O.S. acima (módulo de comissões):</strong>`+
+        `<br>- Comissões previstas: ${moeda(previstoComissaoPeriodo)}`+
+        `<br>- Comissões efetivamente pagas: ${moeda(pagoComissaoPeriodo)}`+
+        `<br>- Saldo pendente total: ${moeda(faltaComissaoPeriodo)}`+
+        `<br>- Saldo liberado para pagamento: ${moeda(pendenteLiberado)}`+
+        (comissoesPeriodo.some(l => l.pago > .009 && l.falta > .009)
+          ? '<br>- Existem pagamentos parciais; NÃO está tudo quitado.' : '')
+      : '<br><small>Histórico de pagamento não disponível neste contexto; comissão calculada não comprova pagamento.</small>';
     const resumoComissao = podeVerValores ? [
       '<br><strong>Resumo para comiss&atilde;o:</strong>',
       `<br>- M&atilde;o de obra com execu&ccedil;&atilde;o confirmada: <strong>${moeda(totalConfirmado)}</strong>`,
@@ -2351,6 +2372,7 @@
         `<strong>Resumo de ${esc(nome)} ${periodoTitulo}:</strong>`,
         linhasResumo.join('<br><br>'),
         resumoValores,
+        podeVerValores ? relatorioPagamentos : '',
         podeVerValores ? acaoPagamentoComissaoIA(func, lista.map(item => item.os?.id).filter(Boolean)) : ''
       ].join('<br>');
     }
@@ -2359,6 +2381,7 @@
       `${lista.length} O.S. em ${veiculosUnicos.size} ve&iacute;culo(s).`,
       linhas.join('<br><br>'),
       resumoComissao,
+      podeVerValores ? relatorioPagamentos : '',
       '<br><small>Crit&eacute;rio operacional: quando existe per&iacute;odo informado, s&oacute; entram O.S. com evid&ecirc;ncia datada do mec&acirc;nico naquele intervalo (servi&ccedil;o inclu&iacute;do/atribu&iacute;do, execu&ccedil;&atilde;o registrada ou responsabilidade de Cliente Oficial). Edi&ccedil;&atilde;o gen&eacute;rica, mudan&ccedil;a de status ou simples autoria de evento n&atilde;o contam como atendimento. Sem per&iacute;odo, o hist&oacute;rico legado continua dispon&iacute;vel. A libera&ccedil;&atilde;o de comiss&atilde;o permanece separada.</small>'
     ].join('<br>');
   }
