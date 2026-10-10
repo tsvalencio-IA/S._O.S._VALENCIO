@@ -28,8 +28,10 @@ jobs:
           git -C "$RUNNER_TEMP/saas2-origem" checkout -q --detach 9aeacd0da5dfbe444e4f069f5f36e203a0738391
           test "$(git -C "$RUNNER_TEMP/saas2-origem" rev-parse HEAD^{tree})" = "3d175349a2b8c2354ab7f98e2fe3a1e6facd6989"
           git checkout -b homologacao
-          rsync -a --exclude=.git --exclude='capacitor-android/keystore/' "$RUNNER_TEMP/saas2-origem/" ./
-          rm -f .github/workflows/importar-base.yml
+          rsync -a --exclude=.git --exclude='capacitor-android/keystore/' --exclude='.github/workflows/build-apk.yml' "$RUNNER_TEMP/saas2-origem/" ./
+          mkdir -p ci-preservado
+          cp "$RUNNER_TEMP/saas2-origem/.github/workflows/build-apk.yml" ci-preservado/build-apk.yml
+          # manter o workflow importador inalterado na branch de homologacao
           cat >> .gitignore <<'EOF'
 
           # Seguranca - nunca versionar segredos e chaves de assinatura
@@ -51,8 +53,8 @@ jobs:
             exit 1
           fi
           count="$(find . -type f -not -path './.git/*' | wc -l)"
-          if [ "$count" -ne 312 ]; then
-            echo "::error::Esperados 312 arquivos apos excluir 2 sensiveis, obtidos $count."
+          if [ "$count" -ne 313 ]; then
+            echo "::error::Esperados 312 arquivos da base mais 1 workflow importador, obtidos $count."
             exit 1
           fi
           git add -A
