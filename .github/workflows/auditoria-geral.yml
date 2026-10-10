@@ -1,0 +1,95 @@
+name: Auditoria Geral - S.O.S. VALENCIO
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/auditoria-geral.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  auditoria-estatica:
+    name: Codigo, JSON, HTML, Cilia, Temparia e regressao IA
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Copia fiel da branch de homologacao
+        uses: actions/checkout@v4
+        with:
+          ref: homologacao
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Conferir integridade JavaScript da aplicacao completa
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          while IFS= read -r -d '' f; do
+            node --check "$f"
+            count=$((count+1))
+          done < <(find . -type f -name '*.js' -not -path '*/node_modules/*' -print0)
+          echo "Arquivos JS verificados: $count"
+          test "$count" -ge 100
+      - name: Conferir JSON e scripts dentro das telas
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, subprocess
+          from html.parser import HTMLParser
+          paths=pathlib.Path('.')
+          n=0
+          for p in paths.rglob('*.json'):
+            if 'node_modules' in p.parts: continue
+            json.loads(p.read_text(encoding='utf-8-sig'))
+            n+=1
+          class Scripts(HTMLParser):
+            def __init__(self):
+              super().__init__(); self.active=False; self.module=False; self.buf=''; self.items=[]
+            def handle_starttag(self, tag, attrs):
+              if tag=='script':
+                a=dict(attrs); t=a.get('type','')
+                self.active=t in ('','text/javascript','application/javascript','module')
+                self.module=t=='module'
+                self.buf=''
+            def handle_data(self,data):
+              if self.active:self.buf+=data
+            def handle_endtag(self,tag):
+              if tag=='script' and self.active:
+                if self.buf.strip():self.items.append((self.buf,self.module))
+                self.active=False
+          import tempfile
+          scripts=0
+          with tempfile.TemporaryDirectory() as d:
+            for p in paths.rglob('*.html'):
+              if 'node_modules' in p.parts: continue
+              parser=Scripts();parser.feed(p.read_text(encoding='utf-8',errors='replace'))
+              for ix,(content,module) in enumerate(parser.items):
+                out=pathlib.Path(d)/('inline.mjs' if module else 'inline.js')
+                out.write_text(content,encoding='utf-8')
+                r=subprocess.run(['node','--check',str(out)],capture_output=True,text=True)
+                if r.returncode:
+                  raise RuntimeError(f'{p} / script {ix+1}: {r.stderr[:650]}')
+                scripts+=1
+          print(f'JSON lidos: {n}; scripts HTML verificados: {scripts}')
+          assert n>=40 and scripts>=35
+          PY
+      - name: Confirmar integridade Cilia/Temparia/XLSX
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '0784a217da2b6665bfa3f878a0fc694974972e92e249fccd331792db189f5005  js/cilia.js' | sha256sum -c
+          echo '15ffb26c0a3386c1c4c7d9a76ee3b3a8d6f35f73afa42a90a5e9a350b543036a  js/cilia-api.js' | sha256sum -c
+          echo 'e2a88214b4f6e378c91da49b6804ee65c4607055e0befa7905f9435f806bef73  js/tabela-tempa.js' | sha256sum -c
+          echo 'ab6261e788984d28292518df06d1ff61b1291e8da2898a6e81753b02f5da18d5  js/exportar-pmsp.js' | sha256sum -c
+      - name: Regressao funcional simulada de pecas, NF, servicos e IA
+        shell: bash
+        run: |
+          set -euo pipefail
+          node TESTES_REGRESSAO_SOS_VALENCIO.js
+          node TESTES_IA_PERIODOS_E_FLUXOS_20261010.js
+      - name: Registrar limitacoes
+        run: |
+          echo "Estes testes NAO incluem regras Firestore publicadas, Firebase real, Cloudinary, permissao Android, pagamento bancario nem UI multiplos perfis."
+          echo "Nao publicar em producao antes dos testes integrados."
