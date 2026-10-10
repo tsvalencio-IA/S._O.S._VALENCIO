@@ -53,6 +53,15 @@ jobs:
         run: |
           chmod +x scripts/prepare-capacitor-www.sh
           ./scripts/prepare-capacitor-www.sh
+      - name: Validar arquivos novos no pacote Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp js/os.js capacitor-android/www/js/os.js
+          cmp js/operacional-cadastros-nf-fix-20260518.js capacitor-android/www/js/operacional-cadastros-nf-fix-20260518.js
+          grep -F 'if (!osSegredo177AtivoOS()) return [];' capacitor-android/www/js/os.js
+          grep -F 'os.permitirNFNoOrcamento === true' capacitor-android/www/js/operacional-cadastros-nf-fix-20260518.js
+          echo "Conteudo corrigido V5 copiado para o Android"
       - name: Dependencias Android
         working-directory: capacitor-android
         run: npm install --no-audit --no-fund
@@ -89,4 +98,4 @@ jobs:
             --target homologacao \
             --prerelease \
             --title "S.O.S. VALENCIO Android Teste #${GITHUB_RUN_NUMBER}" \
-            --notes "APK de teste com correcoes da branch homologacao (commit 75c0134e). Sintaxe e testes isolados verificados; nao representa certificacao de todas as logicas. ATENCAO: Firebase configurado para a base original, sem banco isolado. Nao editar dados reais."
+            --notes "APK V5 de homologacao, com protecao *177, sem pendentes zeradas no relatorio real, sem inclusao automatica por NF/estoque fora de fluxo autorizado. Commit da branch homologacao conferido no job. NAO e auditoria geral concluida. Firebase continua configurado para a base original: NAO editar dados reais."
