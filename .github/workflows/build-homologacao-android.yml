@@ -18,6 +18,11 @@ jobs:
         with:
           ref: homologacao
           persist-credentials: false
+      - name: Conferir correcoes no checkout
+        run: |
+          test -f TESTES_REGRESSAO_SOS_VALENCIO.js
+          node TESTES_REGRESSAO_SOS_VALENCIO.js
+          git rev-parse --short HEAD
       - name: Node.js
         uses: actions/setup-node@v4
         with:
@@ -84,4 +89,4 @@ jobs:
             --target homologacao \
             --prerelease \
             --title "S.O.S. VALENCIO Android Teste #${GITHUB_RUN_NUMBER}" \
-            --notes "APK de homologacao compilado da branch homologacao. Nao e versao corrigida/homologada. A configuracao Firebase da base original ainda aponta para producao; nao gravar dados reais."
+            --notes "APK de teste com correcoes da branch homologacao (commit 75c0134e). Sintaxe e testes isolados verificados; nao representa certificacao de todas as logicas. ATENCAO: Firebase configurado para a base original, sem banco isolado. Nao editar dados reais."
