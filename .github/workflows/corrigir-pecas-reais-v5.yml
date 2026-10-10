@@ -1,0 +1,114 @@
+name: Corrigir origem das pecas reais - V5
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/corrigir-pecas-reais-v5.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout homologacao somente
+        uses: actions/checkout@v4
+        with:
+          ref: homologacao
+          fetch-depth: 1
+      - name: Corrigir os caminhos ja existentes sem alterar Cilia ou Temparia
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum js/cilia.js js/cilia-api.js js/tabela-tempa.js js/exportar-pmsp.js js/importar-orcamento-os.js >/tmp/referencia.sha
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('js/os.js')
+          s=p.read_text(encoding='utf-8')
+          def troca(a,b):
+              global s
+              if s.count(a)!=1:
+                  raise AssertionError(f'Ponto incerto em js/os.js: {a[:90]} / {s.count(a)}')
+              s=s.replace(a,b)
+          ini=s.index('function pecasReaisAutomaticasOS() {')
+          fim=s.index('function montarMensagemStatusClienteOS(',ini)
+          bloco=s[ini:fim]
+          assert bloco.count('  const out = [];')==1 and bloco.count('    if (pr) out.push(pr);')==1
+          bloco=bloco.replace('  const out = [];','  if (!osSegredo177AtivoOS()) return [];\n  const out = [];')
+          bloco=bloco.replace('    if (pr) out.push(pr);',"""    if (pr) out.push(Object.assign({}, pr, {
+              instalada: true, statusAplicacao: 'instalada_confirmada',
+              confirmacaoInstalacaoEm: new Date().toISOString(),
+              confirmacaoInstalacaoPor: window.J?.nome || 'Responsavel'
+            }));""")
+          s=s[:ini]+bloco+s[fim:]
+          troca('  // Peças realmente instaladas (somente dono)\n  const _pecasReais = [];\n  document.querySelectorAll(\'#containerPecasReais > div\').forEach(row => {',
+                """  // Sem *177, preservar todos os registros reais historicos e o Kardex.
+            const _area177EditavelOS = osSegredo177AtivoOS();
+            const _pecasReais = _area177EditavelOS ? [] : (Array.isArray(_oldOSPreservar?.pecasReais) ? _oldOSPreservar.pecasReais.slice() : []);
+            if (_area177EditavelOS) document.querySelectorAll('#containerPecasReais > div').forEach(row => {""")
+          troca('    if (metaPecaReal.origemAutoOS === true) return;', '    // Item historico de estoque nao e descartado sem exclusao explicita no *177.')
+          troca("""  const _pecasReaisAutoOS = pecasReaisAutomaticasOS();
+            _pecasReaisAutoOS.forEach(pr => _pecasReais.push(pr));
+            if (document.getElementById('containerPecasReais') && (window._pecasReaisDesbloqueadas === true || _pecasReaisAutoOS.length)) payload.pecasReais = _pecasReais;""",
+                """  if (_area177EditavelOS) {
+              const _pecasReaisAutoOS = pecasReaisAutomaticasOS();
+              _pecasReaisAutoOS.forEach(pr => {
+                if (!_pecasReais.some(p => p.origemAutoOS === true && String(p.origemAutoKey) === String(pr.origemAutoKey))) {
+                  _pecasReais.push(pr);
+                }
+              });
+              if (document.getElementById('containerPecasReais')) payload.pecasReais = _pecasReais;
+            }""")
+          troca('  const pecasConferencia = pendentesBase.map(p => enriquecerPecaRelatorioEstoqueOS(p, osAtual));',
+                """  const pecasConferencia = pendentesBase.map(p => enriquecerPecaRelatorioEstoqueOS(p, osAtual));
+            if (!pecas.length && !servicosReais.length) {
+              try { win.close?.(); } catch (_) {}
+              window.toast?.('Sem instalacoes confirmadas. Registros pendentes continuam no historico *177, mas nao integram o relatorio de instaladas.', 'warn');
+              return;
+            }""")
+          marcador='  '+chr(36)+'{pecasConferencia.length ? '
+          assert s.count(marcador)==1
+          a=s.index(marcador)
+          b=s.index(" : ''}",a)+len(" : ''}")
+          s=s[:a]+'  <!-- Itens sem instalacao confirmada permanecem no historico, nao no relatorio. -->'+s[b:]
+          p.write_text(s,encoding='utf-8')
+          p=Path('js/operacional-cadastros-nf-fix-20260518.js')
+          t=p.read_text(encoding='utf-8')
+          a="""          if (!(typeof W.thiaNFOSClienteOficial === 'function' && W.thiaNFOSClienteOficial(os))) {
+                      const vis = typeof W.thiaNFPecaOrcamentoFromReal === 'function' ? W.thiaNFPecaOrcamentoFromReal(pecaReal) : null;"""
+          b="""          // NF nao implica servico executado ou venda; excecao apenas com autorizacao persistida.
+                      if (os.permitirNFNoOrcamento === true &&
+                          !(typeof W.thiaNFOSClienteOficial === 'function' && W.thiaNFOSClienteOficial(os))) {
+                      const vis = typeof W.thiaNFPecaOrcamentoFromReal === 'function' ? W.thiaNFPecaOrcamentoFromReal(pecaReal) : null;"""
+          if t.count(a)!=1: raise AssertionError('NF: bloco nao corresponde '+str(t.count(a)))
+          p.write_text(t.replace(a,b),encoding='utf-8')
+          print('V5 aplicada em dois arquivos.')
+          PY
+          sha256sum -c /tmp/referencia.sha
+          node --check js/os.js
+          node --check js/operacional-cadastros-nf-fix-20260518.js
+          node TESTES_REGRESSAO_SOS_VALENCIO.js
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('js/os.js').read_text()
+          t=Path('js/operacional-cadastros-nf-fix-20260518.js').read_text()
+          assert 'if (!osSegredo177AtivoOS()) return [];' in s
+          assert 'const _area177EditavelOS = osSegredo177AtivoOS();' in s
+          assert "if (_area177EditavelOS) {" in s
+          assert 'REGISTROS PENDENTES DE CONFERÊNCIA — NÃO COMPROVAM INSTALAÇÃO (' not in s
+          assert 'os.permitirNFNoOrcamento === true' in t
+          assert 'if (!pecas.length && !servicosReais.length)' in s
+          print('V5 verificacoes estaticas: OK')
+          PY
+          git diff --check
+      - name: Publicar exclusivamente homologacao
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = "homologacao"
+          git config user.name "S.O.S. VALENCIO CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add js/os.js js/operacional-cadastros-nf-fix-20260518.js
+          git commit -m "fix: nao imprimir pendencias zeradas nem criar pecas reais fora do *177"
+          git push origin HEAD:homologacao
