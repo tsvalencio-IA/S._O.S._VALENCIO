@@ -1,0 +1,17 @@
+node_modules/
+tmp/
+web-dist/
+dist-pc/
+capacitor-android/android/.gradle/
+capacitor-android/android/app/build/
+capacitor-android/node_modules/
+
+# Seguranca - nunca versionar segredos e chaves de assinatura
+*.jks
+*.keystore
+*.p12
+*.pfx
+.env
+.env.*
+!*.env.example
+capacitor-android/keystore/
