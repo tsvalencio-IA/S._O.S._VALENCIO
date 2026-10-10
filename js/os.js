@@ -1000,11 +1000,16 @@ function pecaRealFromEstoqueOS(row, idx) {
 }
 
 function pecasReaisAutomaticasOS() {
+  if (!osSegredo177AtivoOS()) return [];
   const out = [];
   document.querySelectorAll('#containerPecasOS > div:not(.cilia-peca-wrap)').forEach((row, idx) => {
     if (row.dataset?.pecaAvulsa === '1') return;
     const pr = pecaRealFromEstoqueOS(row, idx);
-    if (pr) out.push(pr);
+    if (pr) out.push(Object.assign({}, pr, {
+    instalada: true, statusAplicacao: 'instalada_confirmada',
+    confirmacaoInstalacaoEm: new Date().toISOString(),
+    confirmacaoInstalacaoPor: window.J?.nome || 'Responsavel'
+  }));
   });
   return out;
 }
@@ -4712,12 +4717,13 @@ window.salvarOS = async function() {
   payload.descMO = taxaDescontoOS($v('osDescMO') || 0);
   payload.descPeca = taxaDescontoOS($v('osDescPeca') || 0);
   payload.dadosOficiaisCongelados = true;
-  // Peças realmente instaladas (somente dono)
-  const _pecasReais = [];
-  document.querySelectorAll('#containerPecasReais > div').forEach(row => {
+  // Sem *177, preservar todos os registros reais historicos e o Kardex.
+  const _area177EditavelOS = osSegredo177AtivoOS();
+  const _pecasReais = _area177EditavelOS ? [] : (Array.isArray(_oldOSPreservar?.pecasReais) ? _oldOSPreservar.pecasReais.slice() : []);
+  if (_area177EditavelOS) document.querySelectorAll('#containerPecasReais > div').forEach(row => {
     let metaPecaReal = {};
     try { metaPecaReal = JSON.parse(row.querySelector('.pr-meta')?.value || '{}') || {}; } catch (_) { metaPecaReal = {}; }
-    if (metaPecaReal.origemAutoOS === true) return;
+    // Item historico de estoque nao e descartado sem exclusao explicita no *177.
     const pr = Object.assign({}, metaPecaReal, {
       codigo: row.querySelector('.pr-codigo')?.value?.trim() || '',
       desc: row.querySelector('.pr-desc')?.value?.trim() || '',
@@ -4732,9 +4738,15 @@ window.salvarOS = async function() {
     pr.nfNumero = pr.nf;
     if (pr.desc || pr.codigo) _pecasReais.push(pr);
   });
-  const _pecasReaisAutoOS = pecasReaisAutomaticasOS();
-  _pecasReaisAutoOS.forEach(pr => _pecasReais.push(pr));
-  if (document.getElementById('containerPecasReais') && (window._pecasReaisDesbloqueadas === true || _pecasReaisAutoOS.length)) payload.pecasReais = _pecasReais;
+  if (_area177EditavelOS) {
+    const _pecasReaisAutoOS = pecasReaisAutomaticasOS();
+    _pecasReaisAutoOS.forEach(pr => {
+      if (!_pecasReais.some(p => p.origemAutoOS === true && String(p.origemAutoKey) === String(pr.origemAutoKey))) {
+        _pecasReais.push(pr);
+      }
+    });
+    if (document.getElementById('containerPecasReais')) payload.pecasReais = _pecasReais;
+  }
 
   // Serviços terceirizados reais: controle interno exclusivo de cliente oficial.
   // Não entram em payload.servicos, orçamento, comissão ou portal do cliente.
@@ -7316,6 +7328,11 @@ window.imprimirRelatorioPecasReaisOS = async function() {
   });
   const pecas = instaladasBase.map(p => enriquecerPecaRelatorioEstoqueOS(p, osAtual));
   const pecasConferencia = pendentesBase.map(p => enriquecerPecaRelatorioEstoqueOS(p, osAtual));
+  if (!pecas.length && !servicosReais.length) {
+    try { win.close?.(); } catch (_) {}
+    window.toast?.('Sem instalacoes confirmadas. Registros pendentes continuam no historico *177, mas nao integram o relatorio de instaladas.', 'warn');
+    return;
+  }
 
   const oficina = window.J?.oficina || {};
   const nomeOficina = window.J?.tnome || oficina.nomeFantasia || oficina.razaoSocial || oficina.nome || 'OFICIN-IA';
@@ -7442,7 +7459,7 @@ window.imprimirRelatorioPecasReaisOS = async function() {
     <div class="box wide"><b>Local da troca</b>${escOS([nomeOficina, enderecoOficina].filter(Boolean).join(' — '))}</div>
   </section>
   ${pecas.length ? `<h2 style="font-size:12px;margin:10px 0 5px;">PEÇAS REAIS INSTALADAS (${pecas.length}) — CONFIRMADAS/DOCUMENTADAS</h2><div class="table-wrap"><table><colgroup><col style="width:3%"><col style="width:9%"><col style="width:20%"><col style="width:4%"><col style="width:12%"><col style="width:9%"><col style="width:8%"><col style="width:16%"><col style="width:9%"><col style="width:10%"></colgroup><thead><tr><th>#</th><th>Código real</th><th>Descrição real instalada</th><th>Qtd.</th><th>Onde comprou / fornecedor</th><th>Nota fiscal / rastreio</th><th>Data compra / entrada</th><th>Origem / estoque</th><th>Custo unit.</th><th>Custo total</th></tr></thead><tbody>${linhas}</tbody><tfoot><tr><td colspan="10" class="total-geral"><b>CUSTO REAL TOTAL DAS PEÇAS</b><b>${moedaLocal(total)}</b></td></tr></tfoot></table></div>` : ''}
-  ${pecasConferencia.length ? `<h2 style="font-size:12px;margin:12px 0 5px;">REGISTROS PENDENTES DE CONFERÊNCIA — NÃO COMPROVAM INSTALAÇÃO (${pecasConferencia.length})</h2><p style="font-size:9px;">Itens históricos preservados. Não são somados ao custo das peças instaladas; confirme origem e execução antes de classificá-los como trocados.</p><div class="table-wrap"><table><thead><tr><th>#</th><th>Código</th><th>Descrição</th><th>Qtd.</th><th>Motivo</th><th>Origem</th><th>NF</th><th>Fornecedor</th><th>Status</th><th>Custo informado</th></tr></thead><tbody>${linhasPecasConferencia}</tbody></table></div>` : ''}
+  <!-- Itens sem instalacao confirmada permanecem no historico, nao no relatorio. -->
   ${servicosReais.length ? `<h2 style="font-size:12px;margin:12px 0 5px;">SERVIÇOS TERCEIRIZADOS REAIS</h2><div class="table-wrap"><table><colgroup><col style="width:4%"><col style="width:31%"><col style="width:23%"><col style="width:16%"><col style="width:12%"><col style="width:14%"></colgroup><thead><tr><th>#</th><th>Serviço terceirizado</th><th>Prestador / fornecedor</th><th>Nota / documento</th><th>Data</th><th>Custo real</th></tr></thead><tbody>${linhasServicosReais}</tbody><tfoot><tr><td colspan="6" class="total-geral"><b>CUSTO REAL TOTAL DOS SERVIÇOS</b><b>${moedaLocal(totalServicosReais)}</b></td></tr></tfoot></table></div>` : ''}
   <div style="display:flex;justify-content:flex-end;margin-top:10px;"><div style="border:2px solid #111;padding:8px 12px;font-size:13px;display:flex;gap:24px;"><b>CUSTO REAL GERAL</b><b>${moedaLocal(totalRealGeral)}</b></div></div>
   <div class="rodape"><span>Documento interno gerado pelo OFICIN-IA. Peças de estoque mantêm rastreio Kardex; serviços terceirizados são registros internos da O.S.</span><span>Powered by thIAguinho Soluções Digitais</span></div></main></body></html>`;
