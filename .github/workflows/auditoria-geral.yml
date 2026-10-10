@@ -1,4 +1,5 @@
 name: Auditoria Geral - S.O.S. VALENCIO
+# Execucao 2026-10-10: inclui consultas de pagamentos parciais por periodo
 on:
   push:
     branches: [main]
