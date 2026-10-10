@@ -44,10 +44,10 @@ const relatorio=executar(pergunta,[antiga,nova],'admin',{linhas:[
   {osId:'new',previsto:12,pago:0,falta:12,aguardandoExecucao:true,semPercentual:false},
   {osId:'outra-os',previsto:1000,pago:1000,falta:0,aguardandoExecucao:false,semPercentual:false}
 ]});
-assert.match(relatorio,/Comiss[^<]+ previstas: R\\$\\s*27,00/,'somente as OS do periodo');
-assert.match(relatorio,/efetivamente pagas: R\\$\\s*5,00/,'pago != previsto');
-assert.match(relatorio,/pendente total: R\\$\\s*22,00/,'saldo parcial');
+assert.match(relatorio,/Comissões previstas:[^<]*27,00/,'somente as OS do periodo');
+assert.match(relatorio,/efetivamente pagas:[^<]*5,00/,'pago != previsto');
+assert.match(relatorio,/pendente total:[^<]*22,00/,'saldo parcial');
 assert.match(relatorio,/NÃO está tudo quitado/,'não assumir quitação');
-assert.doesNotMatch(relatorio,/1\\.000,00/,'não somar outra OS');
+assert.doesNotMatch(relatorio,/1.000,00/,'não somar outra OS');
 assert.doesNotMatch(executar(pergunta,[antiga],'mecanico',{linhas:[]}),/Pagamentos registrados/,'ocultar financeiro do mecanico');
 console.log('OK: 18 testes de IA/comissao + 4 modulos intactos, sem chamadas Firebase');
