@@ -27,8 +27,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Verificar SDK Android do runner
+        shell: bash
+        run: |
+          test -d "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          echo "Android SDK localizado em ${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
       - name: Pacote de testes separado do aplicativo de producao
         shell: bash
         run: |
