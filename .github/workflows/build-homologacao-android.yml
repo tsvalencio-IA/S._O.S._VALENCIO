@@ -6,7 +6,7 @@ on:
       - '.github/workflows/build-homologacao-android.yml'
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   apk-android:
     name: APK Android de teste
@@ -73,10 +73,15 @@ jobs:
           mkdir -p apk-teste
           cp capacitor-android/android/app/build/outputs/apk/debug/app-debug.apk apk-teste/SOS-VALENCIO-HOMOLOGACAO.apk
           test -s apk-teste/SOS-VALENCIO-HOMOLOGACAO.apk
-      - name: APK para download
-        uses: actions/upload-artifact@v4
-        with:
-          name: SOS-VALENCIO-ANDROID-TESTE
-          path: apk-teste/SOS-VALENCIO-HOMOLOGACAO.apk
-          if-no-files-found: error
-          retention-days: 30
+      - name: Publicar APK como Release privada
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "android-homologacao-${GITHUB_RUN_NUMBER}" \
+            "apk-teste/SOS-VALENCIO-HOMOLOGACAO.apk" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target homologacao \
+            --prerelease \
+            --title "S.O.S. VALENCIO Android Teste #${GITHUB_RUN_NUMBER}" \
+            --notes "APK de homologacao compilado da branch homologacao. Nao e versao corrigida/homologada. A configuracao Firebase da base original ainda aponta para producao; nao gravar dados reais."
