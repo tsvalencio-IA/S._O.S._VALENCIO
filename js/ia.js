@@ -36,6 +36,19 @@
   }
 
   function dataISO(v) {
+    // Firestore Timestamp e Date exigem normalização antes da comparação por período.
+    if (v && typeof v === 'object') {
+      if (typeof v.toDate === 'function') {
+        try { v = v.toDate(); } catch (_) { return ''; }
+      } else if (Number.isFinite(Number(v.seconds ?? v._seconds))) {
+        v = new Date(Number(v.seconds ?? v._seconds) * 1000);
+      }
+    }
+    if (typeof v === 'number' && Number.isFinite(v)) v = new Date(v);
+    if (v instanceof Date) {
+      if (isNaN(v.getTime())) return '';
+      return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}`;
+    }
     const raw = String(v == null ? '' : v).trim();
     if (!raw) return '';
     if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
@@ -43,7 +56,7 @@
     if (m) return `${m[3]}-${m[2]}-${m[1]}`;
     const d = new Date(raw);
     if (!isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    return raw.slice(0, 10);
+    return '';
   }
 
   function dataBR(v) {
@@ -1805,12 +1818,27 @@
     return status === 'Pronto' || status === 'Entregue';
   }
 
+  function dataFinalizacaoConfiavelIA(os) {
+    // Entrada, updatedAt e reabertura não provam finalização.
+    if (!osFinalizadaParaComissao(os)) return '';
+    const diretas = [os?.finalizadoEm, os?.prontoEm, os?.entregueEm, os?.concluidoEm, os?.dataFinalizacao, os?.dataConclusao];
+    const datadas = diretas.filter(v => !!dataISO(v));
+    const eventos = (Array.isArray(os?.timeline) ? os.timeline : []).filter(ev => {
+      const texto = norm([ev?.tipoEvento, ev?.tipo, ev?.acao, ev?.mensagem].join(' '));
+      return /(finaliz|conclui|entregue|entrega de veiculo|veiculo pronto|status.*pronto|status.*entreg)/.test(texto) &&
+        !!dataISO(ev?.dt || ev?.data || ev?.createdAt || ev?.ts);
+    }).map(ev => ev?.dt || ev?.data || ev?.createdAt || ev?.ts);
+    return [...datadas, ...eventos].sort((a,b) => dataISO(b).localeCompare(dataISO(a)))[0] || '';
+  }
+
   function somarValoresServicos(lista) {
     return +((Array.isArray(lista) ? lista : []).reduce((soma, item) => soma + num(item?.valor), 0)).toFixed(2);
   }
 
   function servicosFuncionarioNaOS(os, func, periodo, ctx, exigirDataIndividual = false) {
     const atribuida = osAtribuidaFuncionario(os, func);
+    const dataFechamento = exigirDataIndividual ? dataFinalizacaoConfiavelIA(os) : '';
+    const fechamentoNoPeriodo = !!dataFechamento && periodoContem(periodo, dataFechamento);
     const U = W.JOS || W.JarvisOSUtils || {};
     const itensServico = itensOrcamentoParaIA(os, ctx).filter(it => norm(it?.tipo).includes('servico'));
     const mapa = new Map(itensServico.map(it => [String(it.key || ''), it]));
@@ -1849,8 +1877,13 @@
     if (atribuida || exigirDataIndividual) {
       itensServico.forEach(item => {
         if (!exigirDataIndividual && !itemPertenceFuncionario(item, func, os)) return;
-        const evidencia = dataAtribuicaoServicoFuncionarioIA(os, item, func, { estrito: exigirDataIndividual });
-        if (!periodoContem(periodo, evidencia.data)) return;
+        let evidencia = dataAtribuicaoServicoFuncionarioIA(os, item, func, { estrito: exigirDataIndividual });
+        if ((!evidencia.data || !periodoContem(periodo, evidencia.data)) && fechamentoNoPeriodo &&
+            (itemPertenceFuncionarioExplicitoIA(item, func, os) ||
+             idCombinaFuncionario(os?.mecId || os?.mecanicoId, func))) {
+          evidencia = { data: dataFechamento, fonte: 'finalizacao_os_servico_anterior' };
+        }
+        if (!evidencia.data || !periodoContem(periodo, evidencia.data)) return;
         const desc = item?.desc || '';
         if (!desc) return;
         operacionais.push({
@@ -1873,8 +1906,13 @@
       itensServico.forEach(item => {
         if (temAprovacao && !aprovados.has(item.key)) return;
         if (!exigirDataIndividual && !itemPertenceFuncionario(item, func, os)) return;
-        const evidencia = dataAtribuicaoServicoFuncionarioIA(os, item, func, { estrito: exigirDataIndividual });
-        if (!periodoContem(periodo, evidencia.data)) return;
+        let evidencia = dataAtribuicaoServicoFuncionarioIA(os, item, func, { estrito: exigirDataIndividual });
+        if ((!evidencia.data || !periodoContem(periodo, evidencia.data)) && fechamentoNoPeriodo &&
+            (itemPertenceFuncionarioExplicitoIA(item, func, os) ||
+             idCombinaFuncionario(os?.mecId || os?.mecanicoId, func))) {
+          evidencia = { data: dataFechamento, fonte: 'finalizacao_os_servico_anterior' };
+        }
+        if (!evidencia.data || !periodoContem(periodo, evidencia.data)) return;
         const desc = item?.desc || '';
         if (!desc) return;
         registrados.push({
@@ -2067,6 +2105,13 @@
   function evidenciaAtendimentoFuncionario(os, func, periodo) {
     const atribuida = osAtribuidaFuncionario(os, func);
     const periodoEstrito = !!periodo && periodo.origem !== 'historico_carregado';
+    // Uma O.S. anterior finalizada nesta semana é atendimento do responsável explícito.
+    const finalizadaEm = dataFinalizacaoConfiavelIA(os);
+    if (periodoEstrito && finalizadaEm && periodoContem(periodo, finalizadaEm) &&
+        ((Array.isArray(os?.servicos) && os.servicos.some(s => itemPertenceFuncionarioExplicitoIA(s, func, os))) ||
+         (Array.isArray(os?.comissaoOficialOS?.rateios) && os.comissaoOficialOS.rateios.some(r =>
+           idCombinaFuncionario(r?.mecId || r?.id, func) || nomeCombinaFuncionario(r?.mecNome || r?.nome, func))) ||
+         idCombinaFuncionario(os?.mecId || os?.mecanicoId, func))) return true;
 
     const execucao = Object.values(os?.execucaoItens || {}).some(registro => {
       const data = registro?.atualizadoEm || registro?.updatedAt || registro?.data || registro?.em;
@@ -2203,6 +2248,7 @@
       const osNumero = String(os.numero || os.id || '').slice(-6).toUpperCase();
       const entradaOS = dataBR(dataPrincipalOS(os));
       const datasAtendimentoRaw = [
+        ...(periodoInformado && periodoContem(periodo, dataFinalizacaoConfiavelIA(os)) ? [dataFinalizacaoConfiavelIA(os)] : []),
         ...servicos.confirmados.map(s => s?.data),
         ...servicos.registrados.map(s => s?.data),
         ...(servicos.operacionais || []).map(s => s?.data)
@@ -2226,7 +2272,7 @@
         return [
           `<br>&nbsp;&nbsp;<strong>Servi&ccedil;o:</strong> ${esc(s.desc)}`,
           valores,
-          compacto ? '' : `<br>&nbsp;&nbsp;&nbsp;&nbsp;Situa&ccedil;&atilde;o da base: <strong>${esc(s.situacao)}</strong>`
+          compacto ? '' : `<br>&nbsp;&nbsp;&nbsp;&nbsp;Situa&ccedil;&atilde;o da base: <strong>${esc(s.situacao)}</strong>${s.fonteData === 'finalizacao_os_servico_anterior' ? ' (serviço anterior; O.S. finalizada no período)' : ''}`
         ].join('');
       }).join('');
       const linhaOficial = oficialAtendimento
@@ -2235,6 +2281,8 @@
       return [
         `- ${esc(data)} | O.S. #${esc(osNumero)} | ${esc(placa)} | ${esc(modelo)}`,
         `<br>&nbsp;&nbsp;<strong>Data(s) do atendimento/atribui&ccedil;&atilde;o:</strong> ${esc(data)}`,
+        servicos.registrados.some(x => x.fonteData === 'finalizacao_os_servico_anterior')
+          ? '<br>&nbsp;&nbsp;<small>O.S. finalizada no período; serviços anteriores não foram relançados.</small>' : '',
         entradaOS && entradaOS !== data ? `<br>&nbsp;&nbsp;<strong>Entrada da O.S.:</strong> ${esc(entradaOS)}` : '',
         `<br>&nbsp;&nbsp;<strong>Status atual:</strong> ${esc(statusOperacional.rotulo)}`,
         linhasServico || linhaOficial || '<br>&nbsp;&nbsp;Nenhum servi&ccedil;o atribu&iacute;do foi identificado.'
