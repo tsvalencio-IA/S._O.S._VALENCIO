@@ -1,0 +1,1259 @@
+--- a/TESTES_REGRESSAO_SOS_VALENCIO.js
++++ b/TESTES_REGRESSAO_SOS_VALENCIO.js
+@@ -0,0 +1,43 @@
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const vm = require('node:vm');
++const path = require('node:path');
++const root = __dirname;
++const noop = () => {};
++function sandbox() {
++  const document = {readyState:'loading',addEventListener:noop,getElementById:()=>null};
++  const window = {J:{clientes:[],os:[]}};
++  const env = {window,document,console,setTimeout: noop,setInterval: noop,clearInterval:noop};
++  vm.createContext(env); return env;
++}
++function load(env, file) {vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),env,{filename:file,timeout:2500});}
++const ctx=sandbox();
++load(ctx,'js/os-utils.js');
++load(ctx,'js/nfe-real-pro.js');
++const U=ctx.window.JarvisOSUtils;
++assert.ok(U,'módulo de orçamentos disponível');
++assert.equal(ctx.window.thiaNFOSClienteOficial({clienteNome:'CLIENTE COMUM',clienteOficial:false}),false,'Flag false não é oficial');
++ctx.window.J.clientes=[{id:'c1',nome:'JOSE',clienteOficial:false,tipoCliente:'comum'}];
++assert.equal(ctx.window.thiaNFOSClienteOficial({clienteId:'c1',clienteNome:'JOSE',clienteOficial:false}),false);
++ctx.window.J.clientes=[{id:'c2',nome:'PREFEITURA',tipoCliente:'governo'}];
++assert.equal(ctx.window.thiaNFOSClienteOficial({clienteId:'c2'}),true);
++const linked={codigo:'1234',desc:'AMORTECEDOR DIANTEIRO',qtd:1,venda:100};
++const real={codigo:'1234',desc:'AMORTECEDOR DIANTEIRO',qtd:1,valorCompra:100,nf:'12345',origem:'nf_entrada'};
++assert.equal(U.isBudgetPieceLinkedToRealPart({pecasReais:[real]},linked),false,'Coincidência de preço não é vínculo fiscal');
++assert.equal(U.isBudgetPieceLinkedToRealPart({pecasReais:[{...real,origemNFItemKey:'N1-ITEM1'}]}, {...linked,origemNFItemKey:'N1-ITEM1'}),true,'Vínculo fiscal explícito');
++assert.equal(U.isBudgetPieceLinkedToRealPart({pecasReais:[real]}, {...linked,origem:'nf_entrada_os'}),true,'Linha NF protegida');
++const comercial=U.getPublicBudgetPieces({pecas:[linked],pecasReais:[real]}, {nome:'PREFEITURA',tipoCliente:'governo'});
++assert.equal(comercial.length,1,'Peça comercial não pode desaparecer por coincidência com NF');
++const manual={desc:'Serviço',valor:150,tempo:2,valorHoraTabela:152.25,secaoHora:'MECANICA',valorManual:true};
++assert.equal(U.calcularServicoMaoObra(manual,{}, {descMO:0}).valorBruto,150,'Valor manual prevalece');
++const tabela={...manual,valorManual:false};
++assert.equal(U.calcularServicoMaoObra(tabela,{}, {descMO:0}).valorBruto,304.5,'Tabela de horas preservada');
++const codigoOS=fs.readFileSync(path.join(root,'js/os.js'),'utf8');
++assert.match(codigoOS,/const instaladasBase = \[\];/);
++assert.match(codigoOS,/if \(somenteCompra \|\| !instalada\)/,'Relatório só classifica instalada com confirmação explícita');
++assert.match(codigoOS,/pecasConferencia/);
++const codigoNF=fs.readFileSync(path.join(root,'js/nfe-real-pro.js'),'utf8');
++assert.match(codigoNF,/entry\.os\.permitirNFNoOrcamento === true/,'NF não espelha orçamento automaticamente');
++const codigoCilia=fs.readFileSync(path.join(root,'js/cilia.js'),'utf8');
++assert.ok(codigoCilia.length>100,'Cília preservado');
++console.log('OK: 12 verificações de regressão das funções comerciais, fiscais e *177');
+--- a/equipe.html
++++ b/equipe.html
+@@ -1518,7 +1518,8 @@
+     type:data.resource_type || (/^video\//.test(file.type||'') ? 'video' : 'image'),
+     name:file.name || '',
+     bytes:data.bytes || finalFile.size || file.size || 0,
+-    uploadedAt:new Date().toISOString()
++    uploadedAt:data.created_at && !Number.isNaN(Date.parse(data.created_at)) ? new Date(data.created_at).toISOString() : new Date().toISOString(),
++    uploadHorarioOrigem:data.created_at ? 'cloudinary' : 'dispositivo'
+   };
+ }
+ 
+@@ -2399,12 +2400,7 @@
+           registouAlgo = true;
+       }
+ 
+-      const oldMedia = (oldOS.media || oldOS.fotos || []).length;
+-      const newMedia = (JSON.parse($('mediaArray').value || '[]')).length;
+-      if (newMedia > oldMedia) {
+-          tl.push({ dt: new Date().toISOString(), user: funcUser, acao: `Anexou ${newMedia - oldMedia} foto(s) de evidência.` });
+-          registouAlgo = true;
+-      }
++      // As evidências são auditadas por URL individual após compor o payload.
+ 
+       if (!registouAlgo) {
+           tl.push({ dt: new Date().toISOString(), user: funcUser, acao: `Atualizou os detalhes da O.S.` });
+@@ -2444,19 +2440,21 @@
+     total: t,
+     pecas,
+     servicos,
+-    media:JSON.parse($('mediaArray').value||'[]'),
++    media:prepararVinculoEvidenciasEquipe(JSON.parse($('mediaArray').value||'[]'), osBaseEquipe.media || osBaseEquipe.fotos || []),
+     chkComb:$v('chkComb'),chkPneuDia:parseInt($('chkPD')?.value||100),chkPneuTra:parseInt($('chkPT')?.value||100),chkObs:$v('chkObs'),
+     chkPainel:$('chkPainel')?.value||'',chkPressao:$('chkPressao')?.value||'',
+     chkCar:$('chkCar')?.value||'',chkDoc:$('chkDoc')?.value||'',
+     timeline:tl,updatedAt:new Date().toISOString()
+   };
+ 
++  auditarMidiasIndividualEquipe(p.timeline, p.media, osBaseEquipe.media || osBaseEquipe.fotos || []);
++
+   const osAntigaAprovacao = id ? (dbOS.find(x => x.id === id) || {}) : {};
+   const UOS = window.JOS || window.JarvisOSUtils || {};
+   if (id && UOS.hasApproval?.(osAntigaAprovacao)) {
+     // O.S. aprovada: equipe/mecânico não pode remover/editar o orçamento aprovado/reprovado.
+     // Mantém orçamento, aprovação, total e histórico financeiro como estavam; equipe só muda status operacional,
+-    // diagnóstico/checklist/mídia/timeline e execução interna dos itens aprovados.
++    // diagnóstico/checklist/mídia/timeline e execução interna dos itens aprovados; o status permanece exclusivo do gestor.
+     p.pecas = osAntigaAprovacao.pecas || [];
+     p.servicos = osAntigaAprovacao.servicos || [];
+     p.total = osAntigaAprovacao.total || p.total;
+@@ -2541,8 +2539,39 @@
+   }
+ 
+   let osIdSalva=id;
+-  if(id) await db.collection('ordens_servico').doc(id).update(p);
+-  else{p.createdAt=new Date().toISOString();const refNovaOS=await db.collection('ordens_servico').add(p);osIdSalva=refNovaOS.id;}
++  if(id) {
++    // Alterações técnicas são gravadas sem reescrever o status definido pelo gestor.
++    // A transação recusa uma edição baseada em O.S. que mudou de status/aprovação
++    // entre a abertura e o salvamento, evitando perda de mudanças simultâneas.
++    const ref=db.collection('ordens_servico').doc(id);
++    const ultimoStatus=String(osBaseEquipe.status||'Aguardando');
++    const aprovacaoAnterior=JSON.stringify({aprovacao:osBaseEquipe.aprovacao||null,itensAprovados:osBaseEquipe.itensAprovados||[]});
++    const eventosNovos=tl.slice((osBaseEquipe.timeline||[]).length);
++    const obsNova=($v('osObsEquipeNova')||'').trim();
++    delete p.status; // A equipe nunca grava o status de uma O.S. já existente.
++    delete p.timeline;
++    delete p.observacoesEquipe;
++    try {
++      await db.runTransaction(async trx=>{
++        const snap=await trx.get(ref);
++        if(!snap.exists)throw new Error('O.S. não encontrada.');
++        const atual=snap.data()||{};
++        if((osAtualPreservar.updatedAt && String(atual.updatedAt||'')!==String(osAtualPreservar.updatedAt)) ||
++           String(atual.status||'Aguardando')!==ultimoStatus ||
++           JSON.stringify({aprovacao:atual.aprovacao||null,itensAprovados:atual.itensAprovados||[]})!==aprovacaoAnterior){
++          throw new Error('O gestor atualizou o status/aprovação desta O.S. Reabra a ficha para editar sem sobrescrever dados recentes.');
++        }
++        const mudanca={...p};
++        if(eventosNovos.length)mudanca.timeline=firebase.firestore.FieldValue.arrayUnion(...eventosNovos);
++        if(obsNova)mudanca.observacoesEquipe=firebase.firestore.FieldValue.arrayUnion({dt:p.updatedAt,usuario:J.nome||'Equipe',usuarioId:J.fid||'',perfil:J.role||'equipe',interno:true,visivelCliente:false,texto:obsNova});
++        trx.update(ref,mudanca);
++      });
++    }catch(e){toast('O.S. não salva: '+(e?.message||e),'err');return;}
++  } else {
++    p.createdAt=new Date().toISOString();
++    const refNovaOS=await db.collection('ordens_servico').add(p);
++    osIdSalva=refNovaOS.id;
++  }
+   const obsAuditada=($v('osObsEquipeNova')||'').trim();
+   if(obsAuditada) await auditarEquipeOperacao('OS',`Observação na O.S. #${String(osIdSalva||'').slice(-6).toUpperCase()}: ${obsAuditada}`,{osId:osIdSalva||null,origem:'equipe_observacao'});
+ 
+@@ -2594,7 +2623,7 @@
+   const foto=_equipeGaleriaFotos[_equipeGaleriaIndex];
+   const img=ov.querySelector('[data-eq-galeria-img]');
+   if(img){img.src=foto.url;img.alt=`Foto ${_equipeGaleriaIndex+1} da O.S.`;}
+-  const c=ov.querySelector('[data-eq-galeria-count]'); if(c)c.textContent=`Foto ${_equipeGaleriaIndex+1} de ${_equipeGaleriaFotos.length}`;
++  const c=ov.querySelector('[data-eq-galeria-count]'); if(c)c.textContent=`Foto ${_equipeGaleriaIndex+1} de ${_equipeGaleriaFotos.length} | Enviada: ${dataHoraEvidenciaEquipe(foto.uploadedAt)} | Na O.S.: ${dataHoraEvidenciaEquipe(foto.importedAt)}`;
+   ov.querySelectorAll('[data-eq-nav]').forEach(b=>b.style.visibility=_equipeGaleriaFotos.length>1?'visible':'hidden');
+ }
+ function navegarGaleriaFotosEquipe(delta){
+@@ -2635,6 +2664,44 @@
+   document.addEventListener('keydown',_equipeGaleriaKeydown);renderGaleriaFotosEquipe();
+ }
+ 
++function dataHoraEvidenciaEquipe(value) {
++  if (!value) return 'Não registrada (arquivo antigo)';
++  const d = typeof value?.toDate === 'function' ? value.toDate() : new Date(value);
++  if (Number.isNaN(d.getTime())) return 'Não registrada (arquivo antigo)';
++  return d.toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
++}
++function prepararVinculoEvidenciasEquipe(lista, mediaAntiga) {
++  const urlsAntigas = new Set((Array.isArray(mediaAntiga) ? mediaAntiga : []).map(m => typeof m === 'string' ? m : m?.url || m?.secure_url || '').filter(Boolean));
++  const agora = new Date().toISOString();
++  return (Array.isArray(lista) ? lista : []).map(m => {
++    const url = typeof m === 'string' ? m : m?.url || m?.secure_url || '';
++    if (!url || urlsAntigas.has(url)) return m;
++    const item = typeof m === 'string' ? {url:m,type:'image'} : {...m};
++    if (!item.importedAt) item.importedAt = agora;
++    if (!item.importedPor) item.importedPor = J.nome || 'Equipe';
++    return item;
++  });
++}
++function escMediaEquipe(v) {
++  return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
++}
++function auditarMidiasIndividualEquipe(timeline, novas, antigas) {
++  const getUrl = m => typeof m === 'string' ? m : m?.url || m?.secure_url || '';
++  const prev = new Map((Array.isArray(antigas) ? antigas : []).map(m=>[getUrl(m),m]).filter(([url])=>url));
++  const cur = new Map((Array.isArray(novas) ? novas : []).map(m=>[getUrl(m),m]).filter(([url])=>url));
++  for (const [url,m] of cur) {
++    if (prev.has(url)) continue;
++    const video = /^video/i.test(String(m?.type || ''));
++    timeline.push({dt:m?.importedAt || new Date().toISOString(),user:J.nome||'Equipe',tipo:'evidencia_adicionada',
++      acao:`Anexou ${video?'vídeo':'imagem'}: ${m?.name || url.split('/').pop().split('?')[0] || 'arquivo'}; enviado em ${dataHoraEvidenciaEquipe(m?.uploadedAt)}; importado na O.S. em ${dataHoraEvidenciaEquipe(m?.importedAt)}.`,
++      midiaUrl:url,midiaTipo:video?'video':'imagem',enviadoEm:m?.uploadedAt||null,importadoEm:m?.importedAt||null});
++  }
++  for (const [url,m] of prev) {
++    if (cur.has(url)) continue;
++    timeline.push({dt:new Date().toISOString(),user:J.nome||'Equipe',tipo:'evidencia_removida',
++      acao:`Removeu evidência: ${m?.name || url.split('/').pop().split('?')[0] || 'arquivo'}.`,midiaUrl:url});
++  }
++}
+ function renderMediaGrid(){
+   const media=JSON.parse($('mediaArray')?.value||'[]');
+   $('mediaGrid').innerHTML=media.map((m,i)=>{
+@@ -2642,6 +2709,7 @@
+     const isVideo=/^video$/i.test(String(m?.type||''))||/^video\//i.test(String(m?.type||''));
+     return `<div class="media-item">
+       ${isVideo?`<video src="${url}" controls preload="metadata"></video>`:`<img src="${url}" loading="lazy" referrerpolicy="no-referrer" onclick="abrirGaleriaFotosEquipe(${i})" style="cursor:zoom-in" alt="Foto ${i+1} da O.S.">`}
++      <span style="position:absolute;bottom:0;left:0;right:0;z-index:1;pointer-events:none;background:rgba(8,16,30,.93);padding:3px;color:#e2e8f0;font-size:.53rem;line-height:1.3;overflow-wrap:anywhere;">Envio: ${escMediaEquipe(dataHoraEvidenciaEquipe(m?.uploadedAt))}<span style="display:block">Na O.S.: ${escMediaEquipe(dataHoraEvidenciaEquipe(m?.importedAt))}</span></span>
+       <button type="button" class="media-del" onclick="event.stopPropagation();rmMedia(${i})">✕</button>
+     </div>`;
+   }).join('');
+@@ -2909,13 +2977,13 @@
+ <script src="js/final-1010-regras-os.js"></script>
+ <script src="js/theme.js"></script>
+ <script src="js/hardening-comercial.js?v=26.13.0"></script>
+-<script src="js/ia.js?v=26.21.0"></script>
++<script src="js/ia.js?v=26.24.2"></script>
+ <script src="js/catalogos-ia.js?v=19.0.0"></script>
+ <script src="js/uix-theme-fix.js"></script>
+ <script src="js/equipe-comissoes-v21.js?v=26.1.0"></script>
+ <script src="js/equipe-usabilidade-v262.js?v=26.2.0"></script>
+-<script src="js/equipe-firestore-economico-v265.js?v=26.5.0"></script>
++<script src="js/equipe-firestore-economico-v265.js?v=26.24.2"></script>
+ <script src="js/thia-firestore-runtime-v2612.js?v=26.13.0"></script>
+-<script src="js/equipe-firestore-profissional-v2612.js?v=26.12.0"></script>
++<script src="js/equipe-firestore-profissional-v2612.js?v=26.24.2"></script>
+ </body>
+ </html>
+--- a/firebase/firestore.rules
++++ b/firebase/firestore.rules
+@@ -83,7 +83,17 @@
+     // ─── /clientes ────────────────────────────────────────────────
+     match /clientes/{id} {
+       allow read:   if sameTenantRead() || (isCli() && resource.data.userId == request.auth.uid);
+-      allow create: if sameTenantWrite() && (isAdmin() || isSuper());
++      allow create: if sameTenantWrite() && (isAdmin() || isSuper() || (
++        isMec() && request.resource.data.cadastradoVia == 'equipe_os'
++        && request.resource.data.tipoCliente == 'b2c'
++        && request.resource.data.categoriaComercial == 'comum'
++        && request.resource.data.frotista == false
++        && request.resource.data.keys().hasOnly([
++          'tenantId','nome','wpp','doc','docLimpo','email','login','pin',
++          'tipoCliente','categoriaComercial','frotista','createdAt','updatedAt',
++          'cadastradoVia','cadastradoPor','cadastradoPorId'
++        ])
++      ));
+       allow update: if sameTenantRead() && noTenantSwitch() && (isAdmin() || isSuper());
+       allow delete: if false; // soft delete via campo deletedAt
+     }
+@@ -91,7 +101,17 @@
+     // ─── /veiculos ────────────────────────────────────────────────
+     match /veiculos/{id} {
+       allow read:   if sameTenantRead();
+-      allow create: if sameTenantWrite() && (isAdmin() || isSuper());
++      allow create: if sameTenantWrite() && (isAdmin() || isSuper() || (
++        isMec() && request.resource.data.cadastradoVia == 'equipe_os'
++        && request.resource.data.clienteId is string
++        && exists(/databases/$(database)/documents/clientes/$(request.resource.data.clienteId))
++        && get(/databases/$(database)/documents/clientes/$(request.resource.data.clienteId)).data.tenantId == userTenant()
++        && request.resource.data.keys().hasOnly([
++          'tenantId','clienteId','tipo','placa','modelo','marca','ano','km',
++          'cor','chassis','chassi','createdAt','updatedAt',
++          'cadastradoVia','cadastradoPor','cadastradoPorId'
++        ])
++      ));
+       allow update: if sameTenantRead() && noTenantSwitch() && (isAdmin() || isSuper());
+       allow delete: if false;
+     }
+@@ -139,7 +159,18 @@
+       allow read: if sameTenantRead()
+                   || (isCli() && clienteEhDono(resource.data.clienteId));
+       allow create: if sameTenantWrite() && isStaff();
+-      allow update: if sameTenantRead() && noTenantSwitch() && isStaff();
++      allow update: if sameTenantRead() && noTenantSwitch() && isStaff()
++        // O mecânico não pode mudar status nem lançar recebimento operacional.
++        && (!isMec() || (
++          (!('status' in resource.data) || request.resource.data.status == resource.data.status)
++          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
++            'recebidaOperacional','valorRecebidoOperacional',
++            'recebidaOperacionalAtualizadoEm','recebidaOperacionalPor',
++            'recebidaOperacionalPorId','recebidaOperacionalEm',
++            'recebidaOperacionalMarcadaPor','recebidaOperacionalDesmarcadaEm',
++            'recebidaOperacionalDesmarcadaPor'
++          ])
++        ));
+       allow delete: if false;
+ 
+       // ─── ITENS — operacional, sem preço ─────────────────────────
+--- a/jarvis.html
++++ b/jarvis.html
+@@ -4285,11 +4285,11 @@
+ <script src="js/nfe-real-pro.js?v=26.16.0"></script>
+ <script src="js/thia-runtime-core-v2613.js?v=26.13.0"></script>
+ <script src="js/os-utils.js?v=26.17.2"></script>
+-<script src="js/os.js?v=26.24.1"></script>
++<script src="js/os.js?v=26.24.2"></script>
+ <script src="js/checklist-jarvis-bridge.js?v=26.24.0"></script>
+ <script src="js/cotacoes.js"></script>
+ <script src="js/assinatura-os.js"></script>
+-<script src="js/ia.js?v=26.22.5"></script>
++<script src="js/ia.js?v=26.24.2"></script>
+ <script src="js/catalogos-ia.js?v=19.0.0"></script>
+ <script src="js/tabela-tempa.js?v=26.17.5"></script>
+ <script src="js/exportar-pmsp.js?v=26.17.7"></script>
+@@ -4610,7 +4610,7 @@
+ </script>
+ 
+ <script src="js/jarvis-crm-veiculos-v20.js?v=20.1.1"></script>
+-<script src="js/comissoes-os-v21.js?v=26.22.2"></script>
++<script src="js/comissoes-os-v21.js?v=26.24.2"></script>
+ <script src="js/thia-firestore-runtime-v2612.js?v=26.13.0"></script>
+ <script src="js/performance-v23.js?v=26.13.0"></script>
+ <script src="js/jarvis-financeiro-v263.js?v=26.15.1"></script>
+--- a/js/comissoes-os-v21.js
++++ b/js/comissoes-os-v21.js
+@@ -207,21 +207,161 @@
+   function selectedAllocations(){return Array.from(document.querySelectorAll('#comListaV21 [data-com-row]')).filter(row=>row.querySelector('.com-check-v21')?.checked).map(row=>({osId:row.dataset.osId||'',servicoKey:row.dataset.key||'',servico:row.dataset.servico||'',placa:row.dataset.placa||'',veiculo:row.dataset.veiculo||'',baseServico:n(row.dataset.base),percentual:n(row.dataset.pct),valorComissaoPrevista:n(row.dataset.previsto),valorJaPagoAntes:n(row.dataset.pago),valorPago:n(row.querySelector('.com-valor-v21')?.value||0),comissaoOficial:row.dataset.oficial==='1'})).filter(a=>a.valorPago>0);}
+   function updateSummary(){const allocs=selectedAllocations(),total=allocs.reduce((s,a)=>s+a.valorPago,0);if($id('rhPgtoValor'))$id('rhPgtoValor').value=total?total.toFixed(2):'';if($id('comResumoV21'))$id('comResumoV21').textContent=allocs.length?`${allocs.length} serviço(s) selecionado(s) · pagamento agora ${money(total)}`:'Selecione os serviços que serão pagos agora.';}
+ 
++  // Compatibilidade: implementação anterior mantida intacta. A rotina de pagamento
++  // detalhado atual usa transação atômica e não chama esta função de lote legada.
+   async function consumePending(batch,mecId,osId,valor,agora,paymentId){let restante=valor;const pend=(window.J?.financeiro||[]).filter(f=>f?.isComissao===true&&String(f.mecId||'')===String(mecId)&&String(f.osId||'')===String(osId)&&!isCanceled(f)&&!isPaid(f)).sort((a,b)=>String(a.venc||a.createdAt||'').localeCompare(String(b.venc||b.createdAt||'')));for(const fin of pend){if(restante<=.001)break;const atual=n(fin.valor||0),usar=Math.min(atual,restante),novo=+(atual-usar).toFixed(2),ref=window.db.collection('financeiro').doc(fin.id);if(novo<=.001)batch.update(ref,{status:'Cancelado',valor:0,compensadoPorPagamentoComissao:true,pagamentoComissaoId:paymentId,motivoCancelamento:'Saldo quitado por pagamento detalhado de comissão',updatedAt:agora});else batch.update(ref,{valor:novo,totalComissaoJaPago:+n(fin.totalComissaoJaPago||0)+usar,pagamentoComissaoId:paymentId,updatedAt:agora});restante-=usar;}}
+ 
++
++  // Controle transacional do pagamento detalhado: todos os documentos da seleção
++  // são lidos antes de qualquer escrita. A O.S. é o ponto de serialização entre
++  // gestores/dispositivos; um pagamento simultâneo provoca nova validação.
++  const centavos=v=>Math.round(n(v)*100);
++  let salvandoDetalhado=false;
+   async function saveDetailed(){
+-    const mec=selectedFunc();if(!mec){window.toast?.('Selecione o colaborador.','warn');return;}
+-    const allocs=selectedAllocations();if(!allocs.length){window.toast?.('Selecione ao menos um serviço e informe o valor pago.','warn');return;}
+-    for(const a of allocs){const restante=Math.max(0,a.valorComissaoPrevista-a.valorJaPagoAntes);if(a.valorPago-restante>.011){window.toast?.(`O valor de ${a.servico} supera o saldo restante (${money(restante)}).`,'warn');return;}}
+-    const agora=new Date().toISOString(),data=$id('rhPgtoData')?.value||agora.slice(0,10),forma=$id('rhPgtoForma')?.value||'PIX',obs=$id('rhPgtoObs')?.value||'',paymentId=window.db.collection('financeiro').doc().id;
+-    const groups=new Map();allocs.forEach(a=>{if(!groups.has(a.osId))groups.set(a.osId,[]);groups.get(a.osId).push(a);});
+-    const batch=window.db.batch();let totalGeral=0;
+-    for(const [osId,itens] of groups){const total=+itens.reduce((s,a)=>s+a.valorPago,0).toFixed(2);totalGeral+=total;const ref=window.db.collection('financeiro').doc(),placa=itens[0]?.placa||'',veiculo=itens[0]?.veiculo||'',especialOficial=itens.some(a=>a.comissaoOficial===true);batch.set(ref,{tenantId:window.J.tid,tipo:'Saída',status:'Pago',isComissao:true,isComissaoPagamento:true,categoria:especialOficial?'pagamento_comissao_cliente_oficial':'pagamento_comissao_os_servico',origem:especialOficial?'pagamento_comissao_cliente_oficial':'pagamento_comissao_detalhado',comissaoClienteOficial:especialOficial,mecId:mec.id,mecNome:mec.nome||'',vinculo:`E_${mec.id}`,osId,placa,veiculo,valor:total,pgto:forma,venc:data,dataPgto:data,pagoEm:agora,pagamentoComissaoId:paymentId,desc:`Pagamento comissão — ${mec.nome} — O.S. ${placa||String(osId).slice(-6)}`,nota:obs,alocacoesComissao:itens,itensComissaoPagos:itens,createdAt:agora,updatedAt:agora});const haviaPendente=(window.J?.financeiro||[]).some(f=>f?.isComissao===true&&String(f.mecId||'')===String(mec.id)&&String(f.osId||'')===String(osId)&&!isCanceled(f)&&!isPaid(f));await consumePending(batch,mec.id,osId,total,agora,paymentId);const residual=+itens.reduce((sum,a)=>sum+Math.max(0,n(a.valorComissaoPrevista)-n(a.valorJaPagoAntes)-n(a.valorPago)),0).toFixed(2);if(!haviaPendente&&residual>.001){const pendRef=window.db.collection('financeiro').doc();batch.set(pendRef,{tenantId:window.J.tid,tipo:'Saída',status:'Pendente',isComissao:true,categoria:itens.some(a=>a.comissaoOficial===true)?'comissao_cliente_oficial_viatura_parcial':'comissao_os_servico_parcial',origem:itens.some(a=>a.comissaoOficial===true)?'saldo_comissao_cliente_oficial':'saldo_pagamento_comissao_detalhado',mecId:mec.id,mecNome:mec.nome||'',vinculo:`E_${mec.id}`,osId,placa,veiculo,valor:residual,pgto:'A Combinar',venc:data,desc:`Saldo de comissão — ${mec.nome} — O.S. ${placa||String(osId).slice(-6)}`,servicosComissao:itens.map(a=>({key:a.servicoKey,desc:a.servico,valorComissao:Math.max(0,n(a.valorComissaoPrevista)-n(a.valorJaPagoAntes)-n(a.valorPago)),baseServico:a.baseServico,percentual:a.percentual})),createdAt:agora,updatedAt:agora});}
+-      const osRef=window.db.collection('ordens_servico').doc(osId);
+-      const servicosPagos=itens.map(a=>a.servico).filter(Boolean).join('; ');
+-      batch.update(osRef,{timeline:firebase.firestore.FieldValue.arrayUnion({dt:agora,user:window.J?.nome||'Gestor',userId:window.J?.uid||window.J?.fid||'',perfil:window.J?.role||'gestor',tipo:'pagamento_comissao',mecanicoId:mec.id,mecanicoNome:mec.nome||'',valor:total,pagamentoComissaoId:paymentId,acao:`Comissão paga para ${mec.nome}: ${money(total)}${servicosPagos?' — '+servicosPagos:''}${obs?' — '+obs:''}`}),comissaoAtualizadaEm:agora});
++    if(salvandoDetalhado){window.toast?.('Um pagamento já está sendo registrado.','warn');return;}
++    const mec=selectedFunc();
++    if(!mec){window.toast?.('Selecione o colaborador.','warn');return;}
++    const allocs=selectedAllocations();
++    if(!allocs.length){window.toast?.('Selecione ao menos um serviço e informe o valor pago.','warn');return;}
++    const linhasAtuais=rowsFor(mec);
++    const disponiveis=new Map(linhasAtuais.map(r=>[`${r.osId}|${r.servicoKey}`,r]));
++    const usados=new Set();
++    for(const a of allocs){
++      const key=`${a.osId}|${a.servicoKey}`;
++      const origem=disponiveis.get(key);
++      if(!origem || origem.semPercentual || origem.aguardandoExecucao || usados.has(key)){
++        window.toast?.(`Seleção de comissão desatualizada: ${a.servico}. Atualize a lista.`, 'warn');return;
++      }
++      usados.add(key);
++      // Nunca confiar no saldo/percentual enviado pelo DOM sem validar com o modelo atual.
++      if(centavos(a.valorComissaoPrevista)!==centavos(origem.previsto) || centavos(a.valorJaPagoAntes)!==centavos(origem.pago)){
++        window.toast?.(`Os valores de ${a.servico} mudaram. Atualize a seleção.`, 'warn');return;
++      }
++      if(centavos(a.valorPago)<=0 || centavos(a.valorPago)>centavos(origem.falta)){
++        window.toast?.(`Valor excede saldo de ${a.servico}: ${money(origem.falta)}.`, 'warn');return;
++      }
+     }
+-    await batch.commit();window.toast?.(`✓ Comissão registrada: ${money(totalGeral)} para ${mec.nome}`,'ok');if(typeof window.audit==='function')window.audit('RH/EQUIPE',`Pagamento detalhado de comissão ${money(totalGeral)} para ${mec.nome} em ${groups.size} O.S.`);window.fecharModal?.('modalPgtoRH');window.calcComissoes?.();
++    const groups=new Map();
++    allocs.forEach(a=>{if(!groups.has(a.osId))groups.set(a.osId,[]);groups.get(a.osId).push(a);});
++    if(groups.size>40){window.toast?.('Para preservar a operação atômica, selecione até 40 O.S. por pagamento.','warn');return;}
++    const database=window.db;
++    const agora=new Date().toISOString(),data=$id('rhPgtoData')?.value||agora.slice(0,10);
++    const forma=$id('rhPgtoForma')?.value||'PIX',obs=$id('rhPgtoObs')?.value||'';
++    const paymentId=database.collection('financeiro').doc().id;
++    const actor=window.J?.nome||'Gestor',actorId=window.J?.uid||window.J?.fid||'';
++    const totalGeral=+allocs.reduce((s,a)=>s+a.valorPago,0).toFixed(2);
++    salvandoDetalhado=true;
++    try{
++      await database.runTransaction(async trx=>{
++        const refs=Array.from(groups.keys()).map(osId=>[osId,database.collection('ordens_servico').doc(osId)]);
++        const snapshots=new Map();
++        for(const [osId,ref] of refs){
++          const snap=await trx.get(ref);
++          if(!snap.exists)throw new Error(`O.S. ${osId} não encontrada.`);
++          const atual=snap.data()||{};
++          if(String(atual.tenantId||'')!==String(window.J.tid||''))throw new Error('Oficina divergente na O.S.');
++          const local=(window.J?.os||[]).find(o=>String(o.id)===String(osId));
++          if(local?.updatedAt&&atual.updatedAt&&String(local.updatedAt)!==String(atual.updatedAt))throw new Error(`O.S. atualizada em outro dispositivo. Reabra comissões antes de pagar (${osId}).`);
++          if(/^cancel/i.test(String(atual.status||'')))throw new Error(`O.S. cancelada (${osId}).`);
++          snapshots.set(osId,{ref,atual});
++        }
++        // Também relê saldos financeiros reais para não reusar um pendente
++        // que outro pagamento já consumiu/cancelou.
++        const pendingRefs=new Map();
++        for(const [osId,entry] of snapshots){
++          const ctrl=entry.atual.comissaoControleV26?.[String(mec.id)]||{};
++          const pend=(window.J?.financeiro||[]).filter(f=>f?.id&&f.isComissao===true&&String(f.mecId||'')===String(mec.id)&&String(f.osId||'')===String(osId)&&!isCanceled(f)&&!isPaid(f));
++          const ids=new Set(pend.map(f=>String(f.id)));
++          if(ctrl.saldoId)ids.add(String(ctrl.saldoId));
++          for(const id of ids)pendingRefs.set(id,database.collection('financeiro').doc(id));
++        }
++        const pendSnap=new Map();
++        for(const [id,ref] of pendingRefs)pendSnap.set(id,await trx.get(ref));
++        // TODAS as leituras da transação estão concluídas neste ponto.
++        for(const [osId,itens] of groups){
++          const {ref:osRef,atual}=snapshots.get(osId);
++          const allControl={...(atual.comissaoControleV26||{})};
++          const mecControl={...(allControl[String(mec.id)]||{})};
++          const pagosCentavos={...(mecControl.pagosCentavos||{})};
++          const total=+itens.reduce((s,a)=>s+a.valorPago,0).toFixed(2);
++          const placa=itens[0]?.placa||'',veiculo=itens[0]?.veiculo||'';
++          const especialOficial=itens.some(a=>a.comissaoOficial===true);
++          const liberados=linhasAtuais.filter(r=>String(r.osId)===String(osId)&&!r.semPercentual&&!r.aguardandoExecucao);
++          for(const a of itens){
++            const anterior=Math.max(centavos(a.valorJaPagoAntes),Number(pagosCentavos[a.servicoKey]||0));
++            const previsto=centavos(a.valorComissaoPrevista),parcela=centavos(a.valorPago);
++            if(anterior+parcela>previsto){throw new Error(`Pagamento duplicado/excedente bloqueado: ${a.servico} na O.S. ${placa||osId}. Reabra o extrato.`);}
++            pagosCentavos[a.servicoKey]=anterior+parcela;
++          }
++          const residualCent=liberados.reduce((s,r)=>s+Math.max(0,centavos(r.previsto)-Math.max(centavos(r.pago),Number(pagosCentavos[r.servicoKey]||0))),0);
++          const residual=+(residualCent/100).toFixed(2);
++          const pendExistentes=Array.from(pendSnap.values()).filter(s=>s.exists&&
++            String(s.data()?.osId||'')===String(osId)&&String(s.data()?.mecId||'')===String(mec.id)&&
++            String(s.data()?.tenantId||'')===String(window.J.tid)&&!isCanceled(s.data())&&!isPaid(s.data()))
++            .sort((a,b)=>String(a.data()?.venc||a.data()?.createdAt||'').localeCompare(String(b.data()?.venc||b.data()?.createdAt||'')));
++          let restante=centavos(total);
++          for(const p of pendExistentes){
++            if(restante<=0)break;
++            const fin=p.data(),atualCent=centavos(fin.valor||0),usar=Math.min(atualCent,restante),novoCent=atualCent-usar;
++            if(usar<=0)continue;
++            trx.update(p.ref,novoCent<=0?{
++              status:'Cancelado',valor:0,compensadoPorPagamentoComissao:true,
++              pagamentoComissaoId:paymentId,motivoCancelamento:'Saldo pago em comissão detalhada',updatedAt:agora
++            }:{valor:novoCent/100,totalComissaoJaPago:+(n(fin.totalComissaoJaPago||0)+usar/100).toFixed(2),pagamentoComissaoId:paymentId,updatedAt:agora});
++            restante-=usar;
++          }
++          // Apenas a primeira transação sem título pendente cria um saldo;
++          // o ID fica na O.S., impedindo a duplicação no próximo dispositivo.
++          if(!pendExistentes.length&&residualCent>0){
++            const pendRef=database.collection('financeiro').doc();
++            mecControl.saldoId=pendRef.id;
++            trx.set(pendRef,{
++              tenantId:window.J.tid,tipo:'Saída',status:'Pendente',isComissao:true,
++              categoria:especialOficial?'comissao_cliente_oficial_viatura_parcial':'comissao_os_servico_parcial',
++              origem:especialOficial?'saldo_comissao_cliente_oficial':'saldo_pagamento_comissao_detalhado',
++              mecId:mec.id,mecNome:mec.nome||'',vinculo:`E_${mec.id}`,
++              osId,placa,veiculo,valor:residual,pgto:'A Combinar',venc:data,
++              desc:`Saldo de comissão — ${mec.nome} — O.S. ${placa||String(osId).slice(-6)}`,
++              servicosComissao:liberados.map(r=>({key:r.servicoKey,desc:r.servico,
++                valorComissao:Math.max(0,(centavos(r.previsto)-Math.max(centavos(r.pago),Number(pagosCentavos[r.servicoKey]||0)))/100),
++                baseServico:r.base,percentual:r.percentual})),createdAt:agora,updatedAt:agora
++            });
++          }
++          // Cada O.S. recebe o próprio lançamento integral, mesmo no pagamento em lote.
++          const pagamentoRef=database.collection('financeiro').doc();
++          trx.set(pagamentoRef,{
++            tenantId:window.J.tid,tipo:'Saída',status:'Pago',isComissao:true,isComissaoPagamento:true,
++            categoria:especialOficial?'pagamento_comissao_cliente_oficial':'pagamento_comissao_os_servico',
++            origem:especialOficial?'pagamento_comissao_cliente_oficial':'pagamento_comissao_detalhado',
++            comissaoClienteOficial:especialOficial,mecId:mec.id,mecNome:mec.nome||'',vinculo:`E_${mec.id}`,
++            osId,placa,veiculo,valor:total,pgto:forma,venc:data,dataPgto:data,pagoEm:agora,
++            pagamentoComissaoId:paymentId,registroPor:actor,registroPorId:actorId,
++            situacaoComissao:residualCent>0?'parcial':'quitada',saldoComissaoDepois:residual,
++            desc:`Pagamento comissão — ${mec.nome} — O.S. ${placa||String(osId).slice(-6)}`,
++            nota:obs,alocacoesComissao:itens,itensComissaoPagos:itens,createdAt:agora,updatedAt:agora
++          });
++          mecControl.pagosCentavos=pagosCentavos;
++          mecControl.ultimoPagamentoId=paymentId;
++          mecControl.updatedAt=agora;
++          allControl[String(mec.id)]=mecControl;
++          const servicosPagos=itens.map(a=>a.servico).filter(Boolean).join('; ');
++          trx.update(osRef,{
++            comissaoControleV26:allControl,comissaoAtualizadaEm:agora,
++            timeline:firebase.firestore.FieldValue.arrayUnion({
++              dt:agora,user:actor,userId:actorId,perfil:window.J?.role||'gestor',
++              tipo:'pagamento_comissao',mecanicoId:mec.id,mecanicoNome:mec.nome||'',
++              valor:total,pagamentoComissaoId:paymentId,saldoPendente:residual,
++              situacao:residualCent>0?'parcial':'quitada',
++              acao:`Comissão ${residualCent>0?'parcialmente paga':'quitada'} para ${mec.nome}: ${money(total)}. Saldo estimado: ${money(residual)}${servicosPagos?' — '+servicosPagos:''}${obs?' — '+obs:''}`
++            })
++          });
++        }
++      });
++      window.toast?.(`✓ Pagamento de comissão registrado: ${money(totalGeral)} para ${mec.nome} em ${groups.size} O.S.`, 'ok');
++      if(typeof window.audit==='function')try{window.audit('RH/EQUIPE',`Pagamento de comissão ${money(totalGeral)} para ${mec.nome} em ${groups.size} O.S. (ID ${paymentId})`);}catch(_){}
++      window.fecharModal?.('modalPgtoRH');window.calcComissoes?.();
++    }catch(e){console.error('[Comissões] pagamento transacional:',e);window.toast?.('Pagamento NÃO efetuado: '+(e?.message||e),'err');}
++    finally{salvandoDetalhado=false;}
+   }
+ 
+   function summaryByFunc(func){
+@@ -243,6 +383,17 @@
+     box.innerHTML=(window.J?.equipe||[]).map(f=>({f,s:summaryByFunc(f)})).filter(x=>x.s.qtdServicos>0||x.s.pendente>0||x.s.pago>0).map(({f,s})=>`<div class="com-card" style="cursor:pointer;align-items:center;min-width:0;max-width:100%;box-sizing:border-box" onclick="window.abrirComissaoColaboradorV21('${esc(f.id)}')"><div style="min-width:0"><div class="com-nome" style="overflow-wrap:anywhere">${esc(f.nome)}</div><div style="font-family:var(--fm);font-size:.6rem;color:var(--muted)">${s.qtdServicos} SERVIÇO(S) · PAGO ${money(s.pago)} · FALTA ${money(s.pendente)}${s.semPercentual?` · <span style="color:var(--warn)">${s.semPercentual} SEM %</span>`:''}${s.aguardando?` · <span style="color:var(--warn)">${s.aguardando} AGUARDANDO</span>`:''}</div></div><div style="text-align:right"><div class="com-val">${money(s.pendente)}</div><div style="font-family:var(--fm);font-size:.56rem;color:var(--cyan);margin-top:3px">DETALHAR / PAGAR</div></div></div>`).join('')||'<div style="text-align:center;color:var(--muted);padding:20px;">Sem serviços atribuídos ou comissões registradas</div>';
+   }
+ 
++  // Fonte única para a IA financeira: reaproveita rowsFor, rateios e pagamentos reais.
++  window.thiaComissoesResumoV26=function(mecId){
++    const mec=(window.J?.equipe||[]).find(f=>String(f.id)===String(mecId));
++    if(!mec)return null;
++    const linhas=rowsFor(mec);
++    return {mecId:mec.id,linhas,
++      previsto:+linhas.reduce((s,r)=>s+n(r.previsto),0).toFixed(2),
++      pago:+linhas.reduce((s,r)=>s+n(r.pago),0).toFixed(2),
++      pendente:+linhas.filter(r=>!r.semPercentual&&!r.aguardandoExecucao).reduce((s,r)=>s+n(r.falta),0).toFixed(2)};
++  };
++
+   const oldPrep=window.prepPgtoRH;window.prepPgtoRH=function(){if(typeof oldPrep==='function')oldPrep.apply(this,arguments);ensureUI();toggle();};
+   const oldSave=window.salvarPgtoRH;window.salvarPgtoRH=function(){return $id('rhPgtoTipo')?.value==='Pagamento Comissão'?saveDetailed():(typeof oldSave==='function'?oldSave.apply(this,arguments):undefined);};
+   window.calcComissoes=calcCards;
+--- a/js/equipe-firestore-economico-v265.js
++++ b/js/equipe-firestore-economico-v265.js
+@@ -62,7 +62,7 @@
+     if(state.osUnsub&&!force)return;
+     if(force&&state.osUnsub){try{state.osUnsub();}catch(_){}state.osUnsub=null;}
+     if(!state.loaded.os)await cache('os','ordens_servico',applyOS);
+-    if(!force&&fresh('os')&&dbOS?.length)return;
++    // O cache hidrata a tela, mas nunca substitui o listener em tempo real.
+     statusEquipeDados('Sincronizando pátio da equipe...', 'warn');
+     const q=query('ordens_servico');if(!q)return;
+     state.osUnsub=q.onSnapshot({includeMetadataChanges:true},snap=>{
+@@ -96,7 +96,7 @@
+   function wrapSave(){
+     if(typeof W.salvarOS==='function'&&!W.salvarOS.__eqEco265){
+       const original=W.salvarOS;
+-      const wrapped=function(){const out=original.apply(this,arguments);Promise.resolve(out).finally(()=>{cache('os','ordens_servico',applyOS);cache('estoque','estoqueItems',applyEstoque);});return out;};
++      const wrapped=function(){return original.apply(this,arguments);}; // O onSnapshot atualiza O.S.; não reaplicar cache antigo após salvar.
+       wrapped.__eqEco265=true;wrapped.__original=original;W.salvarOS=wrapped;
+     }
+   }
+--- a/js/equipe-firestore-profissional-v2612.js
++++ b/js/equipe-firestore-profissional-v2612.js
+@@ -237,10 +237,8 @@
+       const original = W.salvarOS;
+       const wrapped = function () {
+         const out = original.apply(this, arguments);
+-        Promise.resolve(out).finally(() => {
+-          loadStock(false);
+-          if (!roleAll()) startMechanic(false);
+-        });
++        // A sessão já mantém listeners ativos; não refazer consulta de estoque a cada salvamento.
++        Promise.resolve(out).then(() => { if (!roleAll()) startOS(false); }).catch(() => {});
+         return out;
+       };
+       wrapped.__thiaEquipeProV2612 = true;
+--- a/js/ia.js
++++ b/js/ia.js
+@@ -497,50 +497,47 @@
+   }
+ 
+   function responderComissoesDetalhadas(texto, q, ctx, opts) {
+-    // Comissão só é consultada quando a pergunta fala explicitamente em comissão.
+-    // "Mecânico", "funcionário" ou "atendimento" isoladamente são consultas operacionais,
+-    // e nunca devem ser desviadas para o financeiro.
++    // Somente perguntas EXPLÍCITAS de comissão entram no financeiro.
++    // Atendimento/serviço executado permanece operacional e separado.
+     if (!/comiss/.test(q)) return null;
+-    if (!podeFinanceiro(opts)) return 'Seu perfil nao tem permissao para consultar comissoes ou financeiro.';
+-    const func = funcionarioPorPergunta(ctx, q);
+-    let lista = ctx.financeiro.filter(financeiroEhComissao);
+-    if (func) lista = lista.filter(f => financeiroDoFuncionario(f, func));
+-    const periodo = extrairPeriodoNaturalIA(texto);
+-    if (periodo) {
+-      lista = lista.filter(f => periodoContem(periodo, f.data || f.createdAt || f.dataLancamento || f.venc || f.vencimento || f.dataPagamento || f.pagoEm));
+-    }
+-    const querPagas = /\b(pagas|pago|pagos|pagamento|liquidadas|quitadas)\b/.test(q) && !/\ba\s+pagar\b/.test(q);
+-    const querPendentes = /\b(a\s+pagar|pagar|pendente|pendentes|aberto|abertas|em\s+aberto|devido|devidas)\b/.test(q) || !querPagas;
+-    if (querPagas) lista = lista.filter(f => isPagoStatus(f.status));
+-    else if (querPendentes) lista = lista.filter(f => isPendenteStatus(f.status));
+-    const tituloPessoa = func ? ` de ${esc(func.nome || func.usuario || 'colaborador')}` : '';
+-    if (!lista.length) return `Nao encontrei comissoes${tituloPessoa} ${querPagas ? 'pagas' : 'a pagar'} nos dados carregados.`;
+-    const total = lista.reduce((s, f) => s + num(f.valor || f.total || 0), 0);
+-    const porPessoa = {};
+-    lista.forEach(f => {
+-      const id = f.mecId || f.funcId || f.funcionarioId || f.colaboradorId || f.vinculo || 'sem-vinculo';
+-      const nome = (ctx.equipe.find(e => [e.id,e.uid,e.usuario].map(x=>String(x||'')).includes(String(id))) || {}).nome || f.mecNome || f.funcionario || f.colaborador || (func && (func.nome || func.usuario)) || 'Sem colaborador identificado';
+-      porPessoa[nome] = (porPessoa[nome] || 0) + num(f.valor || f.total || 0);
+-    });
+-    const resumo = Object.keys(porPessoa).length > 1
+-      ? '<br><strong>Resumo por colaborador:</strong><br>' + Object.entries(porPessoa).sort((a,b)=>b[1]-a[1]).map(([nome, total]) => `- ${esc(nome)}: ${moeda(total)}`).join('<br>')
+-      : '';
+-    const acoes = (() => {
+-      if (querPagas) return '';
+-      if (func) return acaoPagamentoComissaoIA(func, lista.map(f => f.osId));
+-      const porMec = new Map();
+-      lista.forEach(f => {
+-        const id = String(f.mecId || f.funcId || f.funcionarioId || f.colaboradorId || '').trim();
+-        if (!id) return;
+-        if (!porMec.has(id)) porMec.set(id, []);
+-        if (f.osId) porMec.get(id).push(f.osId);
+-      });
+-      return Array.from(porMec.entries()).slice(0, 12).map(([id, osIds]) => {
+-        const pessoa = (ctx.equipe || []).find(e => String(e.id || e.uid || '') === id) || { id, nome: (lista.find(f => String(f.mecId || f.funcId || f.funcionarioId || f.colaboradorId || '') === id)?.mecNome || 'Colaborador') };
+-        return acaoPagamentoComissaoIA(pessoa, osIds);
+-      }).join('');
+-    })();
+-    return `<strong>Comissões ${querPagas ? 'pagas' : 'a pagar'}${tituloPessoa} (${lista.length}):</strong><br>${lista.slice(0, 10).map(formatarLinhaFinanceiro).join('<br>')}<br><br><strong>Total:</strong> ${moeda(total)}${resumo}${acoes}`;
++    if (!podeFinanceiro(opts)) return 'Seu perfil não tem permissão para consultar comissões ou financeiro.';
++    const func=funcionarioPorPergunta(ctx,q);
++    const periodo=extrairPeriodoNaturalIA(texto);
++    let registros=(ctx.financeiro||[]).filter(f=>financeiroEhComissao(f)&&!isCanceladoStatus(f.status)
++      && f.canceladoPorReemissaoOS!==true && f.compensadoPorPagamentoComissao!==true);
++    if(func)registros=registros.filter(f=>financeiroDoFuncionario(f,func));
++    if(periodo)registros=registros.filter(f=>periodoContem(periodo,
++      (isPagoStatus(f.status)||f.pagoEm||f.dataPgto)
++        ? (f.dataPgto||f.pagoEm||f.dataPagamento||f.createdAt)
++        : (f.createdAt||f.dataLancamento||f.venc||f.vencimento)));
++    const pagos=registros.filter(f=>isPagoStatus(f.status)||!!f.pagoEm||!!f.dataPgto);
++    const pendentes=registros.filter(f=>!pagos.includes(f)&&isPendenteStatus(f.status));
++    const totalPago=pagos.reduce((s,f)=>s+num(f.valorPago??f.valor??f.total??0),0);
++    const totalTitulosPendentes=pendentes.reduce((s,f)=>s+num(f.saldoPendente??f.valor??f.total??0),0);
++    const querPagas=/\b(pagas|pagos|pagamento|pagamentos|liquidadas|quitadas|foi pago|ja pagou)\b/.test(q);
++    const querPendentes=/\b(a pagar|pendente|pendentes|em aberto|devido|devidas|saldo|saldos|falta|restante)\b/.test(q);
++    const listaMostrar=querPagas&&!querPendentes?pagos:querPendentes&&!querPagas?pendentes:registros;
++    const titulo=func?` de ${esc(func.nome||func.usuario||'colaborador')}`:'';
++    const relatorio=func&&typeof W.thiaComissoesResumoV26==='function'?W.thiaComissoesResumoV26(func.id):null;
++    if(!registros.length&&!relatorio?.linhas?.length)return `Não encontrei registros de comissões${titulo}${periodo?' no período informado':''} nos dados carregados.`;
++    const historico=pagos.slice().sort((a,b)=>String(b.dataPgto||b.pagoEm||b.createdAt||'').localeCompare(String(a.dataPgto||a.pagoEm||a.createdAt||'')));
++    const detalheHist=historico.slice(0,10).map(f=>{
++      const data=dataBR(f.dataPgto||f.pagoEm||f.createdAt);
++      const os=(ctx.os||[]).find(o=>String(o.id)===String(f.osId||''));
++      const placa=f.placa||os?.placa||String(f.osId||'').slice(-6).toUpperCase()||'-';
++      const tipo=f.situacaoComissao==='parcial'?' [PARCIAL]':f.situacaoComissao==='quitada'?' [QUITAÇÃO]':'';
++      const ator=f.registroPor?` · Lançado por ${esc(f.registroPor)}`:'';
++      return `${esc(data)} · O.S. ${esc(placa)} · ${moeda(f.valorPago??f.valor??0)}${tipo} · ${esc(f.pgto||f.forma||'')}${ator}`;
++    }).join('<br>');
++    const saldoCalculado=relatorio?relatorio.pendente:null;
++    const resumoModel=relatorio?`<br><strong>Saldo por serviços/viaturas elegíveis no módulo de comissões:</strong> ${moeda(saldoCalculado)} (${relatorio.linhas.filter(r=>r.falta>.009).length} item(ns) com saldo)`:'';
++    const pagosHtml=`<strong>Pagamentos efetivamente registrados:</strong> ${moeda(totalPago)} (${pagos.length} lançamento(s)).`;
++    const pendHtml=`<strong>Títulos pendentes registrados:</strong> ${moeda(totalTitulosPendentes)} (${pendentes.length} lançamento(s)).`;
++    const listaHtml=listaMostrar.length?`<br><br><strong>Registros consultados:</strong><br>${listaMostrar.slice(0,12).map(formatarLinhaFinanceiro).join('<br>')}`:'';
++    const histHtml=detalheHist?`<br><br><strong>Histórico individual de pagamentos (data · O.S. · valor):</strong><br>${detalheHist}`:'';
++    const obs=periodo?'<br><small>Valores de lançamentos filtrados pelo período solicitado; saldo do módulo, quando exibido, representa a situação atual dos serviços carregados.</small>':'';
++    const acoes=func&&!querPagas?acaoPagamentoComissaoIA(func,(relatorio?.linhas||[]).filter(r=>r.falta>.009).map(r=>r.osId).concat(pendentes.map(f=>f.osId))):'';
++    return `<strong>Comissões${titulo}</strong><br>${pagosHtml}<br>${pendHtml}${resumoModel}${listaHtml}${histHtml}${obs}${acoes}`;
+   }
+ 
+   function responderFinanceiroDetalhado(texto, q, ctx, opts) {
+--- a/js/nfe-real-pro.js
++++ b/js/nfe-real-pro.js
+@@ -1699,26 +1699,19 @@
+     return out;
+   }
+   function osClienteOficialNF(os){
+-    // Regra cirúrgica: orçamento importado/Cília NÃO torna cliente oficial.
+-    // Cliente comum com Cília ou PDF continua recebendo peça da NF em Peças da O.S.
++    // Não pesquisar nomes de propriedades num JSON: clienteOficial:false não é oficial.
+     const cliente = (W.J?.clientes || []).find(c => String(c.id) === String(os?.clienteId || os?.cliente || '')) || {};
+-    const nomeCliente = String(cliente.nome || os?.clienteNome || os?.cliente || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+-    if (!nomeCliente || nomeCliente === 'CONSUMIDOR') return false;
+-    const tipoCliente = String(cliente.tipoCliente || os?.tipoCliente || os?.clienteTipo || '').toLowerCase();
+-    if (tipoCliente === 'governo' || tipoCliente === 'oficial') return true;
+-    const raw = JSON.stringify({
+-      osClienteOficial: os?.clienteOficial,
+-      osOrgaoPublico: os?.orgaoPublico,
+-      osGov: os?.gov,
+-      osFiscalContrato: os?.fiscalContrato,
+-      osContrato: os?.contrato,
+-      clienteOficial: cliente.clienteOficial,
+-      clienteOrgaoPublico: cliente.orgaoPublico,
+-      clientePublico: cliente.publico,
+-      clienteGov: cliente.gov,
+-      clienteTipo: cliente.tipoCliente
+-    }).toUpperCase();
+-    return /OFICIAL|GOVERNO|PMSP|POLICIA|POLÍCIA|MILITAR|BPM|PREFEITURA|ESTADO|MUNICIP|SECRETARIA/.test(raw);
++    const tipoCliente = String(cliente.tipoCliente || os?.tipoCliente || os?.clienteTipo || '').trim().toLowerCase();
++    if (['governo','oficial','publico','público'].includes(tipoCliente)) return true;
++    // Priorizar sinais explícitos. Falsy como false, 'false', '0' e 0 não indicam cliente oficial.
++    const sim = v => v === true || v === 1 || ['true','1','sim','s','yes'].includes(String(v ?? '').trim().toLowerCase());
++    if ([cliente.clienteOficial, cliente.orgaoPublico, cliente.publico, cliente.gov,
++         os?.clienteOficial, os?.orgaoPublico, os?.gov].some(sim)) return true;
++    const institucional = [cliente.govUnidade, cliente.orgao, cliente.tipoCliente,
++      os?.fiscalContrato, os?.contrato, os?.orgao, os?.unidade]
++      .filter(v => typeof v === 'string' && v.trim()).join(' ')
++      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
++    return /\b(PMSP|POLICIA|MILITAR|PREFEITURA|SECRETARIA|GOVERNO|ORG(AO|AO) PUBLICO)\b/.test(institucional);
+   }
+   function pecaOrcamentoFromNF(pecaReal){
+     const desc = pecaReal.desc || pecaReal.descricao || '';
+@@ -1847,7 +1840,10 @@
+         ultimaEntradaNFVinculada: nfPayload.numero || nfRef.id
+       };
+       osUpdate.pecasReais = mergePecasReaisNF(entry.os.pecasReais, pecas);
+-      if (!osClienteOficialNF(entry.os)) {
++      // NF vinculada documenta compra; não é lançamento comercial automático.
++      // Apenas O.S. com autorização persistida de espelhamento podem usar o
++      // fluxo legado, sem interferir nas peças do Cília/TEMPÁRIA.
++      if (entry.os.permitirNFNoOrcamento === true && !osClienteOficialNF(entry.os)) {
+         const pecasOrcamento = pecas.map(pecaOrcamentoFromNF).filter(Boolean).filter(p => !pecaOrcamentoOcultaOSNF(entry.os, p));
+         if (pecasOrcamento.length) osUpdate.pecas = mergePecasOrcamentoNF(entry.os.pecas, pecasOrcamento);
+       }
+@@ -1871,7 +1867,7 @@
+         });
+         W.atualizarResumoPecasReais177?.();
+       }
+-      if (!osClienteOficialNF(entry.os)) refletirPecasNFNaOSTelaAtual(osId, pecas);
++      if (entry.os.permitirNFNoOrcamento === true && !osClienteOficialNF(entry.os)) refletirPecasNFNaOSTelaAtual(osId, pecas);
+     }
+     return { os: porOS.size, pecas: totalPecas, registrosAuxiliares };
+   }
+--- a/js/os-utils.js
++++ b/js/os-utils.js
+@@ -266,7 +266,7 @@
+     const valorHora = U.parseNumberBR(valorHoraPreferido);
+     const valorManualTotal = servico?.valorManual === true || servico?.valorManual === '1';
+     const temHoraExplicita = opts.valorHoraInput != null || valorHoraManual || !!(servico?.valorHoraSecao || servico?.valorHoraTabela || servico?.precoHora);
+-    const usaCalculoHora = tempo > 0 && valorHora > 0 && (
++    const usaCalculoHora = (!valorManualTotal || opts.forcarCalculoHora === true) && tempo > 0 && valorHora > 0 && (
+       temBaseTabela ||
+       valorHoraManual ||
+       opts.forcarCalculoHora === true ||
+@@ -467,31 +467,18 @@
+ 
+   U.isBudgetPieceLinkedToRealPart = function(os, peca) {
+     if (!peca || typeof peca !== 'object') return false;
++    // A própria linha identifica sua origem fiscal/protegida.
+     if (U.isProtectedRealPart(peca)) return true;
+-
++    // Um vínculo explícito e estável é prova; igualdade de código, preço e quantidade NÃO é.
+     const reais = U.getRealParts(os);
+     if (!reais.length) return false;
+-
+-    const chavePeca = normalizarCodigoPecaReal(peca.origemNFItemKey || peca.idReal || peca.pecaRealId || '');
+-    const codigosPeca = codigosPecaReal(peca);
+-    const qtdPeca = quantidadePecaReal(peca);
+-
+-    return reais.some(real => {
+-      const chaveReal = normalizarCodigoPecaReal(real.origemNFItemKey || real.idReal || real.pecaRealId || '');
+-      if (chavePeca && chaveReal && chavePeca === chaveReal) return true;
+-
+-      const codigosReal = codigosPecaReal(real);
+-      const codigoIgual = codigosPeca.some(codigo => codigosReal.includes(codigo));
+-      const descricaoIgual = descricoesCoincidemPecaReal(peca, real);
+-      const valorIgual = valoresCoincidemPecaReal(peca, real);
+-      const qtdIgual = Math.abs(qtdPeca - quantidadePecaReal(real)) < 0.0001;
+-      const nfIgual = referenciasNFCoincidemPecaReal(peca, real);
+-
+-      if (nfIgual && (codigoIgual || descricaoIgual)) return true;
+-      if (codigoIgual && valorIgual && (descricaoIgual || qtdIgual)) return true;
+-      if (descricaoIgual && valorIgual && qtdIgual) return true;
+-      return false;
+-    });
++    const ids = ['origemNFItemKey', 'idReal', 'pecaRealId'];
++    const links = ids.map(k => normalizarCodigoPecaReal(peca[k])).filter(Boolean);
++    if (!links.length) return false;
++    return reais.some(real => ids.some(k => {
++      const id = normalizarCodigoPecaReal(real[k]);
++      return Boolean(id && links.includes(id));
++    }));
+   };
+ 
+   U.hasProtectedRealParts = function(os) {
+--- a/js/os.js
++++ b/js/os.js
+@@ -1744,9 +1744,11 @@
+       const prismaFmt = prismaAtual && s !== 'Entregue'
+         ? `<div style="display:inline-flex;align-items:center;gap:4px;margin-top:4px;font-family:var(--fm);font-size:.58rem;color:#111;background:var(--warn);border-radius:999px;padding:2px 7px;font-weight:900;letter-spacing:.8px;">PRISMA ${esc(prismaAtual)}</div>`
+         : '';
+-      const recebidaOperacional = os.recebidaOperacional === true;
++      const recebidoValorOp = Number(os.valorRecebidoOperacional);
++      const recebidoValorValido = Number.isFinite(recebidoValorOp) && recebidoValorOp > 0;
++      const recebidaOperacional = os.recebidaOperacional === true || recebidoValorValido;
+       const recebidaBadge = recebidaOperacional
+-        ? `<div style="display:inline-flex;align-items:center;gap:4px;margin-top:4px;margin-left:${prismaAtual&&s!=='Entregue'?'4px':'0'};font-family:var(--fm);font-size:.58rem;color:#062b1c;background:var(--success);border-radius:999px;padding:2px 7px;font-weight:900;letter-spacing:.8px;">💰 RECEBIDA</div>`
++        ? `<div style="display:inline-flex;align-items:center;gap:4px;margin-top:4px;margin-left:${prismaAtual&&s!=='Entregue'?'4px':'0'};font-family:var(--fm);font-size:.58rem;color:#062b1c;background:var(--success);border-radius:999px;padding:2px 7px;font-weight:900;letter-spacing:.8px;">💰 RECEBIDA${recebidoValorValido ? ' · '+esc(moeda(recebidoValorOp)) : ''}</div>`
+         : '';
+       const UOS = window.JarvisOSUtils || window.JOS || {};
+       const resumoValores = UOS.getBudgetSummary
+@@ -1789,6 +1791,7 @@
+             </div>
+             <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+               <button title="${recebidaOperacional?'Desmarcar recebimento operacional':'Marcar O.S. como recebida sem registrar forma de pagamento'}" onclick="event.stopPropagation();window.toggleOSRecebidaOperacional('${os.id}')" style="background:${recebidaOperacional?'rgba(0,255,136,.14)':'transparent'};border:1px solid ${recebidaOperacional?'var(--success)':'rgba(0,255,136,.42)'};color:${recebidaOperacional?'var(--success)':'var(--muted2)'};font-family:var(--fm);font-size:.56rem;padding:3px 6px;border-radius:3px;cursor:pointer;white-space:nowrap;">${recebidaOperacional?'✓ RECEBIDA':'💰 RECEBER'}</button>
++              <button type="button" title="Lançar/alterar valor recebido operacional (sem conciliação financeira)" onclick="event.stopPropagation();window.registrarValorRecebidoOperacional('${os.id}')" style="background:transparent;border:1px solid rgba(0,212,255,.35);color:var(--cyan);font-family:var(--fm);font-size:.56rem;padding:3px 6px;border-radius:3px;cursor:pointer;white-space:nowrap;">R$ VALOR</button>
+               ${btnExcluir}
+             </div>
+         </div>
+@@ -1810,45 +1813,67 @@
+   });
+ };
+ 
+-window.toggleOSRecebidaOperacional = async function(id) {
+-  const osAtual = (Array.isArray(J.os) ? J.os : []).find(o => String(o.id) === String(id));
+-  if (!osAtual) { window.toast?.('O.S. não encontrada nos dados carregados.', 'warn'); return; }
+-  const marcar = osAtual.recebidaOperacional !== true;
+-  const placa = identidadeVeiculoOS(osAtual, (J.veiculos || []).find(v => String(v.id) === String(osAtual.veiculoId)) || {}).placa || osAtual.placa || String(id).slice(-6).toUpperCase();
+-  const confirma = confirm(marcar
+-    ? `Marcar ${placa} como RECEBIDA no pátio?\n\nIsto é apenas um controle operacional. NÃO cria lançamento financeiro e NÃO registra forma de pagamento.`
+-    : `Desmarcar o indicador RECEBIDA de ${placa}?\n\nA alteração ficará registrada na auditoria da O.S.`);
+-  if (!confirma) return;
+-  const agora = new Date().toISOString();
+-  const usuario = J.nome || sessionStorage.getItem('j_nome') || 'Gestor';
+-  const usuarioId = J.uid || J.fid || sessionStorage.getItem('j_uid') || sessionStorage.getItem('j_fid') || '';
+-  const perfil = J.role || sessionStorage.getItem('j_role') || 'gestor';
+-  const acao = marcar
+-    ? 'Marcou a O.S. como RECEBIDA no pátio, sem registrar forma de pagamento.'
+-    : 'Desmarcou o indicador RECEBIDA da O.S. no pátio.';
+-  const evento = { dt: agora, user: usuario, userId: usuarioId, perfil, tipo: 'recebimento_operacional', recebido: marcar, acao };
+-  const update = {
+-    recebidaOperacional: marcar,
+-    recebidaOperacionalAtualizadoEm: agora,
+-    recebidaOperacionalPor: usuario,
+-    recebidaOperacionalPorId: usuarioId,
+-    timeline: firebase.firestore.FieldValue.arrayUnion(evento)
+-  };
+-  if (marcar) {
+-    update.recebidaOperacionalEm = agora;
+-    update.recebidaOperacionalMarcadaPor = usuario;
+-  } else {
+-    update.recebidaOperacionalDesmarcadaEm = agora;
+-    update.recebidaOperacionalDesmarcadaPor = usuario;
+-  }
+-  try {
+-    await db.collection('ordens_servico').doc(id).update(update);
+-    await auditGeralOS(id, acao, { tipo: 'recebimento_operacional', placa, recebido: marcar, usuarioId, perfil });
+-    window.toast?.(marcar ? '✓ O.S. marcada como RECEBIDA no pátio.' : 'Indicador RECEBIDA removido da O.S.', marcar ? 'ok' : 'warn');
+-  } catch (e) {
+-    console.error('[O.S.] recebimento operacional:', e);
+-    window.toast?.('Erro ao atualizar indicador de recebimento: ' + (e?.message || e), 'err');
+-  }
++// Indicador de recebimento somente operacional: NÃO cria título nem baixa conciliada.
++function _recebimentoNumeroBR(v){
++  let s=String(v==null?'':v).trim().replace(/\s|R\$/gi,'');
++  if(!s || !/^[\d.,]+$/.test(s))return NaN;
++  if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');
++  else if(s.includes(','))s=s.replace(',','.');
++  else if((s.match(/\./g)||[]).length>1)s=s.replace(/\./g,'');
++  const n=Number(s);return Number.isFinite(n)&&n>=0&&n<=10000000000&&Math.round(n*100)/100===n?n:NaN;
++}
++async function _registrarRecebimentoOS(id, novoValor, marcar, operacao){
++  const dbRef=db.collection('ordens_servico').doc(id);
++  const usuario=J.nome||sessionStorage.getItem('j_nome')||'Gestor';
++  const usuarioId=J.uid||J.fid||sessionStorage.getItem('j_uid')||sessionStorage.getItem('j_fid')||'';
++  const perfil=J.role||sessionStorage.getItem('j_role')||'gestor';
++  if(!['admin','gestor','gerente','superadmin','dono','oficina_admin','financeiro'].includes(String(perfil).toLowerCase())){
++    window.toast?.('Somente o gestor/financeiro registra recebimento operacional.','err');return;
++  }
++  try{
++    let evento;
++    await db.runTransaction(async trx=>{
++      const snap=await trx.get(dbRef);
++      if(!snap.exists)throw new Error('O.S. não encontrada.');
++      const atual=snap.data()||{};
++      const antes=Number(atual.valorRecebidoOperacional)||0;
++      const recebidaAntes=atual.recebidaOperacional===true;
++      const valorDepois=Math.round(novoValor*100)/100;
++      const agora=new Date().toISOString();
++      const acao=`Recebimento operacional ${operacao}: ${moeda(antes)} → ${moeda(valorDepois)}. Indicador ${recebidaAntes?'RECEBIDA':'NÃO RECEBIDA'} → ${marcar?'RECEBIDA':'NÃO RECEBIDA'}. Não é baixa financeira conciliada.`;
++      evento={dt:agora,user:usuario,userId:usuarioId,perfil,tipo:'recebimento_operacional',valorAnterior:antes,valorNovo:valorDepois,recebidoAnterior:recebidaAntes,recebido:marcar,acao};
++      const update={valorRecebidoOperacional:valorDepois,recebidaOperacional:marcar,recebidaOperacionalAtualizadoEm:agora,recebidaOperacionalPor:usuario,recebidaOperacionalPorId:usuarioId,timeline:firebase.firestore.FieldValue.arrayUnion(evento)};
++      if(marcar){update.recebidaOperacionalEm=agora;update.recebidaOperacionalMarcadaPor=usuario;}
++      else{update.recebidaOperacionalDesmarcadaEm=agora;update.recebidaOperacionalDesmarcadaPor=usuario;}
++      trx.update(dbRef,update);
++    });
++    // Documento auditado na mesma transação; auditoria geral é complemento.
++    try{await auditGeralOS(id,evento.acao,{tipo:evento.tipo,valorAnterior:evento.valorAnterior,valorNovo:evento.valorNovo,usuarioId,perfil});}
++    catch(err){console.warn('[O.S.] auditoria geral auxiliar:',err);}
++    window.toast?.('✓ Recebimento operacional atualizado, sem conciliação financeira.','ok');
++  }catch(e){console.error('[O.S.] recebimento operacional:',e);window.toast?.('Erro ao registrar recebimento: '+(e?.message||e),'err');}
++}
++window.registrarValorRecebidoOperacional=async function(id){
++  const osAtual=(Array.isArray(J.os)?J.os:[]).find(o=>String(o.id)===String(id));
++  if(!osAtual){window.toast?.('O.S. não encontrada nos dados carregados.','warn');return;}
++  const anterior=Number(osAtual.valorRecebidoOperacional)||0;
++  const placa=identidadeVeiculoOS(osAtual,(J.veiculos||[]).find(v=>String(v.id)===String(osAtual.veiculoId))||{}).placa||osAtual.placa||id;
++  const digitado=prompt(`VALOR RECEBIDO — ${placa}\n\nControle operacional, não conciliado. Informe o valor total recebido até o momento em R$ (não apenas o último pagamento).\n\nValor anterior: ${moeda(anterior)}.\nDigite 0 para zerar o registro.`,anterior.toFixed(2).replace('.',','));
++  if(digitado===null)return;
++  const valor=_recebimentoNumeroBR(digitado);
++  if(!Number.isFinite(valor)){window.toast?.('Informe um valor válido em R$, com até 2 casas decimais.','warn');return;}
++  if(valor===anterior && (osAtual.recebidaOperacional===true)===(valor>0)){window.toast?.('Nenhuma alteração no recebimento.','warn');return;}
++  await _registrarRecebimentoOS(id,valor,valor>0,'informado pelo gestor');
++};
++window.toggleOSRecebidaOperacional=async function(id){
++  const osAtual=(Array.isArray(J.os)?J.os:[]).find(o=>String(o.id)===String(id));
++  if(!osAtual){window.toast?.('O.S. não encontrada nos dados carregados.','warn');return;}
++  const recebido=osAtual.recebidaOperacional===true;
++  const valor=Number(osAtual.valorRecebidoOperacional)||0;
++  const marcar=!recebido;
++  const placa=identidadeVeiculoOS(osAtual,(J.veiculos||[]).find(v=>String(v.id)===String(osAtual.veiculoId))||{}).placa||osAtual.placa||id;
++  if(!confirm(marcar?`Marcar ${placa} como RECEBIDA (sem conciliação)?\nValor atual: ${moeda(valor)}. Use R$ VALOR para lançar um valor.`:`Desmarcar RECEBIDA de ${placa} e zerar o indicador de valor operacional (${moeda(valor)})? A auditoria preservará o valor anterior.`))return;
++  await _registrarRecebimentoOS(id,marcar?valor:0,marcar,marcar?'marcado':'desmarcado');
+ };
+ 
+ window.moverStatusOS = async function(id, novoStatus) {
+@@ -2524,6 +2549,7 @@
+ 
+ 
+ window.prepOS = function(mode, id = null) {
++  window._osSessaoReabertura = null;
+   ['osId', 'osPlaca', 'osPlacaView', 'osPrefixo', 'osVeiculo', 'osCliente', 'osCelular', 'osCpf', 'osDiagnostico', 'osRelato', 'osDescricao', 'chkObs', 'osKm', 'osData', 'osPrisma'].forEach(f => { if ($(f)) $(f).value = ''; });
+   // Limpa apenas os marcadores de vínculo da O.S. anterior. Eles serão definidos novamente
+   // ao abrir uma O.S. existente e usados para impedir que listeners apaguem cliente/veículo.
+@@ -2593,6 +2619,11 @@
+   if (mode === 'edit' && id) {
+     const o = J.os.find(x => x.id === id);
+     if (!o) return;
++    // Marcador local, sem escrita ao apenas visualizar. Ao SALVAR, registra
++    // a reabertura de uma O.S. encerrada sem apagar peças/serviços existentes.
++    window._osSessaoReabertura = /^(entregue|concluido|concluído|finalizado|faturado|pronto)$/i.test(String(o.status || '').trim())
++      ? { osId:o.id, abertaEm:new Date().toISOString(), statusAnterior:o.status }
++      : null;
+ 
+     if ($('osId')) $('osId').value = o.id;
+     if ($('osIdBadge')) $('osIdBadge').innerText = 'OS #' + o.id.slice(-6).toUpperCase();
+@@ -3531,7 +3562,11 @@
+   const o = os || {};
+   const visiveis = Array.isArray(pecasAtuais) ? pecasAtuais.slice() : [];
+   const reais = Array.isArray(pecasReaisAtuais) ? pecasReaisAtuais : (Array.isArray(o.pecasReais) ? o.pecasReais : []);
+-  if (osClienteOficialSeguroOS(o)) return visiveis;
++  // Dados de compra/NF e peças realmente trocadas pertencem ao controle
++  // interno *177: nunca criar item de orçamento automaticamente por reabertura.
++  // A rotina legada fica acessível APENAS para O.S. com opt-in explícito
++  // anterior, preservando eventuais fluxos comerciais deliberadamente configurados.
++  if (osClienteOficialSeguroOS(o) || o.permitirNFNoOrcamento !== true) return visiveis;
+   reais.forEach(real => {
+     const origemNF = real && (real.origem === 'nf_entrada' || real.statusAplicacao === 'comprada_vinculada_nf' || real.nfId || real.origemNFItemKey);
+     if (!origemNF) return;
+@@ -4757,7 +4792,7 @@
+ 
+   // Mapeia media para o payload antes do Deep Diff para podermos comparar
+   if ($('osMediaArray')) {
+-      payload.media = JSON.parse($('osMediaArray').value || '[]');
++      payload.media = prepararRegistroMidiasOS(JSON.parse($('osMediaArray').value || '[]'), _oldOSPreservar?.media || _oldOSPreservar?.fotos || [], window.J?.nome || 'Gestor');
+   }
+ 
+   // ── Assinatura do responsável por esta O.S. (thIAgui) ──────────────
+@@ -5043,6 +5078,27 @@
+                }));
+                registouAlgo = true;
+            }
++      });
++
++      // O diff legado compara descrições. Complemento de auditoria:
++      // uma segunda peça de mesmo nome precisa ser registrada individualmente.
++      const contarDescricoesOS = lista => {
++        const contagem = new Map();
++        (lista || []).forEach(item => {
++          const chave = String(item?.desc || item?.descricao || '').trim().toLowerCase();
++          if (chave) contagem.set(chave, (contagem.get(chave) || 0) + 1);
++        });
++        return contagem;
++      };
++      const cntPecasAntes = contarDescricoesOS(oldPecas);
++      const cntPecasDepois = contarDescricoesOS(newPecas);
++      cntPecasDepois.forEach((novaQtd, descricao) => {
++        const antigaQtd = cntPecasAntes.get(descricao) || 0;
++        if (!antigaQtd || novaQtd <= antigaQtd) return; // novas descrições já foram auditadas acima
++        tl.push(eventoEstruturadoOS('peca_adicionada', `Adicionou ${novaQtd-antigaQtd} nova(s) ocorrência(s) da peça já existente: ${descricao}.`, {
++          pecaDescricao:descricao,ocorrenciasAnteriores:antigaQtd,ocorrenciasNovas:novaQtd,origemEvento:'complemento_os'
++        }));
++        registouAlgo = true;
+       });
+ 
+       // 5. Identificação de Serviços (Adições, Remoções, Alterações de Valor)
+@@ -5122,17 +5178,35 @@
+            }
+       });
+ 
+-      // 6. Novas Fotos/Evidências
+-      const oldMediaLength = (oldOS.media || oldOS.fotos || []).length;
+-      const newMediaLength = (payload.media || []).length;
+-      if (newMediaLength > oldMediaLength) {
+-          const adicionadas = newMediaLength - oldMediaLength;
+-          tl.push({ dt: new Date().toISOString(), user: funcUser, acao: `Anexou ${adicionadas} nova(s) foto(s)/vídeo(s) de evidência.` });
+-          registouAlgo = true;
+-      } else if (newMediaLength < oldMediaLength) {
+-          const removidas = oldMediaLength - newMediaLength;
+-          tl.push({ dt: new Date().toISOString(), user: funcUser, acao: `Removeu ${removidas} foto(s)/vídeo(s) de evidência.` });
+-          registouAlgo = true;
++      const cntServicosAntes = contarDescricoesOS(oldServicos);
++      const cntServicosDepois = contarDescricoesOS(newServicos);
++      cntServicosDepois.forEach((novaQtd, descricao) => {
++        const antigaQtd = cntServicosAntes.get(descricao) || 0;
++        if (!antigaQtd || novaQtd <= antigaQtd) return;
++        tl.push(eventoEstruturadoOS('servico_adicionado', `Adicionou ${novaQtd-antigaQtd} nova(s) ocorrência(s) do serviço já existente: ${descricao}.`, {
++          servicoDescricao:descricao,ocorrenciasAnteriores:antigaQtd,ocorrenciasNovas:novaQtd,origemEvento:'complemento_os'
++        }));
++        registouAlgo = true;
++      });
++
++      // 6. Evidências: eventos individualizados por URL (inclui substituições
++      // com a mesma quantidade). Datas históricas ausentes não são inventadas.
++      const urlMidia = m => typeof m === 'string' ? m : (m?.url || m?.secure_url || '');
++      const antigas = new Map((oldOS.media || oldOS.fotos || []).map(m => [urlMidia(m),m]).filter(([url]) => url));
++      const atuais = new Map((payload.media || []).map(m => [urlMidia(m),m]).filter(([url]) => url));
++      for (const [url, m] of atuais) {
++        if (antigas.has(url)) continue;
++        const video = /^video/i.test(String(m?.type || ''));
++        tl.push({ dt: m?.importedAt || new Date().toISOString(), user:funcUser, tipo:'evidencia_adicionada',
++          acao:`Anexou ${video ? 'vídeo' : 'imagem'}: ${m?.name || url.split('/').pop().split('?')[0] || 'arquivo'}; enviado em ${dataHoraEvidenciaOS(m?.uploadedAt)}; importado na O.S. em ${dataHoraEvidenciaOS(m?.importedAt)}.`,
++          midiaUrl:url, midiaTipo:video ? 'video' : 'imagem', enviadoEm:m?.uploadedAt || null, importadoEm:m?.importedAt || null });
++        registouAlgo = true;
++      }
++      for (const [url, m] of antigas) {
++        if (atuais.has(url)) continue;
++        tl.push({ dt:new Date().toISOString(),user:funcUser,tipo:'evidencia_removida',
++          acao:`Removeu evidência: ${m?.name || url.split('/').pop().split('?')[0] || 'arquivo'}.`,midiaUrl:url });
++        registouAlgo = true;
+       }
+ 
+       // Fallback operacional: se nada entrou no histórico da OS e também não foi
+@@ -5147,6 +5221,14 @@
+       tl.push(eventoEstruturadoOS('os_aberta', `Abriu a O.S. (Status inicial: ${STATUS_MAP_LEGACY[payload.status] || payload.status})`, {
+           statusNovo: payload.status || ''
+       }));
++      (payload.media || []).forEach(m => {
++        const url = typeof m === 'string' ? m : m?.url || m?.secure_url || '';
++        if (!url) return;
++        const video = /^video/i.test(String(m?.type || ''));
++        tl.push({ dt:m?.importedAt || new Date().toISOString(),user:funcUser,tipo:'evidencia_adicionada',
++          acao:`Anexou ${video ? 'vídeo' : 'imagem'} na criação: ${m?.name || url.split('/').pop().split('?')[0] || 'arquivo'}; enviado em ${dataHoraEvidenciaOS(m?.uploadedAt)}; na O.S. em ${dataHoraEvidenciaOS(m?.importedAt)}.`,
++          midiaUrl:url, midiaTipo:video ? 'video' : 'imagem', enviadoEm:m?.uploadedAt || null, importadoEm:m?.importedAt || null });
++      });
+       idsMecanicosDocumentoOS(payload).forEach(id => {
+           const mec = snapshotMecanicoOS(id, payload);
+           tl.push(eventoEstruturadoOS('mecanico_relacionado_os', `Relacionou o mecânico ${mec.nome || id} à O.S.`, {
+@@ -5183,6 +5265,21 @@
+       }
+   }
+ 
++  if (osId && window._osSessaoReabertura?.osId === osId) {
++      const sessao = window._osSessaoReabertura;
++      tl.push(eventoEstruturadoOS('os_reabertura_edicao',
++        `Reabriu para edição/complementação a O.S. anteriormente ${sessao.statusAnterior}; novos lançamentos permanecem auditados individualmente.`, {
++        statusAnterior:sessao.statusAnterior, statusNovo:payload.status,
++        abertaEm:sessao.abertaEm, origemEvento:'edicao_os'
++      }));
++  }
++  if (osId && !registroReaberturaAprovacaoOS &&
++      /^(entregue|concluido|concluído|finalizado|faturado|pronto)$/i.test(String(oldOSParaAprovacao.status || '').trim()) &&
++      statusReabreEdicaoOrcamentoOS(payload.status)) {
++      tl.push(eventoEstruturadoOS('os_reaberta', `Reabriu a O.S. de ${oldOSParaAprovacao.status} para ${payload.status}, permitindo lançamentos adicionais sem apagar o histórico.`, {
++        statusAnterior:oldOSParaAprovacao.status,statusNovo:payload.status,origemEvento:'salvar_os'
++      }));
++  }
+   if (registroReaberturaAprovacaoOS) {
+       tl.push({
+           dt: new Date().toISOString(),
+@@ -5540,6 +5637,8 @@
+   operacoesBatchSalvarOS += 1;
+ 
+   await batchSalvarOS.commit();
++  // Só limpa após persistência confirmada; falha de gravação não perde contexto.
++  if (window._osSessaoReabertura?.osId === osId) window._osSessaoReabertura = null;
+   const savedOsId = targetOsId;
+   if (document.getElementById('osId')) document.getElementById('osId').value = savedOsId;
+ 
+@@ -5717,7 +5816,8 @@
+     type: data.resource_type || (/^video\//.test(file.type || '') ? 'video' : 'image'),
+     name: file.name || '',
+     bytes: data.bytes || finalFile.size || file.size || 0,
+-    uploadedAt: new Date().toISOString()
++    uploadedAt: data.created_at && !Number.isNaN(Date.parse(data.created_at)) ? new Date(data.created_at).toISOString() : new Date().toISOString(),
++    uploadHorarioOrigem: data.created_at ? 'cloudinary' : 'dispositivo'
+   };
+ };
+ 
+@@ -5865,7 +5965,7 @@
+   const prev = overlay.querySelector('[data-os-galeria-prev]');
+   const next = overlay.querySelector('[data-os-galeria-next]');
+   if (img) { img.src = foto.url; img.alt = `Foto ${idx + 1} da O.S.`; }
+-  if (count) count.textContent = `Foto ${idx + 1} de ${fotos.length}`;
++  if (count) count.textContent = `Foto ${idx + 1} de ${fotos.length} | Enviada: ${dataHoraEvidenciaOS(foto.uploadedAt)} | Na O.S.: ${dataHoraEvidenciaOS(foto.importedAt)}`;
+   if (prev) prev.style.visibility = fotos.length > 1 ? 'visible' : 'hidden';
+   if (next) next.style.visibility = fotos.length > 1 ? 'visible' : 'hidden';
+ };
+@@ -5949,6 +6049,26 @@
+   window.renderGaleriaFotoOS();
+ };
+ 
++function dataHoraEvidenciaOS(value) {
++  if (!value) return 'Não registrada (arquivo antigo)';
++  const data = typeof value?.toDate === 'function' ? value.toDate() : new Date(value);
++  if (Number.isNaN(data.getTime())) return 'Não registrada (arquivo antigo)';
++  return data.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
++}
++
++function prepararRegistroMidiasOS(lista, historico, responsavel) {
++  const anteriores = new Set((Array.isArray(historico) ? historico : []).map(m => typeof m === 'string' ? m : m?.url || m?.secure_url || '').filter(Boolean));
++  const agora = new Date().toISOString();
++  return (Array.isArray(lista) ? lista : []).map(m => {
++    const url = typeof m === 'string' ? m : m?.url || m?.secure_url || '';
++    if (!url || anteriores.has(url)) return m;
++    const atual = typeof m === 'string' ? { url:m, type:'image' } : { ...m };
++    if (!atual.importedAt) atual.importedAt = agora;
++    if (!atual.importedPor) atual.importedPor = responsavel || 'Responsável da O.S.';
++    return atual;
++  });
++}
++
+ window.renderMediaOS = function() {
+   const media = JSON.parse($('osMediaArray')?.value || '[]');
+   if($('osMediaGrid')) {
+@@ -5957,6 +6077,7 @@
+         const isVideo = /^video$/i.test(String(m?.type || '')) || /^video\//i.test(String(m?.type || ''));
+         return `<div class="media-item">
+           ${isVideo ? `<video src="${url}" controls preload="metadata"></video>` : `<img src="${url}" loading="lazy" referrerpolicy="no-referrer" onclick="window.abrirGaleriaFotosOS(${i})" style="cursor:zoom-in" alt="Foto ${i + 1} da O.S.">`}
++          <span class="media-registro-horario" style="position:absolute;bottom:0;left:0;right:0;z-index:1;pointer-events:none;display:block;font-size:.61rem;line-height:1.3;padding:4px;overflow-wrap:anywhere;background:rgba(8,16,30,.95);color:#e2e8f0;" title="Horário individual da evidência">Enviado: ${escOS(dataHoraEvidenciaOS(m?.uploadedAt))}<span style="display:block">Na O.S.: ${escOS(dataHoraEvidenciaOS(m?.importedAt))}</span></span>
+           <button type="button" class="media-del" onclick="event.stopPropagation();window.removerMediaOS(${i})" title="Remover">✕</button>
+         </div>`;
+       }).join('');
+@@ -6637,7 +6758,7 @@
+ 
+   let media = [];
+   try { media = JSON.parse(document.getElementById('osMediaArray')?.value || '[]'); } catch(e) { media = []; }
+-  const imagens = media.filter(m => (m.type || 'image') !== 'video' && m.url).slice(0, 12);
++  const imagens = media.filter(m => m && !/^video/i.test(String(m?.type || 'image')) && m.url).slice(0, 12);
+   if (incluirImagensPDF && imagens.length) {
+     linhaTitulo('EVIDÊNCIAS DIGITAIS');
+     const thumbW = 55, thumbH = 38, gap = 5;
+@@ -6664,6 +6785,27 @@
+     }
+     if (count % 3 !== 0) y += thumbH + 8;
+   }
++  if (incluirImagensPDF && media.length) {
++    // Índice completo, incluindo vídeos e imagens além das 12 miniaturas.
++    // Histórico sem horário explícito é assinalado como legado: nunca inferir data.
++    const registros = media.filter(m => typeof m === 'string' ? !!m : !!m?.url).map((m, i) => {
++      const item = typeof m === 'string' ? {url:m,type:'image'} : m;
++      const tipo = /^video/i.test(String(item.type || 'image')) ? 'VÍDEO' : 'IMAGEM';
++      return [String(i+1),tipo,String(item.name || item.url.split('/').pop().split('?')[0] || 'evidência'),
++        dataHoraEvidenciaOS(item.uploadedAt),dataHoraEvidenciaOS(item.importedAt)];
++    });
++    if (registros.length) {
++      if (y > ph - 45) { doc.addPage(); y = 12; }
++      linhaTitulo('REGISTRO CRONOLÓGICO DAS EVIDÊNCIAS');
++      doc.autoTable({ startY:y, theme:'grid', margin:{left:margem,right:margem},
++        head:[['#','Tipo','Arquivo','Envio','Vínculo à O.S.']], body:registros,
++        styles:{fontSize:6.8,cellPadding:1.1,overflow:'linebreak'},
++        headStyles:{fillColor:[38,51,67],textColor:[255,255,255]},
++        columnStyles:{0:{cellWidth:9},1:{cellWidth:18},2:{cellWidth:48},3:{cellWidth:53},4:{cellWidth:53}}
++      });
++      y = doc.lastAutoTable.finalY + 8;
++    }
++  }
+ 
+   const assinaturaPDF = (typeof window._osSignGetPayload === 'function' ? window._osSignGetPayload() : null) || osAtual.assinaturaResponsavel || osAtual.assinaturaOS || osAtual.assinaturaUsada || J.oficina?.assinatura || {};
+   const urlAssPDF = assinaturaPDF.url || assinaturaPDF.cloudUrl || assinaturaPDF.assinaturaUrl || assinaturaPDF.urlAssinatura || '';
+@@ -6775,7 +6917,17 @@
+ }
+ 
+ window.adicionarPecaReal = function(options = {}) {
+-  const row = window.adicionarPecaRealRow({}, options);
++  // + PEÇA REAL é acionável apenas na área *177. O registro manual novo
++  // recebe confirmação explícita de instalação; NF de compra continua pendente.
++  if (!osSegredo177AtivoOS()) {
++    window.toast?.('Libere a área *177 antes de registrar instalação real.', 'warn');
++    return null;
++  }
++  const row = window.adicionarPecaRealRow({
++    origem:'os_real_manual_177',statusAplicacao:'instalada_confirmada',
++    instalada:true,confirmacaoInstalacaoEm:new Date().toISOString(),
++    confirmacaoInstalacaoPor:window.J?.nome || 'Responsável'
++  }, options);
+   focarItemRealOS(row, '.pr-busca-estoque,.pr-codigo,.pr-desc', options);
+   return row;
+ };
+@@ -7141,7 +7293,29 @@
+     window.toast?.('Esta O.S. não possui peças ou serviços reais registrados para imprimir.', 'warn');
+     return;
+   }
+-  const pecas = pecasBase.map(p => enriquecerPecaRelatorioEstoqueOS(p, osAtual));
++  // NF vinculada é compra, não prova instalação. Linhas antigas incompletas
++  // permanecem na seção de conferência *177, sem integrar contagem/custo instalado.
++  const instaladasBase = [];
++  const pendentesBase = [];
++  pecasBase.forEach(p => {
++    const st = String(p.statusAplicacao || '').trim().toLowerCase();
++    const origem = String(p.origem || '').trim().toLowerCase();
++    const instalada = p.instalada === true || p.trocada === true || p.confirmadaInstalacao === true ||
++      /^(instalada|instalado|aplicada|aplicado|trocada|trocado|instalada_confirmada)$/.test(st);
++    const somenteCompra = /^(comprada|compra|comprada_vinculada_nf|nf_entrada|pendente|em_estoque)/.test(st) ||
++      (origem === 'nf_entrada' && !instalada);
++    const documento = Boolean(String(p.nf || p.nfNumero || p.notaFiscal || p.fornecedor || p.fornecedorNome || p.estoqueId || p.estoqueItemId || '').trim());
++    const valor = numBR(p.valorCompra ?? p.custo ?? p.valorUnitario ?? 0);
++    const incompleta = !instalada && valor <= 0 && !documento;
++    if (somenteCompra || !instalada) {
++      const motivo = somenteCompra ? 'NF/compra vinculada, sem confirmação de instalação'
++        : incompleta ? 'Registro incompleto: custo zero e sem documento/estoque/fornecedor'
++        : 'Registro antigo ou manual ainda sem confirmação explícita de instalação';
++      pendentesBase.push({ ...p, motivoConferencia: motivo });
++    } else instaladasBase.push(p);
++  });
++  const pecas = instaladasBase.map(p => enriquecerPecaRelatorioEstoqueOS(p, osAtual));
++  const pecasConferencia = pendentesBase.map(p => enriquecerPecaRelatorioEstoqueOS(p, osAtual));
+ 
+   const oficina = window.J?.oficina || {};
+   const nomeOficina = window.J?.tnome || oficina.nomeFantasia || oficina.razaoSocial || oficina.nome || 'OFICIN-IA';
+@@ -7176,6 +7350,19 @@
+       <td data-label="Custo total" class="num"><b>${moedaLocal(qtd * unit)}</b></td>
+     </tr>`;
+   }).join('');
++
++  const linhasPecasConferencia = pecasConferencia.map((p, index) => `<tr>
++      <td data-label="#">${index + 1}</td>
++      <td data-label="Código">${escOS(p.codigo || '-')}</td>
++      <td data-label="Descrição">${escOS(p.desc || p.descricao || '-')}</td>
++      <td data-label="Qtd." class="num">${Math.max(0,numBR(p.qtd || 0))}</td>
++      <td data-label="Motivo da conferência">${escOS(p.motivoConferencia)}</td>
++      <td data-label="Origem">${escOS(p.origem || 'Legado/manual sem origem')}</td>
++      <td data-label="Nota fiscal">${escOS(p.nfRelatorio)}</td>
++      <td data-label="Fornecedor">${escOS(p.fornecedorRelatorio)}</td>
++      <td data-label="Status">${escOS(p.statusAplicacao || 'Sem confirmação')}</td>
++      <td data-label="Custo informado" class="num">${moedaLocal(numBR(p.valorCompra || 0))}</td>
++    </tr>`).join('');
+ 
+   const linhasServicosReais = servicosReais.map((s, index) => `<tr>
+       <td data-label="#">${index + 1}</td>
+@@ -7254,7 +7441,8 @@
+     <div class="box"><b>Responsável(is)</b>${escOS(responsaveis.join(', ') || 'Não informado')}</div>
+     <div class="box wide"><b>Local da troca</b>${escOS([nomeOficina, enderecoOficina].filter(Boolean).join(' — '))}</div>
+   </section>
+-  ${pecas.length ? `<h2 style="font-size:12px;margin:10px 0 5px;">PEÇAS REAIS INSTALADAS</h2><div class="table-wrap"><table><colgroup><col style="width:3%"><col style="width:9%"><col style="width:20%"><col style="width:4%"><col style="width:12%"><col style="width:9%"><col style="width:8%"><col style="width:16%"><col style="width:9%"><col style="width:10%"></colgroup><thead><tr><th>#</th><th>Código real</th><th>Descrição real instalada</th><th>Qtd.</th><th>Onde comprou / fornecedor</th><th>Nota fiscal / rastreio</th><th>Data compra / entrada</th><th>Origem / estoque</th><th>Custo unit.</th><th>Custo total</th></tr></thead><tbody>${linhas}</tbody><tfoot><tr><td colspan="10" class="total-geral"><b>CUSTO REAL TOTAL DAS PEÇAS</b><b>${moedaLocal(total)}</b></td></tr></tfoot></table></div>` : ''}
++  ${pecas.length ? `<h2 style="font-size:12px;margin:10px 0 5px;">PEÇAS REAIS INSTALADAS (${pecas.length}) — CONFIRMADAS/DOCUMENTADAS</h2><div class="table-wrap"><table><colgroup><col style="width:3%"><col style="width:9%"><col style="width:20%"><col style="width:4%"><col style="width:12%"><col style="width:9%"><col style="width:8%"><col style="width:16%"><col style="width:9%"><col style="width:10%"></colgroup><thead><tr><th>#</th><th>Código real</th><th>Descrição real instalada</th><th>Qtd.</th><th>Onde comprou / fornecedor</th><th>Nota fiscal / rastreio</th><th>Data compra / entrada</th><th>Origem / estoque</th><th>Custo unit.</th><th>Custo total</th></tr></thead><tbody>${linhas}</tbody><tfoot><tr><td colspan="10" class="total-geral"><b>CUSTO REAL TOTAL DAS PEÇAS</b><b>${moedaLocal(total)}</b></td></tr></tfoot></table></div>` : ''}
++  ${pecasConferencia.length ? `<h2 style="font-size:12px;margin:12px 0 5px;">REGISTROS PENDENTES DE CONFERÊNCIA — NÃO COMPROVAM INSTALAÇÃO (${pecasConferencia.length})</h2><p style="font-size:9px;">Itens históricos preservados. Não são somados ao custo das peças instaladas; confirme origem e execução antes de classificá-los como trocados.</p><div class="table-wrap"><table><thead><tr><th>#</th><th>Código</th><th>Descrição</th><th>Qtd.</th><th>Motivo</th><th>Origem</th><th>NF</th><th>Fornecedor</th><th>Status</th><th>Custo informado</th></tr></thead><tbody>${linhasPecasConferencia}</tbody></table></div>` : ''}
+   ${servicosReais.length ? `<h2 style="font-size:12px;margin:12px 0 5px;">SERVIÇOS TERCEIRIZADOS REAIS</h2><div class="table-wrap"><table><colgroup><col style="width:4%"><col style="width:31%"><col style="width:23%"><col style="width:16%"><col style="width:12%"><col style="width:14%"></colgroup><thead><tr><th>#</th><th>Serviço terceirizado</th><th>Prestador / fornecedor</th><th>Nota / documento</th><th>Data</th><th>Custo real</th></tr></thead><tbody>${linhasServicosReais}</tbody><tfoot><tr><td colspan="6" class="total-geral"><b>CUSTO REAL TOTAL DOS SERVIÇOS</b><b>${moedaLocal(totalServicosReais)}</b></td></tr></tfoot></table></div>` : ''}
+   <div style="display:flex;justify-content:flex-end;margin-top:10px;"><div style="border:2px solid #111;padding:8px 12px;font-size:13px;display:flex;gap:24px;"><b>CUSTO REAL GERAL</b><b>${moedaLocal(totalRealGeral)}</b></div></div>
+   <div class="rodape"><span>Documento interno gerado pelo OFICIN-IA. Peças de estoque mantêm rastreio Kardex; serviços terceirizados são registros internos da O.S.</span><span>Powered by thIAguinho Soluções Digitais</span></div></main></body></html>`;
+--- a/js/pdf.js
++++ b/js/pdf.js
+@@ -17,6 +17,7 @@
+ 
+   try {
+     const osId    = _v('osId');
++    const os      = (J.os || []).find(o => String(o.id) === String(osId)) || {};
+     const veiculo = J.veiculos.find(x => x.id === _v('osVeiculo'));
+     const cliente = J.clientes.find(x => x.id === _v('osCliente'));
+     const mec     = J.equipe.find(x => x.id === _v('osMec'));
+@@ -291,12 +292,18 @@
+ 
+     // ─── PÁGINA DE FOTOS / PROVAS DA O.S. (NOVO) ────────────────
+     // Se a OS tem fotos no Cloudinary, monta uma grade de miniaturas em página nova
+-    const fotosOS = (os.media || os.fotos || []).filter(m => {
+-      // Aceita strings (URLs) ou objetos {url, ...}
+-      if (!m) return false;
+-      const url = typeof m === 'string' ? m : (m.url || m.secure_url || '');
++    const midiasOS = (os.media || os.fotos || []).filter(m => {
++      const url = typeof m === 'string' ? m : (m?.url || m?.secure_url || '');
+       return url && /^https?:\/\//i.test(url);
+-    }).map(m => typeof m === 'string' ? m : (m.url || m.secure_url));
++    }).map(m => typeof m === 'string' ? {url:m,type:'image'} : m);
++    const fotosOS = midiasOS.filter(m => !/^video/i.test(String(m.type || 'image'))).map(m => m.url || m.secure_url);
++    const horaMidia = valor => {
++      if (!valor) return 'Não registrado (legado)';
++      const d = typeof valor?.toDate === 'function' ? valor.toDate() : new Date(valor);
++      return Number.isNaN(d.getTime()) ? 'Não registrado (legado)' : d.toLocaleString('pt-BR', {
++        day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'
++      });
++    };
+ 
+     if (fotosOS.length > 0) {
+       doc.addPage();
+@@ -364,6 +371,22 @@
+       // Volta para a última página da OS para não bagunçar o rodapé
+       doc.setPage(1);
+     }
++    // Metadados de TODAS as evidências (inclusive vídeos não embutidos e
++    // imagens além da grade), preservando a ausência de data no legado.
++    if (midiasOS.length) {
++      doc.addPage();
++      doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(40,50,65);
++      doc.text('REGISTRO CRONOLÓGICO DAS EVIDÊNCIAS',ml,16);
++      doc.autoTable({startY:21,theme:'grid',margin:{left:ml,right:pw-mr},
++        head:[['#','Tipo','Arquivo','Enviado','Importado na O.S.']],
++        body:midiasOS.map((m,i)=>[String(i+1),/^video/i.test(String(m.type||''))?'VÍDEO':'IMAGEM',
++          String(m.name || (m.url||m.secure_url||'').split('/').pop().split('?')[0] || 'Evidência'),
++          horaMidia(m.uploadedAt),horaMidia(m.importedAt)]),
++        styles:{fontSize:7,cellPadding:2,overflow:'linebreak'},
++        headStyles:{fillColor:[bR,bG,bB],textColor:[255,255,255]},
++        columnStyles:{0:{cellWidth:9},1:{cellWidth:20},2:{cellWidth:48},3:{cellWidth:48},4:{cellWidth:52}}});
++      doc.setPage(1);
++    }
+ 
+     // ─── RODAPÉ COM ASSINATURA thIAguinho ─────────────────────
+     // Aplica em TODAS as páginas (inclusive as de fotos)
