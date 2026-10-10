@@ -3,10 +3,11 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
-function executar(pergunta,os,perfil='admin'){
+function executar(pergunta,os,perfil='admin',resumo=null){
   const J={tid:'TESTE_SEM_FIREBASE',role:perfil,equipe:[{id:'m1',nome:'Murilo',comissao:10},{id:'m2',nome:'Joao',comissao:10}],
     os,clientes:[],veiculos:[],financeiro:[],notasFiscaisEntrada:[],fornecedores:[],estoque:[]};
   const W={J,location:{pathname:'/jarvis.html'}};
+  if(resumo) W.thiaComissoesResumoV26=()=>resumo;
   const env={window:W,document:{addEventListener:()=>{},getElementById:()=>null},location:W.location,console,
     sessionStorage:{getItem:()=>null},setTimeout:()=>{},clearTimeout:()=>{},navigator:{}};
   vm.createContext(env);
@@ -38,4 +39,15 @@ assert.match(executar(pergunta,[{...antiga,finalizadoEm:ts}]),/AAA1111/,'timesta
 assert.doesNotMatch(executar(pergunta,[antiga],'mecanico'),/Valor cobrado do cliente/,'sigilo financeiro');
 for(const f of ['js/cilia.js','js/cilia-api.js','js/tabela-tempa.js','js/exportar-pmsp.js'])
   assert.ok(fs.statSync(path.join(__dirname,f)).size>100, 'arquivo critico presente: '+f);
-console.log('OK: 12 testes de IA + 4 modulos intactos, sem chamadas Firebase');
+const relatorio=executar(pergunta,[antiga,nova],'admin',{linhas:[
+  {osId:'old',previsto:15,pago:5,falta:10,aguardandoExecucao:false,semPercentual:false},
+  {osId:'new',previsto:12,pago:0,falta:12,aguardandoExecucao:true,semPercentual:false},
+  {osId:'outra-os',previsto:1000,pago:1000,falta:0,aguardandoExecucao:false,semPercentual:false}
+]});
+assert.match(relatorio,/Comiss[^<]+ previstas: R\\$\\s*27,00/,'somente as OS do periodo');
+assert.match(relatorio,/efetivamente pagas: R\\$\\s*5,00/,'pago != previsto');
+assert.match(relatorio,/pendente total: R\\$\\s*22,00/,'saldo parcial');
+assert.match(relatorio,/NÃO está tudo quitado/,'não assumir quitação');
+assert.doesNotMatch(relatorio,/1\\.000,00/,'não somar outra OS');
+assert.doesNotMatch(executar(pergunta,[antiga],'mecanico',{linhas:[]}),/Pagamentos registrados/,'ocultar financeiro do mecanico');
+console.log('OK: 18 testes de IA/comissao + 4 modulos intactos, sem chamadas Firebase');
