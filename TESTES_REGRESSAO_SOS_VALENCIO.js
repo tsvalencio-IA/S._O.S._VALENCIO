@@ -1,0 +1,43 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const path = require('node:path');
+const root = __dirname;
+const noop = () => {};
+function sandbox() {
+  const document = {readyState:'loading',addEventListener:noop,getElementById:()=>null};
+  const window = {J:{clientes:[],os:[]}};
+  const env = {window,document,console,setTimeout: noop,setInterval: noop,clearInterval:noop};
+  vm.createContext(env); return env;
+}
+function load(env, file) {vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),env,{filename:file,timeout:2500});}
+const ctx=sandbox();
+load(ctx,'js/os-utils.js');
+load(ctx,'js/nfe-real-pro.js');
+const U=ctx.window.JarvisOSUtils;
+assert.ok(U,'módulo de orçamentos disponível');
+assert.equal(ctx.window.thiaNFOSClienteOficial({clienteNome:'CLIENTE COMUM',clienteOficial:false}),false,'Flag false não é oficial');
+ctx.window.J.clientes=[{id:'c1',nome:'JOSE',clienteOficial:false,tipoCliente:'comum'}];
+assert.equal(ctx.window.thiaNFOSClienteOficial({clienteId:'c1',clienteNome:'JOSE',clienteOficial:false}),false);
+ctx.window.J.clientes=[{id:'c2',nome:'PREFEITURA',tipoCliente:'governo'}];
+assert.equal(ctx.window.thiaNFOSClienteOficial({clienteId:'c2'}),true);
+const linked={codigo:'1234',desc:'AMORTECEDOR DIANTEIRO',qtd:1,venda:100};
+const real={codigo:'1234',desc:'AMORTECEDOR DIANTEIRO',qtd:1,valorCompra:100,nf:'12345',origem:'nf_entrada'};
+assert.equal(U.isBudgetPieceLinkedToRealPart({pecasReais:[real]},linked),false,'Coincidência de preço não é vínculo fiscal');
+assert.equal(U.isBudgetPieceLinkedToRealPart({pecasReais:[{...real,origemNFItemKey:'N1-ITEM1'}]}, {...linked,origemNFItemKey:'N1-ITEM1'}),true,'Vínculo fiscal explícito');
+assert.equal(U.isBudgetPieceLinkedToRealPart({pecasReais:[real]}, {...linked,origem:'nf_entrada_os'}),true,'Linha NF protegida');
+const comercial=U.getPublicBudgetPieces({pecas:[linked],pecasReais:[real]}, {nome:'PREFEITURA',tipoCliente:'governo'});
+assert.equal(comercial.length,1,'Peça comercial não pode desaparecer por coincidência com NF');
+const manual={desc:'Serviço',valor:150,tempo:2,valorHoraTabela:152.25,secaoHora:'MECANICA',valorManual:true};
+assert.equal(U.calcularServicoMaoObra(manual,{}, {descMO:0}).valorBruto,150,'Valor manual prevalece');
+const tabela={...manual,valorManual:false};
+assert.equal(U.calcularServicoMaoObra(tabela,{}, {descMO:0}).valorBruto,304.5,'Tabela de horas preservada');
+const codigoOS=fs.readFileSync(path.join(root,'js/os.js'),'utf8');
+assert.match(codigoOS,/const instaladasBase = \[\];/);
+assert.match(codigoOS,/if \(somenteCompra \|\| !instalada\)/,'Relatório só classifica instalada com confirmação explícita');
+assert.match(codigoOS,/pecasConferencia/);
+const codigoNF=fs.readFileSync(path.join(root,'js/nfe-real-pro.js'),'utf8');
+assert.match(codigoNF,/entry\.os\.permitirNFNoOrcamento === true/,'NF não espelha orçamento automaticamente');
+const codigoCilia=fs.readFileSync(path.join(root,'js/cilia.js'),'utf8');
+assert.ok(codigoCilia.length>100,'Cília preservado');
+console.log('OK: 12 verificações de regressão das funções comerciais, fiscais e *177');

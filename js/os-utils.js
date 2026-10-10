@@ -266,7 +266,7 @@
     const valorHora = U.parseNumberBR(valorHoraPreferido);
     const valorManualTotal = servico?.valorManual === true || servico?.valorManual === '1';
     const temHoraExplicita = opts.valorHoraInput != null || valorHoraManual || !!(servico?.valorHoraSecao || servico?.valorHoraTabela || servico?.precoHora);
-    const usaCalculoHora = tempo > 0 && valorHora > 0 && (
+    const usaCalculoHora = (!valorManualTotal || opts.forcarCalculoHora === true) && tempo > 0 && valorHora > 0 && (
       temBaseTabela ||
       valorHoraManual ||
       opts.forcarCalculoHora === true ||
@@ -467,31 +467,18 @@
 
   U.isBudgetPieceLinkedToRealPart = function(os, peca) {
     if (!peca || typeof peca !== 'object') return false;
+    // A própria linha identifica sua origem fiscal/protegida.
     if (U.isProtectedRealPart(peca)) return true;
-
+    // Um vínculo explícito e estável é prova; igualdade de código, preço e quantidade NÃO é.
     const reais = U.getRealParts(os);
     if (!reais.length) return false;
-
-    const chavePeca = normalizarCodigoPecaReal(peca.origemNFItemKey || peca.idReal || peca.pecaRealId || '');
-    const codigosPeca = codigosPecaReal(peca);
-    const qtdPeca = quantidadePecaReal(peca);
-
-    return reais.some(real => {
-      const chaveReal = normalizarCodigoPecaReal(real.origemNFItemKey || real.idReal || real.pecaRealId || '');
-      if (chavePeca && chaveReal && chavePeca === chaveReal) return true;
-
-      const codigosReal = codigosPecaReal(real);
-      const codigoIgual = codigosPeca.some(codigo => codigosReal.includes(codigo));
-      const descricaoIgual = descricoesCoincidemPecaReal(peca, real);
-      const valorIgual = valoresCoincidemPecaReal(peca, real);
-      const qtdIgual = Math.abs(qtdPeca - quantidadePecaReal(real)) < 0.0001;
-      const nfIgual = referenciasNFCoincidemPecaReal(peca, real);
-
-      if (nfIgual && (codigoIgual || descricaoIgual)) return true;
-      if (codigoIgual && valorIgual && (descricaoIgual || qtdIgual)) return true;
-      if (descricaoIgual && valorIgual && qtdIgual) return true;
-      return false;
-    });
+    const ids = ['origemNFItemKey', 'idReal', 'pecaRealId'];
+    const links = ids.map(k => normalizarCodigoPecaReal(peca[k])).filter(Boolean);
+    if (!links.length) return false;
+    return reais.some(real => ids.some(k => {
+      const id = normalizarCodigoPecaReal(real[k]);
+      return Boolean(id && links.includes(id));
+    }));
   };
 
   U.hasProtectedRealParts = function(os) {

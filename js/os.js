@@ -1744,9 +1744,11 @@ window.renderKanban = function() {
       const prismaFmt = prismaAtual && s !== 'Entregue'
         ? `<div style="display:inline-flex;align-items:center;gap:4px;margin-top:4px;font-family:var(--fm);font-size:.58rem;color:#111;background:var(--warn);border-radius:999px;padding:2px 7px;font-weight:900;letter-spacing:.8px;">PRISMA ${esc(prismaAtual)}</div>`
         : '';
-      const recebidaOperacional = os.recebidaOperacional === true;
+      const recebidoValorOp = Number(os.valorRecebidoOperacional);
+      const recebidoValorValido = Number.isFinite(recebidoValorOp) && recebidoValorOp > 0;
+      const recebidaOperacional = os.recebidaOperacional === true || recebidoValorValido;
       const recebidaBadge = recebidaOperacional
-        ? `<div style="display:inline-flex;align-items:center;gap:4px;margin-top:4px;margin-left:${prismaAtual&&s!=='Entregue'?'4px':'0'};font-family:var(--fm);font-size:.58rem;color:#062b1c;background:var(--success);border-radius:999px;padding:2px 7px;font-weight:900;letter-spacing:.8px;">💰 RECEBIDA</div>`
+        ? `<div style="display:inline-flex;align-items:center;gap:4px;margin-top:4px;margin-left:${prismaAtual&&s!=='Entregue'?'4px':'0'};font-family:var(--fm);font-size:.58rem;color:#062b1c;background:var(--success);border-radius:999px;padding:2px 7px;font-weight:900;letter-spacing:.8px;">💰 RECEBIDA${recebidoValorValido ? ' · '+esc(moeda(recebidoValorOp)) : ''}</div>`
         : '';
       const UOS = window.JarvisOSUtils || window.JOS || {};
       const resumoValores = UOS.getBudgetSummary
@@ -1789,6 +1791,7 @@ window.renderKanban = function() {
             </div>
             <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
               <button title="${recebidaOperacional?'Desmarcar recebimento operacional':'Marcar O.S. como recebida sem registrar forma de pagamento'}" onclick="event.stopPropagation();window.toggleOSRecebidaOperacional('${os.id}')" style="background:${recebidaOperacional?'rgba(0,255,136,.14)':'transparent'};border:1px solid ${recebidaOperacional?'var(--success)':'rgba(0,255,136,.42)'};color:${recebidaOperacional?'var(--success)':'var(--muted2)'};font-family:var(--fm);font-size:.56rem;padding:3px 6px;border-radius:3px;cursor:pointer;white-space:nowrap;">${recebidaOperacional?'✓ RECEBIDA':'💰 RECEBER'}</button>
+              <button type="button" title="Lançar/alterar valor recebido operacional (sem conciliação financeira)" onclick="event.stopPropagation();window.registrarValorRecebidoOperacional('${os.id}')" style="background:transparent;border:1px solid rgba(0,212,255,.35);color:var(--cyan);font-family:var(--fm);font-size:.56rem;padding:3px 6px;border-radius:3px;cursor:pointer;white-space:nowrap;">R$ VALOR</button>
               ${btnExcluir}
             </div>
         </div>
@@ -1810,45 +1813,67 @@ window.renderKanban = function() {
   });
 };
 
-window.toggleOSRecebidaOperacional = async function(id) {
-  const osAtual = (Array.isArray(J.os) ? J.os : []).find(o => String(o.id) === String(id));
-  if (!osAtual) { window.toast?.('O.S. não encontrada nos dados carregados.', 'warn'); return; }
-  const marcar = osAtual.recebidaOperacional !== true;
-  const placa = identidadeVeiculoOS(osAtual, (J.veiculos || []).find(v => String(v.id) === String(osAtual.veiculoId)) || {}).placa || osAtual.placa || String(id).slice(-6).toUpperCase();
-  const confirma = confirm(marcar
-    ? `Marcar ${placa} como RECEBIDA no pátio?\n\nIsto é apenas um controle operacional. NÃO cria lançamento financeiro e NÃO registra forma de pagamento.`
-    : `Desmarcar o indicador RECEBIDA de ${placa}?\n\nA alteração ficará registrada na auditoria da O.S.`);
-  if (!confirma) return;
-  const agora = new Date().toISOString();
-  const usuario = J.nome || sessionStorage.getItem('j_nome') || 'Gestor';
-  const usuarioId = J.uid || J.fid || sessionStorage.getItem('j_uid') || sessionStorage.getItem('j_fid') || '';
-  const perfil = J.role || sessionStorage.getItem('j_role') || 'gestor';
-  const acao = marcar
-    ? 'Marcou a O.S. como RECEBIDA no pátio, sem registrar forma de pagamento.'
-    : 'Desmarcou o indicador RECEBIDA da O.S. no pátio.';
-  const evento = { dt: agora, user: usuario, userId: usuarioId, perfil, tipo: 'recebimento_operacional', recebido: marcar, acao };
-  const update = {
-    recebidaOperacional: marcar,
-    recebidaOperacionalAtualizadoEm: agora,
-    recebidaOperacionalPor: usuario,
-    recebidaOperacionalPorId: usuarioId,
-    timeline: firebase.firestore.FieldValue.arrayUnion(evento)
-  };
-  if (marcar) {
-    update.recebidaOperacionalEm = agora;
-    update.recebidaOperacionalMarcadaPor = usuario;
-  } else {
-    update.recebidaOperacionalDesmarcadaEm = agora;
-    update.recebidaOperacionalDesmarcadaPor = usuario;
+// Indicador de recebimento somente operacional: NÃO cria título nem baixa conciliada.
+function _recebimentoNumeroBR(v){
+  let s=String(v==null?'':v).trim().replace(/\s|R\$/gi,'');
+  if(!s || !/^[\d.,]+$/.test(s))return NaN;
+  if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');
+  else if(s.includes(','))s=s.replace(',','.');
+  else if((s.match(/\./g)||[]).length>1)s=s.replace(/\./g,'');
+  const n=Number(s);return Number.isFinite(n)&&n>=0&&n<=10000000000&&Math.round(n*100)/100===n?n:NaN;
+}
+async function _registrarRecebimentoOS(id, novoValor, marcar, operacao){
+  const dbRef=db.collection('ordens_servico').doc(id);
+  const usuario=J.nome||sessionStorage.getItem('j_nome')||'Gestor';
+  const usuarioId=J.uid||J.fid||sessionStorage.getItem('j_uid')||sessionStorage.getItem('j_fid')||'';
+  const perfil=J.role||sessionStorage.getItem('j_role')||'gestor';
+  if(!['admin','gestor','gerente','superadmin','dono','oficina_admin','financeiro'].includes(String(perfil).toLowerCase())){
+    window.toast?.('Somente o gestor/financeiro registra recebimento operacional.','err');return;
   }
-  try {
-    await db.collection('ordens_servico').doc(id).update(update);
-    await auditGeralOS(id, acao, { tipo: 'recebimento_operacional', placa, recebido: marcar, usuarioId, perfil });
-    window.toast?.(marcar ? '✓ O.S. marcada como RECEBIDA no pátio.' : 'Indicador RECEBIDA removido da O.S.', marcar ? 'ok' : 'warn');
-  } catch (e) {
-    console.error('[O.S.] recebimento operacional:', e);
-    window.toast?.('Erro ao atualizar indicador de recebimento: ' + (e?.message || e), 'err');
-  }
+  try{
+    let evento;
+    await db.runTransaction(async trx=>{
+      const snap=await trx.get(dbRef);
+      if(!snap.exists)throw new Error('O.S. não encontrada.');
+      const atual=snap.data()||{};
+      const antes=Number(atual.valorRecebidoOperacional)||0;
+      const recebidaAntes=atual.recebidaOperacional===true;
+      const valorDepois=Math.round(novoValor*100)/100;
+      const agora=new Date().toISOString();
+      const acao=`Recebimento operacional ${operacao}: ${moeda(antes)} → ${moeda(valorDepois)}. Indicador ${recebidaAntes?'RECEBIDA':'NÃO RECEBIDA'} → ${marcar?'RECEBIDA':'NÃO RECEBIDA'}. Não é baixa financeira conciliada.`;
+      evento={dt:agora,user:usuario,userId:usuarioId,perfil,tipo:'recebimento_operacional',valorAnterior:antes,valorNovo:valorDepois,recebidoAnterior:recebidaAntes,recebido:marcar,acao};
+      const update={valorRecebidoOperacional:valorDepois,recebidaOperacional:marcar,recebidaOperacionalAtualizadoEm:agora,recebidaOperacionalPor:usuario,recebidaOperacionalPorId:usuarioId,timeline:firebase.firestore.FieldValue.arrayUnion(evento)};
+      if(marcar){update.recebidaOperacionalEm=agora;update.recebidaOperacionalMarcadaPor=usuario;}
+      else{update.recebidaOperacionalDesmarcadaEm=agora;update.recebidaOperacionalDesmarcadaPor=usuario;}
+      trx.update(dbRef,update);
+    });
+    // Documento auditado na mesma transação; auditoria geral é complemento.
+    try{await auditGeralOS(id,evento.acao,{tipo:evento.tipo,valorAnterior:evento.valorAnterior,valorNovo:evento.valorNovo,usuarioId,perfil});}
+    catch(err){console.warn('[O.S.] auditoria geral auxiliar:',err);}
+    window.toast?.('✓ Recebimento operacional atualizado, sem conciliação financeira.','ok');
+  }catch(e){console.error('[O.S.] recebimento operacional:',e);window.toast?.('Erro ao registrar recebimento: '+(e?.message||e),'err');}
+}
+window.registrarValorRecebidoOperacional=async function(id){
+  const osAtual=(Array.isArray(J.os)?J.os:[]).find(o=>String(o.id)===String(id));
+  if(!osAtual){window.toast?.('O.S. não encontrada nos dados carregados.','warn');return;}
+  const anterior=Number(osAtual.valorRecebidoOperacional)||0;
+  const placa=identidadeVeiculoOS(osAtual,(J.veiculos||[]).find(v=>String(v.id)===String(osAtual.veiculoId))||{}).placa||osAtual.placa||id;
+  const digitado=prompt(`VALOR RECEBIDO — ${placa}\n\nControle operacional, não conciliado. Informe o valor total recebido até o momento em R$ (não apenas o último pagamento).\n\nValor anterior: ${moeda(anterior)}.\nDigite 0 para zerar o registro.`,anterior.toFixed(2).replace('.',','));
+  if(digitado===null)return;
+  const valor=_recebimentoNumeroBR(digitado);
+  if(!Number.isFinite(valor)){window.toast?.('Informe um valor válido em R$, com até 2 casas decimais.','warn');return;}
+  if(valor===anterior && (osAtual.recebidaOperacional===true)===(valor>0)){window.toast?.('Nenhuma alteração no recebimento.','warn');return;}
+  await _registrarRecebimentoOS(id,valor,valor>0,'informado pelo gestor');
+};
+window.toggleOSRecebidaOperacional=async function(id){
+  const osAtual=(Array.isArray(J.os)?J.os:[]).find(o=>String(o.id)===String(id));
+  if(!osAtual){window.toast?.('O.S. não encontrada nos dados carregados.','warn');return;}
+  const recebido=osAtual.recebidaOperacional===true;
+  const valor=Number(osAtual.valorRecebidoOperacional)||0;
+  const marcar=!recebido;
+  const placa=identidadeVeiculoOS(osAtual,(J.veiculos||[]).find(v=>String(v.id)===String(osAtual.veiculoId))||{}).placa||osAtual.placa||id;
+  if(!confirm(marcar?`Marcar ${placa} como RECEBIDA (sem conciliação)?\nValor atual: ${moeda(valor)}. Use R$ VALOR para lançar um valor.`:`Desmarcar RECEBIDA de ${placa} e zerar o indicador de valor operacional (${moeda(valor)})? A auditoria preservará o valor anterior.`))return;
+  await _registrarRecebimentoOS(id,marcar?valor:0,marcar,marcar?'marcado':'desmarcado');
 };
 
 window.moverStatusOS = async function(id, novoStatus) {
@@ -2524,6 +2549,7 @@ window.atualizarEquipeMecanicosOS = function() {
 
 
 window.prepOS = function(mode, id = null) {
+  window._osSessaoReabertura = null;
   ['osId', 'osPlaca', 'osPlacaView', 'osPrefixo', 'osVeiculo', 'osCliente', 'osCelular', 'osCpf', 'osDiagnostico', 'osRelato', 'osDescricao', 'chkObs', 'osKm', 'osData', 'osPrisma'].forEach(f => { if ($(f)) $(f).value = ''; });
   // Limpa apenas os marcadores de vínculo da O.S. anterior. Eles serão definidos novamente
   // ao abrir uma O.S. existente e usados para impedir que listeners apaguem cliente/veículo.
@@ -2593,6 +2619,11 @@ window.prepOS = function(mode, id = null) {
   if (mode === 'edit' && id) {
     const o = J.os.find(x => x.id === id);
     if (!o) return;
+    // Marcador local, sem escrita ao apenas visualizar. Ao SALVAR, registra
+    // a reabertura de uma O.S. encerrada sem apagar peças/serviços existentes.
+    window._osSessaoReabertura = /^(entregue|concluido|concluído|finalizado|faturado|pronto)$/i.test(String(o.status || '').trim())
+      ? { osId:o.id, abertaEm:new Date().toISOString(), statusAnterior:o.status }
+      : null;
 
     if ($('osId')) $('osId').value = o.id;
     if ($('osIdBadge')) $('osIdBadge').innerText = 'OS #' + o.id.slice(-6).toUpperCase();
@@ -3531,7 +3562,11 @@ function osReconciliarPecasReaisParaClienteComumOS(os, pecasAtuais, pecasReaisAt
   const o = os || {};
   const visiveis = Array.isArray(pecasAtuais) ? pecasAtuais.slice() : [];
   const reais = Array.isArray(pecasReaisAtuais) ? pecasReaisAtuais : (Array.isArray(o.pecasReais) ? o.pecasReais : []);
-  if (osClienteOficialSeguroOS(o)) return visiveis;
+  // Dados de compra/NF e peças realmente trocadas pertencem ao controle
+  // interno *177: nunca criar item de orçamento automaticamente por reabertura.
+  // A rotina legada fica acessível APENAS para O.S. com opt-in explícito
+  // anterior, preservando eventuais fluxos comerciais deliberadamente configurados.
+  if (osClienteOficialSeguroOS(o) || o.permitirNFNoOrcamento !== true) return visiveis;
   reais.forEach(real => {
     const origemNF = real && (real.origem === 'nf_entrada' || real.statusAplicacao === 'comprada_vinculada_nf' || real.nfId || real.origemNFItemKey);
     if (!origemNF) return;
@@ -4757,7 +4792,7 @@ window.salvarOS = async function() {
 
   // Mapeia media para o payload antes do Deep Diff para podermos comparar
   if ($('osMediaArray')) {
-      payload.media = JSON.parse($('osMediaArray').value || '[]');
+      payload.media = prepararRegistroMidiasOS(JSON.parse($('osMediaArray').value || '[]'), _oldOSPreservar?.media || _oldOSPreservar?.fotos || [], window.J?.nome || 'Gestor');
   }
 
   // ── Assinatura do responsável por esta O.S. (thIAgui) ──────────────
@@ -5045,6 +5080,27 @@ window.salvarOS = async function() {
            }
       });
 
+      // O diff legado compara descrições. Complemento de auditoria:
+      // uma segunda peça de mesmo nome precisa ser registrada individualmente.
+      const contarDescricoesOS = lista => {
+        const contagem = new Map();
+        (lista || []).forEach(item => {
+          const chave = String(item?.desc || item?.descricao || '').trim().toLowerCase();
+          if (chave) contagem.set(chave, (contagem.get(chave) || 0) + 1);
+        });
+        return contagem;
+      };
+      const cntPecasAntes = contarDescricoesOS(oldPecas);
+      const cntPecasDepois = contarDescricoesOS(newPecas);
+      cntPecasDepois.forEach((novaQtd, descricao) => {
+        const antigaQtd = cntPecasAntes.get(descricao) || 0;
+        if (!antigaQtd || novaQtd <= antigaQtd) return; // novas descrições já foram auditadas acima
+        tl.push(eventoEstruturadoOS('peca_adicionada', `Adicionou ${novaQtd-antigaQtd} nova(s) ocorrência(s) da peça já existente: ${descricao}.`, {
+          pecaDescricao:descricao,ocorrenciasAnteriores:antigaQtd,ocorrenciasNovas:novaQtd,origemEvento:'complemento_os'
+        }));
+        registouAlgo = true;
+      });
+
       // 5. Identificação de Serviços (Adições, Remoções, Alterações de Valor)
       const oldServicos = oldOS.servicos || [];
       const newServicos = payload.servicos || [];
@@ -5122,17 +5178,35 @@ window.salvarOS = async function() {
            }
       });
 
-      // 6. Novas Fotos/Evidências
-      const oldMediaLength = (oldOS.media || oldOS.fotos || []).length;
-      const newMediaLength = (payload.media || []).length;
-      if (newMediaLength > oldMediaLength) {
-          const adicionadas = newMediaLength - oldMediaLength;
-          tl.push({ dt: new Date().toISOString(), user: funcUser, acao: `Anexou ${adicionadas} nova(s) foto(s)/vídeo(s) de evidência.` });
-          registouAlgo = true;
-      } else if (newMediaLength < oldMediaLength) {
-          const removidas = oldMediaLength - newMediaLength;
-          tl.push({ dt: new Date().toISOString(), user: funcUser, acao: `Removeu ${removidas} foto(s)/vídeo(s) de evidência.` });
-          registouAlgo = true;
+      const cntServicosAntes = contarDescricoesOS(oldServicos);
+      const cntServicosDepois = contarDescricoesOS(newServicos);
+      cntServicosDepois.forEach((novaQtd, descricao) => {
+        const antigaQtd = cntServicosAntes.get(descricao) || 0;
+        if (!antigaQtd || novaQtd <= antigaQtd) return;
+        tl.push(eventoEstruturadoOS('servico_adicionado', `Adicionou ${novaQtd-antigaQtd} nova(s) ocorrência(s) do serviço já existente: ${descricao}.`, {
+          servicoDescricao:descricao,ocorrenciasAnteriores:antigaQtd,ocorrenciasNovas:novaQtd,origemEvento:'complemento_os'
+        }));
+        registouAlgo = true;
+      });
+
+      // 6. Evidências: eventos individualizados por URL (inclui substituições
+      // com a mesma quantidade). Datas históricas ausentes não são inventadas.
+      const urlMidia = m => typeof m === 'string' ? m : (m?.url || m?.secure_url || '');
+      const antigas = new Map((oldOS.media || oldOS.fotos || []).map(m => [urlMidia(m),m]).filter(([url]) => url));
+      const atuais = new Map((payload.media || []).map(m => [urlMidia(m),m]).filter(([url]) => url));
+      for (const [url, m] of atuais) {
+        if (antigas.has(url)) continue;
+        const video = /^video/i.test(String(m?.type || ''));
+        tl.push({ dt: m?.importedAt || new Date().toISOString(), user:funcUser, tipo:'evidencia_adicionada',
+          acao:`Anexou ${video ? 'vídeo' : 'imagem'}: ${m?.name || url.split('/').pop().split('?')[0] || 'arquivo'}; enviado em ${dataHoraEvidenciaOS(m?.uploadedAt)}; importado na O.S. em ${dataHoraEvidenciaOS(m?.importedAt)}.`,
+          midiaUrl:url, midiaTipo:video ? 'video' : 'imagem', enviadoEm:m?.uploadedAt || null, importadoEm:m?.importedAt || null });
+        registouAlgo = true;
+      }
+      for (const [url, m] of antigas) {
+        if (atuais.has(url)) continue;
+        tl.push({ dt:new Date().toISOString(),user:funcUser,tipo:'evidencia_removida',
+          acao:`Removeu evidência: ${m?.name || url.split('/').pop().split('?')[0] || 'arquivo'}.`,midiaUrl:url });
+        registouAlgo = true;
       }
 
       // Fallback operacional: se nada entrou no histórico da OS e também não foi
@@ -5147,6 +5221,14 @@ window.salvarOS = async function() {
       tl.push(eventoEstruturadoOS('os_aberta', `Abriu a O.S. (Status inicial: ${STATUS_MAP_LEGACY[payload.status] || payload.status})`, {
           statusNovo: payload.status || ''
       }));
+      (payload.media || []).forEach(m => {
+        const url = typeof m === 'string' ? m : m?.url || m?.secure_url || '';
+        if (!url) return;
+        const video = /^video/i.test(String(m?.type || ''));
+        tl.push({ dt:m?.importedAt || new Date().toISOString(),user:funcUser,tipo:'evidencia_adicionada',
+          acao:`Anexou ${video ? 'vídeo' : 'imagem'} na criação: ${m?.name || url.split('/').pop().split('?')[0] || 'arquivo'}; enviado em ${dataHoraEvidenciaOS(m?.uploadedAt)}; na O.S. em ${dataHoraEvidenciaOS(m?.importedAt)}.`,
+          midiaUrl:url, midiaTipo:video ? 'video' : 'imagem', enviadoEm:m?.uploadedAt || null, importadoEm:m?.importedAt || null });
+      });
       idsMecanicosDocumentoOS(payload).forEach(id => {
           const mec = snapshotMecanicoOS(id, payload);
           tl.push(eventoEstruturadoOS('mecanico_relacionado_os', `Relacionou o mecânico ${mec.nome || id} à O.S.`, {
@@ -5183,6 +5265,21 @@ window.salvarOS = async function() {
       }
   }
 
+  if (osId && window._osSessaoReabertura?.osId === osId) {
+      const sessao = window._osSessaoReabertura;
+      tl.push(eventoEstruturadoOS('os_reabertura_edicao',
+        `Reabriu para edição/complementação a O.S. anteriormente ${sessao.statusAnterior}; novos lançamentos permanecem auditados individualmente.`, {
+        statusAnterior:sessao.statusAnterior, statusNovo:payload.status,
+        abertaEm:sessao.abertaEm, origemEvento:'edicao_os'
+      }));
+  }
+  if (osId && !registroReaberturaAprovacaoOS &&
+      /^(entregue|concluido|concluído|finalizado|faturado|pronto)$/i.test(String(oldOSParaAprovacao.status || '').trim()) &&
+      statusReabreEdicaoOrcamentoOS(payload.status)) {
+      tl.push(eventoEstruturadoOS('os_reaberta', `Reabriu a O.S. de ${oldOSParaAprovacao.status} para ${payload.status}, permitindo lançamentos adicionais sem apagar o histórico.`, {
+        statusAnterior:oldOSParaAprovacao.status,statusNovo:payload.status,origemEvento:'salvar_os'
+      }));
+  }
   if (registroReaberturaAprovacaoOS) {
       tl.push({
           dt: new Date().toISOString(),
@@ -5540,6 +5637,8 @@ window.salvarOS = async function() {
   operacoesBatchSalvarOS += 1;
 
   await batchSalvarOS.commit();
+  // Só limpa após persistência confirmada; falha de gravação não perde contexto.
+  if (window._osSessaoReabertura?.osId === osId) window._osSessaoReabertura = null;
   const savedOsId = targetOsId;
   if (document.getElementById('osId')) document.getElementById('osId').value = savedOsId;
 
@@ -5717,7 +5816,8 @@ window.uploadCloudinaryOSFile = async function(file) {
     type: data.resource_type || (/^video\//.test(file.type || '') ? 'video' : 'image'),
     name: file.name || '',
     bytes: data.bytes || finalFile.size || file.size || 0,
-    uploadedAt: new Date().toISOString()
+    uploadedAt: data.created_at && !Number.isNaN(Date.parse(data.created_at)) ? new Date(data.created_at).toISOString() : new Date().toISOString(),
+    uploadHorarioOrigem: data.created_at ? 'cloudinary' : 'dispositivo'
   };
 };
 
@@ -5865,7 +5965,7 @@ window.renderGaleriaFotoOS = function() {
   const prev = overlay.querySelector('[data-os-galeria-prev]');
   const next = overlay.querySelector('[data-os-galeria-next]');
   if (img) { img.src = foto.url; img.alt = `Foto ${idx + 1} da O.S.`; }
-  if (count) count.textContent = `Foto ${idx + 1} de ${fotos.length}`;
+  if (count) count.textContent = `Foto ${idx + 1} de ${fotos.length} | Enviada: ${dataHoraEvidenciaOS(foto.uploadedAt)} | Na O.S.: ${dataHoraEvidenciaOS(foto.importedAt)}`;
   if (prev) prev.style.visibility = fotos.length > 1 ? 'visible' : 'hidden';
   if (next) next.style.visibility = fotos.length > 1 ? 'visible' : 'hidden';
 };
@@ -5949,6 +6049,26 @@ window.abrirGaleriaFotosOS = function(indiceMedia) {
   window.renderGaleriaFotoOS();
 };
 
+function dataHoraEvidenciaOS(value) {
+  if (!value) return 'Não registrada (arquivo antigo)';
+  const data = typeof value?.toDate === 'function' ? value.toDate() : new Date(value);
+  if (Number.isNaN(data.getTime())) return 'Não registrada (arquivo antigo)';
+  return data.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+
+function prepararRegistroMidiasOS(lista, historico, responsavel) {
+  const anteriores = new Set((Array.isArray(historico) ? historico : []).map(m => typeof m === 'string' ? m : m?.url || m?.secure_url || '').filter(Boolean));
+  const agora = new Date().toISOString();
+  return (Array.isArray(lista) ? lista : []).map(m => {
+    const url = typeof m === 'string' ? m : m?.url || m?.secure_url || '';
+    if (!url || anteriores.has(url)) return m;
+    const atual = typeof m === 'string' ? { url:m, type:'image' } : { ...m };
+    if (!atual.importedAt) atual.importedAt = agora;
+    if (!atual.importedPor) atual.importedPor = responsavel || 'Responsável da O.S.';
+    return atual;
+  });
+}
+
 window.renderMediaOS = function() {
   const media = JSON.parse($('osMediaArray')?.value || '[]');
   if($('osMediaGrid')) {
@@ -5957,6 +6077,7 @@ window.renderMediaOS = function() {
         const isVideo = /^video$/i.test(String(m?.type || '')) || /^video\//i.test(String(m?.type || ''));
         return `<div class="media-item">
           ${isVideo ? `<video src="${url}" controls preload="metadata"></video>` : `<img src="${url}" loading="lazy" referrerpolicy="no-referrer" onclick="window.abrirGaleriaFotosOS(${i})" style="cursor:zoom-in" alt="Foto ${i + 1} da O.S.">`}
+          <span class="media-registro-horario" style="position:absolute;bottom:0;left:0;right:0;z-index:1;pointer-events:none;display:block;font-size:.61rem;line-height:1.3;padding:4px;overflow-wrap:anywhere;background:rgba(8,16,30,.95);color:#e2e8f0;" title="Horário individual da evidência">Enviado: ${escOS(dataHoraEvidenciaOS(m?.uploadedAt))}<span style="display:block">Na O.S.: ${escOS(dataHoraEvidenciaOS(m?.importedAt))}</span></span>
           <button type="button" class="media-del" onclick="event.stopPropagation();window.removerMediaOS(${i})" title="Remover">✕</button>
         </div>`;
       }).join('');
@@ -6637,7 +6758,7 @@ window.gerarPDFOS = async function(opcoes = {}) {
 
   let media = [];
   try { media = JSON.parse(document.getElementById('osMediaArray')?.value || '[]'); } catch(e) { media = []; }
-  const imagens = media.filter(m => (m.type || 'image') !== 'video' && m.url).slice(0, 12);
+  const imagens = media.filter(m => m && !/^video/i.test(String(m?.type || 'image')) && m.url).slice(0, 12);
   if (incluirImagensPDF && imagens.length) {
     linhaTitulo('EVIDÊNCIAS DIGITAIS');
     const thumbW = 55, thumbH = 38, gap = 5;
@@ -6663,6 +6784,27 @@ window.gerarPDFOS = async function(opcoes = {}) {
       if (count % 3 === 0) { x = margem; y += thumbH + 8; }
     }
     if (count % 3 !== 0) y += thumbH + 8;
+  }
+  if (incluirImagensPDF && media.length) {
+    // Índice completo, incluindo vídeos e imagens além das 12 miniaturas.
+    // Histórico sem horário explícito é assinalado como legado: nunca inferir data.
+    const registros = media.filter(m => typeof m === 'string' ? !!m : !!m?.url).map((m, i) => {
+      const item = typeof m === 'string' ? {url:m,type:'image'} : m;
+      const tipo = /^video/i.test(String(item.type || 'image')) ? 'VÍDEO' : 'IMAGEM';
+      return [String(i+1),tipo,String(item.name || item.url.split('/').pop().split('?')[0] || 'evidência'),
+        dataHoraEvidenciaOS(item.uploadedAt),dataHoraEvidenciaOS(item.importedAt)];
+    });
+    if (registros.length) {
+      if (y > ph - 45) { doc.addPage(); y = 12; }
+      linhaTitulo('REGISTRO CRONOLÓGICO DAS EVIDÊNCIAS');
+      doc.autoTable({ startY:y, theme:'grid', margin:{left:margem,right:margem},
+        head:[['#','Tipo','Arquivo','Envio','Vínculo à O.S.']], body:registros,
+        styles:{fontSize:6.8,cellPadding:1.1,overflow:'linebreak'},
+        headStyles:{fillColor:[38,51,67],textColor:[255,255,255]},
+        columnStyles:{0:{cellWidth:9},1:{cellWidth:18},2:{cellWidth:48},3:{cellWidth:53},4:{cellWidth:53}}
+      });
+      y = doc.lastAutoTable.finalY + 8;
+    }
   }
 
   const assinaturaPDF = (typeof window._osSignGetPayload === 'function' ? window._osSignGetPayload() : null) || osAtual.assinaturaResponsavel || osAtual.assinaturaOS || osAtual.assinaturaUsada || J.oficina?.assinatura || {};
@@ -6775,7 +6917,17 @@ function focarItemRealOS(row, selector, options = {}) {
 }
 
 window.adicionarPecaReal = function(options = {}) {
-  const row = window.adicionarPecaRealRow({}, options);
+  // + PEÇA REAL é acionável apenas na área *177. O registro manual novo
+  // recebe confirmação explícita de instalação; NF de compra continua pendente.
+  if (!osSegredo177AtivoOS()) {
+    window.toast?.('Libere a área *177 antes de registrar instalação real.', 'warn');
+    return null;
+  }
+  const row = window.adicionarPecaRealRow({
+    origem:'os_real_manual_177',statusAplicacao:'instalada_confirmada',
+    instalada:true,confirmacaoInstalacaoEm:new Date().toISOString(),
+    confirmacaoInstalacaoPor:window.J?.nome || 'Responsável'
+  }, options);
   focarItemRealOS(row, '.pr-busca-estoque,.pr-codigo,.pr-desc', options);
   return row;
 };
@@ -7141,7 +7293,29 @@ window.imprimirRelatorioPecasReaisOS = async function() {
     window.toast?.('Esta O.S. não possui peças ou serviços reais registrados para imprimir.', 'warn');
     return;
   }
-  const pecas = pecasBase.map(p => enriquecerPecaRelatorioEstoqueOS(p, osAtual));
+  // NF vinculada é compra, não prova instalação. Linhas antigas incompletas
+  // permanecem na seção de conferência *177, sem integrar contagem/custo instalado.
+  const instaladasBase = [];
+  const pendentesBase = [];
+  pecasBase.forEach(p => {
+    const st = String(p.statusAplicacao || '').trim().toLowerCase();
+    const origem = String(p.origem || '').trim().toLowerCase();
+    const instalada = p.instalada === true || p.trocada === true || p.confirmadaInstalacao === true ||
+      /^(instalada|instalado|aplicada|aplicado|trocada|trocado|instalada_confirmada)$/.test(st);
+    const somenteCompra = /^(comprada|compra|comprada_vinculada_nf|nf_entrada|pendente|em_estoque)/.test(st) ||
+      (origem === 'nf_entrada' && !instalada);
+    const documento = Boolean(String(p.nf || p.nfNumero || p.notaFiscal || p.fornecedor || p.fornecedorNome || p.estoqueId || p.estoqueItemId || '').trim());
+    const valor = numBR(p.valorCompra ?? p.custo ?? p.valorUnitario ?? 0);
+    const incompleta = !instalada && valor <= 0 && !documento;
+    if (somenteCompra || !instalada) {
+      const motivo = somenteCompra ? 'NF/compra vinculada, sem confirmação de instalação'
+        : incompleta ? 'Registro incompleto: custo zero e sem documento/estoque/fornecedor'
+        : 'Registro antigo ou manual ainda sem confirmação explícita de instalação';
+      pendentesBase.push({ ...p, motivoConferencia: motivo });
+    } else instaladasBase.push(p);
+  });
+  const pecas = instaladasBase.map(p => enriquecerPecaRelatorioEstoqueOS(p, osAtual));
+  const pecasConferencia = pendentesBase.map(p => enriquecerPecaRelatorioEstoqueOS(p, osAtual));
 
   const oficina = window.J?.oficina || {};
   const nomeOficina = window.J?.tnome || oficina.nomeFantasia || oficina.razaoSocial || oficina.nome || 'OFICIN-IA';
@@ -7176,6 +7350,19 @@ window.imprimirRelatorioPecasReaisOS = async function() {
       <td data-label="Custo total" class="num"><b>${moedaLocal(qtd * unit)}</b></td>
     </tr>`;
   }).join('');
+
+  const linhasPecasConferencia = pecasConferencia.map((p, index) => `<tr>
+      <td data-label="#">${index + 1}</td>
+      <td data-label="Código">${escOS(p.codigo || '-')}</td>
+      <td data-label="Descrição">${escOS(p.desc || p.descricao || '-')}</td>
+      <td data-label="Qtd." class="num">${Math.max(0,numBR(p.qtd || 0))}</td>
+      <td data-label="Motivo da conferência">${escOS(p.motivoConferencia)}</td>
+      <td data-label="Origem">${escOS(p.origem || 'Legado/manual sem origem')}</td>
+      <td data-label="Nota fiscal">${escOS(p.nfRelatorio)}</td>
+      <td data-label="Fornecedor">${escOS(p.fornecedorRelatorio)}</td>
+      <td data-label="Status">${escOS(p.statusAplicacao || 'Sem confirmação')}</td>
+      <td data-label="Custo informado" class="num">${moedaLocal(numBR(p.valorCompra || 0))}</td>
+    </tr>`).join('');
 
   const linhasServicosReais = servicosReais.map((s, index) => `<tr>
       <td data-label="#">${index + 1}</td>
@@ -7254,7 +7441,8 @@ window.imprimirRelatorioPecasReaisOS = async function() {
     <div class="box"><b>Responsável(is)</b>${escOS(responsaveis.join(', ') || 'Não informado')}</div>
     <div class="box wide"><b>Local da troca</b>${escOS([nomeOficina, enderecoOficina].filter(Boolean).join(' — '))}</div>
   </section>
-  ${pecas.length ? `<h2 style="font-size:12px;margin:10px 0 5px;">PEÇAS REAIS INSTALADAS</h2><div class="table-wrap"><table><colgroup><col style="width:3%"><col style="width:9%"><col style="width:20%"><col style="width:4%"><col style="width:12%"><col style="width:9%"><col style="width:8%"><col style="width:16%"><col style="width:9%"><col style="width:10%"></colgroup><thead><tr><th>#</th><th>Código real</th><th>Descrição real instalada</th><th>Qtd.</th><th>Onde comprou / fornecedor</th><th>Nota fiscal / rastreio</th><th>Data compra / entrada</th><th>Origem / estoque</th><th>Custo unit.</th><th>Custo total</th></tr></thead><tbody>${linhas}</tbody><tfoot><tr><td colspan="10" class="total-geral"><b>CUSTO REAL TOTAL DAS PEÇAS</b><b>${moedaLocal(total)}</b></td></tr></tfoot></table></div>` : ''}
+  ${pecas.length ? `<h2 style="font-size:12px;margin:10px 0 5px;">PEÇAS REAIS INSTALADAS (${pecas.length}) — CONFIRMADAS/DOCUMENTADAS</h2><div class="table-wrap"><table><colgroup><col style="width:3%"><col style="width:9%"><col style="width:20%"><col style="width:4%"><col style="width:12%"><col style="width:9%"><col style="width:8%"><col style="width:16%"><col style="width:9%"><col style="width:10%"></colgroup><thead><tr><th>#</th><th>Código real</th><th>Descrição real instalada</th><th>Qtd.</th><th>Onde comprou / fornecedor</th><th>Nota fiscal / rastreio</th><th>Data compra / entrada</th><th>Origem / estoque</th><th>Custo unit.</th><th>Custo total</th></tr></thead><tbody>${linhas}</tbody><tfoot><tr><td colspan="10" class="total-geral"><b>CUSTO REAL TOTAL DAS PEÇAS</b><b>${moedaLocal(total)}</b></td></tr></tfoot></table></div>` : ''}
+  ${pecasConferencia.length ? `<h2 style="font-size:12px;margin:12px 0 5px;">REGISTROS PENDENTES DE CONFERÊNCIA — NÃO COMPROVAM INSTALAÇÃO (${pecasConferencia.length})</h2><p style="font-size:9px;">Itens históricos preservados. Não são somados ao custo das peças instaladas; confirme origem e execução antes de classificá-los como trocados.</p><div class="table-wrap"><table><thead><tr><th>#</th><th>Código</th><th>Descrição</th><th>Qtd.</th><th>Motivo</th><th>Origem</th><th>NF</th><th>Fornecedor</th><th>Status</th><th>Custo informado</th></tr></thead><tbody>${linhasPecasConferencia}</tbody></table></div>` : ''}
   ${servicosReais.length ? `<h2 style="font-size:12px;margin:12px 0 5px;">SERVIÇOS TERCEIRIZADOS REAIS</h2><div class="table-wrap"><table><colgroup><col style="width:4%"><col style="width:31%"><col style="width:23%"><col style="width:16%"><col style="width:12%"><col style="width:14%"></colgroup><thead><tr><th>#</th><th>Serviço terceirizado</th><th>Prestador / fornecedor</th><th>Nota / documento</th><th>Data</th><th>Custo real</th></tr></thead><tbody>${linhasServicosReais}</tbody><tfoot><tr><td colspan="6" class="total-geral"><b>CUSTO REAL TOTAL DOS SERVIÇOS</b><b>${moedaLocal(totalServicosReais)}</b></td></tr></tfoot></table></div>` : ''}
   <div style="display:flex;justify-content:flex-end;margin-top:10px;"><div style="border:2px solid #111;padding:8px 12px;font-size:13px;display:flex;gap:24px;"><b>CUSTO REAL GERAL</b><b>${moedaLocal(totalRealGeral)}</b></div></div>
   <div class="rodape"><span>Documento interno gerado pelo OFICIN-IA. Peças de estoque mantêm rastreio Kardex; serviços terceirizados são registros internos da O.S.</span><span>Powered by thIAguinho Soluções Digitais</span></div></main></body></html>`;

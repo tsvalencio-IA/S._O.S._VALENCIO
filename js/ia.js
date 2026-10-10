@@ -497,50 +497,47 @@
   }
 
   function responderComissoesDetalhadas(texto, q, ctx, opts) {
-    // Comissão só é consultada quando a pergunta fala explicitamente em comissão.
-    // "Mecânico", "funcionário" ou "atendimento" isoladamente são consultas operacionais,
-    // e nunca devem ser desviadas para o financeiro.
+    // Somente perguntas EXPLÍCITAS de comissão entram no financeiro.
+    // Atendimento/serviço executado permanece operacional e separado.
     if (!/comiss/.test(q)) return null;
-    if (!podeFinanceiro(opts)) return 'Seu perfil nao tem permissao para consultar comissoes ou financeiro.';
-    const func = funcionarioPorPergunta(ctx, q);
-    let lista = ctx.financeiro.filter(financeiroEhComissao);
-    if (func) lista = lista.filter(f => financeiroDoFuncionario(f, func));
-    const periodo = extrairPeriodoNaturalIA(texto);
-    if (periodo) {
-      lista = lista.filter(f => periodoContem(periodo, f.data || f.createdAt || f.dataLancamento || f.venc || f.vencimento || f.dataPagamento || f.pagoEm));
-    }
-    const querPagas = /\b(pagas|pago|pagos|pagamento|liquidadas|quitadas)\b/.test(q) && !/\ba\s+pagar\b/.test(q);
-    const querPendentes = /\b(a\s+pagar|pagar|pendente|pendentes|aberto|abertas|em\s+aberto|devido|devidas)\b/.test(q) || !querPagas;
-    if (querPagas) lista = lista.filter(f => isPagoStatus(f.status));
-    else if (querPendentes) lista = lista.filter(f => isPendenteStatus(f.status));
-    const tituloPessoa = func ? ` de ${esc(func.nome || func.usuario || 'colaborador')}` : '';
-    if (!lista.length) return `Nao encontrei comissoes${tituloPessoa} ${querPagas ? 'pagas' : 'a pagar'} nos dados carregados.`;
-    const total = lista.reduce((s, f) => s + num(f.valor || f.total || 0), 0);
-    const porPessoa = {};
-    lista.forEach(f => {
-      const id = f.mecId || f.funcId || f.funcionarioId || f.colaboradorId || f.vinculo || 'sem-vinculo';
-      const nome = (ctx.equipe.find(e => [e.id,e.uid,e.usuario].map(x=>String(x||'')).includes(String(id))) || {}).nome || f.mecNome || f.funcionario || f.colaborador || (func && (func.nome || func.usuario)) || 'Sem colaborador identificado';
-      porPessoa[nome] = (porPessoa[nome] || 0) + num(f.valor || f.total || 0);
-    });
-    const resumo = Object.keys(porPessoa).length > 1
-      ? '<br><strong>Resumo por colaborador:</strong><br>' + Object.entries(porPessoa).sort((a,b)=>b[1]-a[1]).map(([nome, total]) => `- ${esc(nome)}: ${moeda(total)}`).join('<br>')
-      : '';
-    const acoes = (() => {
-      if (querPagas) return '';
-      if (func) return acaoPagamentoComissaoIA(func, lista.map(f => f.osId));
-      const porMec = new Map();
-      lista.forEach(f => {
-        const id = String(f.mecId || f.funcId || f.funcionarioId || f.colaboradorId || '').trim();
-        if (!id) return;
-        if (!porMec.has(id)) porMec.set(id, []);
-        if (f.osId) porMec.get(id).push(f.osId);
-      });
-      return Array.from(porMec.entries()).slice(0, 12).map(([id, osIds]) => {
-        const pessoa = (ctx.equipe || []).find(e => String(e.id || e.uid || '') === id) || { id, nome: (lista.find(f => String(f.mecId || f.funcId || f.funcionarioId || f.colaboradorId || '') === id)?.mecNome || 'Colaborador') };
-        return acaoPagamentoComissaoIA(pessoa, osIds);
-      }).join('');
-    })();
-    return `<strong>Comissões ${querPagas ? 'pagas' : 'a pagar'}${tituloPessoa} (${lista.length}):</strong><br>${lista.slice(0, 10).map(formatarLinhaFinanceiro).join('<br>')}<br><br><strong>Total:</strong> ${moeda(total)}${resumo}${acoes}`;
+    if (!podeFinanceiro(opts)) return 'Seu perfil não tem permissão para consultar comissões ou financeiro.';
+    const func=funcionarioPorPergunta(ctx,q);
+    const periodo=extrairPeriodoNaturalIA(texto);
+    let registros=(ctx.financeiro||[]).filter(f=>financeiroEhComissao(f)&&!isCanceladoStatus(f.status)
+      && f.canceladoPorReemissaoOS!==true && f.compensadoPorPagamentoComissao!==true);
+    if(func)registros=registros.filter(f=>financeiroDoFuncionario(f,func));
+    if(periodo)registros=registros.filter(f=>periodoContem(periodo,
+      (isPagoStatus(f.status)||f.pagoEm||f.dataPgto)
+        ? (f.dataPgto||f.pagoEm||f.dataPagamento||f.createdAt)
+        : (f.createdAt||f.dataLancamento||f.venc||f.vencimento)));
+    const pagos=registros.filter(f=>isPagoStatus(f.status)||!!f.pagoEm||!!f.dataPgto);
+    const pendentes=registros.filter(f=>!pagos.includes(f)&&isPendenteStatus(f.status));
+    const totalPago=pagos.reduce((s,f)=>s+num(f.valorPago??f.valor??f.total??0),0);
+    const totalTitulosPendentes=pendentes.reduce((s,f)=>s+num(f.saldoPendente??f.valor??f.total??0),0);
+    const querPagas=/\b(pagas|pagos|pagamento|pagamentos|liquidadas|quitadas|foi pago|ja pagou)\b/.test(q);
+    const querPendentes=/\b(a pagar|pendente|pendentes|em aberto|devido|devidas|saldo|saldos|falta|restante)\b/.test(q);
+    const listaMostrar=querPagas&&!querPendentes?pagos:querPendentes&&!querPagas?pendentes:registros;
+    const titulo=func?` de ${esc(func.nome||func.usuario||'colaborador')}`:'';
+    const relatorio=func&&typeof W.thiaComissoesResumoV26==='function'?W.thiaComissoesResumoV26(func.id):null;
+    if(!registros.length&&!relatorio?.linhas?.length)return `Não encontrei registros de comissões${titulo}${periodo?' no período informado':''} nos dados carregados.`;
+    const historico=pagos.slice().sort((a,b)=>String(b.dataPgto||b.pagoEm||b.createdAt||'').localeCompare(String(a.dataPgto||a.pagoEm||a.createdAt||'')));
+    const detalheHist=historico.slice(0,10).map(f=>{
+      const data=dataBR(f.dataPgto||f.pagoEm||f.createdAt);
+      const os=(ctx.os||[]).find(o=>String(o.id)===String(f.osId||''));
+      const placa=f.placa||os?.placa||String(f.osId||'').slice(-6).toUpperCase()||'-';
+      const tipo=f.situacaoComissao==='parcial'?' [PARCIAL]':f.situacaoComissao==='quitada'?' [QUITAÇÃO]':'';
+      const ator=f.registroPor?` · Lançado por ${esc(f.registroPor)}`:'';
+      return `${esc(data)} · O.S. ${esc(placa)} · ${moeda(f.valorPago??f.valor??0)}${tipo} · ${esc(f.pgto||f.forma||'')}${ator}`;
+    }).join('<br>');
+    const saldoCalculado=relatorio?relatorio.pendente:null;
+    const resumoModel=relatorio?`<br><strong>Saldo por serviços/viaturas elegíveis no módulo de comissões:</strong> ${moeda(saldoCalculado)} (${relatorio.linhas.filter(r=>r.falta>.009).length} item(ns) com saldo)`:'';
+    const pagosHtml=`<strong>Pagamentos efetivamente registrados:</strong> ${moeda(totalPago)} (${pagos.length} lançamento(s)).`;
+    const pendHtml=`<strong>Títulos pendentes registrados:</strong> ${moeda(totalTitulosPendentes)} (${pendentes.length} lançamento(s)).`;
+    const listaHtml=listaMostrar.length?`<br><br><strong>Registros consultados:</strong><br>${listaMostrar.slice(0,12).map(formatarLinhaFinanceiro).join('<br>')}`:'';
+    const histHtml=detalheHist?`<br><br><strong>Histórico individual de pagamentos (data · O.S. · valor):</strong><br>${detalheHist}`:'';
+    const obs=periodo?'<br><small>Valores de lançamentos filtrados pelo período solicitado; saldo do módulo, quando exibido, representa a situação atual dos serviços carregados.</small>':'';
+    const acoes=func&&!querPagas?acaoPagamentoComissaoIA(func,(relatorio?.linhas||[]).filter(r=>r.falta>.009).map(r=>r.osId).concat(pendentes.map(f=>f.osId))):'';
+    return `<strong>Comissões${titulo}</strong><br>${pagosHtml}<br>${pendHtml}${resumoModel}${listaHtml}${histHtml}${obs}${acoes}`;
   }
 
   function responderFinanceiroDetalhado(texto, q, ctx, opts) {

@@ -1699,26 +1699,19 @@
     return out;
   }
   function osClienteOficialNF(os){
-    // Regra cirúrgica: orçamento importado/Cília NÃO torna cliente oficial.
-    // Cliente comum com Cília ou PDF continua recebendo peça da NF em Peças da O.S.
+    // Não pesquisar nomes de propriedades num JSON: clienteOficial:false não é oficial.
     const cliente = (W.J?.clientes || []).find(c => String(c.id) === String(os?.clienteId || os?.cliente || '')) || {};
-    const nomeCliente = String(cliente.nome || os?.clienteNome || os?.cliente || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (!nomeCliente || nomeCliente === 'CONSUMIDOR') return false;
-    const tipoCliente = String(cliente.tipoCliente || os?.tipoCliente || os?.clienteTipo || '').toLowerCase();
-    if (tipoCliente === 'governo' || tipoCliente === 'oficial') return true;
-    const raw = JSON.stringify({
-      osClienteOficial: os?.clienteOficial,
-      osOrgaoPublico: os?.orgaoPublico,
-      osGov: os?.gov,
-      osFiscalContrato: os?.fiscalContrato,
-      osContrato: os?.contrato,
-      clienteOficial: cliente.clienteOficial,
-      clienteOrgaoPublico: cliente.orgaoPublico,
-      clientePublico: cliente.publico,
-      clienteGov: cliente.gov,
-      clienteTipo: cliente.tipoCliente
-    }).toUpperCase();
-    return /OFICIAL|GOVERNO|PMSP|POLICIA|POLÍCIA|MILITAR|BPM|PREFEITURA|ESTADO|MUNICIP|SECRETARIA/.test(raw);
+    const tipoCliente = String(cliente.tipoCliente || os?.tipoCliente || os?.clienteTipo || '').trim().toLowerCase();
+    if (['governo','oficial','publico','público'].includes(tipoCliente)) return true;
+    // Priorizar sinais explícitos. Falsy como false, 'false', '0' e 0 não indicam cliente oficial.
+    const sim = v => v === true || v === 1 || ['true','1','sim','s','yes'].includes(String(v ?? '').trim().toLowerCase());
+    if ([cliente.clienteOficial, cliente.orgaoPublico, cliente.publico, cliente.gov,
+         os?.clienteOficial, os?.orgaoPublico, os?.gov].some(sim)) return true;
+    const institucional = [cliente.govUnidade, cliente.orgao, cliente.tipoCliente,
+      os?.fiscalContrato, os?.contrato, os?.orgao, os?.unidade]
+      .filter(v => typeof v === 'string' && v.trim()).join(' ')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+    return /\b(PMSP|POLICIA|MILITAR|PREFEITURA|SECRETARIA|GOVERNO|ORG(AO|AO) PUBLICO)\b/.test(institucional);
   }
   function pecaOrcamentoFromNF(pecaReal){
     const desc = pecaReal.desc || pecaReal.descricao || '';
@@ -1847,7 +1840,10 @@
         ultimaEntradaNFVinculada: nfPayload.numero || nfRef.id
       };
       osUpdate.pecasReais = mergePecasReaisNF(entry.os.pecasReais, pecas);
-      if (!osClienteOficialNF(entry.os)) {
+      // NF vinculada documenta compra; não é lançamento comercial automático.
+      // Apenas O.S. com autorização persistida de espelhamento podem usar o
+      // fluxo legado, sem interferir nas peças do Cília/TEMPÁRIA.
+      if (entry.os.permitirNFNoOrcamento === true && !osClienteOficialNF(entry.os)) {
         const pecasOrcamento = pecas.map(pecaOrcamentoFromNF).filter(Boolean).filter(p => !pecaOrcamentoOcultaOSNF(entry.os, p));
         if (pecasOrcamento.length) osUpdate.pecas = mergePecasOrcamentoNF(entry.os.pecas, pecasOrcamento);
       }
@@ -1871,7 +1867,7 @@
         });
         W.atualizarResumoPecasReais177?.();
       }
-      if (!osClienteOficialNF(entry.os)) refletirPecasNFNaOSTelaAtual(osId, pecas);
+      if (entry.os.permitirNFNoOrcamento === true && !osClienteOficialNF(entry.os)) refletirPecasNFNaOSTelaAtual(osId, pecas);
     }
     return { os: porOS.size, pecas: totalPecas, registrosAuxiliares };
   }

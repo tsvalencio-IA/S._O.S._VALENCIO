@@ -17,6 +17,7 @@ window.gerarPDFOS = async function() {
 
   try {
     const osId    = _v('osId');
+    const os      = (J.os || []).find(o => String(o.id) === String(osId)) || {};
     const veiculo = J.veiculos.find(x => x.id === _v('osVeiculo'));
     const cliente = J.clientes.find(x => x.id === _v('osCliente'));
     const mec     = J.equipe.find(x => x.id === _v('osMec'));
@@ -291,12 +292,18 @@ window.gerarPDFOS = async function() {
 
     // ─── PÁGINA DE FOTOS / PROVAS DA O.S. (NOVO) ────────────────
     // Se a OS tem fotos no Cloudinary, monta uma grade de miniaturas em página nova
-    const fotosOS = (os.media || os.fotos || []).filter(m => {
-      // Aceita strings (URLs) ou objetos {url, ...}
-      if (!m) return false;
-      const url = typeof m === 'string' ? m : (m.url || m.secure_url || '');
+    const midiasOS = (os.media || os.fotos || []).filter(m => {
+      const url = typeof m === 'string' ? m : (m?.url || m?.secure_url || '');
       return url && /^https?:\/\//i.test(url);
-    }).map(m => typeof m === 'string' ? m : (m.url || m.secure_url));
+    }).map(m => typeof m === 'string' ? {url:m,type:'image'} : m);
+    const fotosOS = midiasOS.filter(m => !/^video/i.test(String(m.type || 'image'))).map(m => m.url || m.secure_url);
+    const horaMidia = valor => {
+      if (!valor) return 'Não registrado (legado)';
+      const d = typeof valor?.toDate === 'function' ? valor.toDate() : new Date(valor);
+      return Number.isNaN(d.getTime()) ? 'Não registrado (legado)' : d.toLocaleString('pt-BR', {
+        day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'
+      });
+    };
 
     if (fotosOS.length > 0) {
       doc.addPage();
@@ -362,6 +369,22 @@ window.gerarPDFOS = async function() {
         if (col === cols - 1) yFotos += thumbH + 8;
       }
       // Volta para a última página da OS para não bagunçar o rodapé
+      doc.setPage(1);
+    }
+    // Metadados de TODAS as evidências (inclusive vídeos não embutidos e
+    // imagens além da grade), preservando a ausência de data no legado.
+    if (midiasOS.length) {
+      doc.addPage();
+      doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(40,50,65);
+      doc.text('REGISTRO CRONOLÓGICO DAS EVIDÊNCIAS',ml,16);
+      doc.autoTable({startY:21,theme:'grid',margin:{left:ml,right:pw-mr},
+        head:[['#','Tipo','Arquivo','Enviado','Importado na O.S.']],
+        body:midiasOS.map((m,i)=>[String(i+1),/^video/i.test(String(m.type||''))?'VÍDEO':'IMAGEM',
+          String(m.name || (m.url||m.secure_url||'').split('/').pop().split('?')[0] || 'Evidência'),
+          horaMidia(m.uploadedAt),horaMidia(m.importedAt)]),
+        styles:{fontSize:7,cellPadding:2,overflow:'linebreak'},
+        headStyles:{fillColor:[bR,bG,bB],textColor:[255,255,255]},
+        columnStyles:{0:{cellWidth:9},1:{cellWidth:20},2:{cellWidth:48},3:{cellWidth:48},4:{cellWidth:52}}});
       doc.setPage(1);
     }
 

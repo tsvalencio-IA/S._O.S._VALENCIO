@@ -207,21 +207,161 @@
   function selectedAllocations(){return Array.from(document.querySelectorAll('#comListaV21 [data-com-row]')).filter(row=>row.querySelector('.com-check-v21')?.checked).map(row=>({osId:row.dataset.osId||'',servicoKey:row.dataset.key||'',servico:row.dataset.servico||'',placa:row.dataset.placa||'',veiculo:row.dataset.veiculo||'',baseServico:n(row.dataset.base),percentual:n(row.dataset.pct),valorComissaoPrevista:n(row.dataset.previsto),valorJaPagoAntes:n(row.dataset.pago),valorPago:n(row.querySelector('.com-valor-v21')?.value||0),comissaoOficial:row.dataset.oficial==='1'})).filter(a=>a.valorPago>0);}
   function updateSummary(){const allocs=selectedAllocations(),total=allocs.reduce((s,a)=>s+a.valorPago,0);if($id('rhPgtoValor'))$id('rhPgtoValor').value=total?total.toFixed(2):'';if($id('comResumoV21'))$id('comResumoV21').textContent=allocs.length?`${allocs.length} serviço(s) selecionado(s) · pagamento agora ${money(total)}`:'Selecione os serviços que serão pagos agora.';}
 
+  // Compatibilidade: implementação anterior mantida intacta. A rotina de pagamento
+  // detalhado atual usa transação atômica e não chama esta função de lote legada.
   async function consumePending(batch,mecId,osId,valor,agora,paymentId){let restante=valor;const pend=(window.J?.financeiro||[]).filter(f=>f?.isComissao===true&&String(f.mecId||'')===String(mecId)&&String(f.osId||'')===String(osId)&&!isCanceled(f)&&!isPaid(f)).sort((a,b)=>String(a.venc||a.createdAt||'').localeCompare(String(b.venc||b.createdAt||'')));for(const fin of pend){if(restante<=.001)break;const atual=n(fin.valor||0),usar=Math.min(atual,restante),novo=+(atual-usar).toFixed(2),ref=window.db.collection('financeiro').doc(fin.id);if(novo<=.001)batch.update(ref,{status:'Cancelado',valor:0,compensadoPorPagamentoComissao:true,pagamentoComissaoId:paymentId,motivoCancelamento:'Saldo quitado por pagamento detalhado de comissão',updatedAt:agora});else batch.update(ref,{valor:novo,totalComissaoJaPago:+n(fin.totalComissaoJaPago||0)+usar,pagamentoComissaoId:paymentId,updatedAt:agora});restante-=usar;}}
 
+
+  // Controle transacional do pagamento detalhado: todos os documentos da seleção
+  // são lidos antes de qualquer escrita. A O.S. é o ponto de serialização entre
+  // gestores/dispositivos; um pagamento simultâneo provoca nova validação.
+  const centavos=v=>Math.round(n(v)*100);
+  let salvandoDetalhado=false;
   async function saveDetailed(){
-    const mec=selectedFunc();if(!mec){window.toast?.('Selecione o colaborador.','warn');return;}
-    const allocs=selectedAllocations();if(!allocs.length){window.toast?.('Selecione ao menos um serviço e informe o valor pago.','warn');return;}
-    for(const a of allocs){const restante=Math.max(0,a.valorComissaoPrevista-a.valorJaPagoAntes);if(a.valorPago-restante>.011){window.toast?.(`O valor de ${a.servico} supera o saldo restante (${money(restante)}).`,'warn');return;}}
-    const agora=new Date().toISOString(),data=$id('rhPgtoData')?.value||agora.slice(0,10),forma=$id('rhPgtoForma')?.value||'PIX',obs=$id('rhPgtoObs')?.value||'',paymentId=window.db.collection('financeiro').doc().id;
-    const groups=new Map();allocs.forEach(a=>{if(!groups.has(a.osId))groups.set(a.osId,[]);groups.get(a.osId).push(a);});
-    const batch=window.db.batch();let totalGeral=0;
-    for(const [osId,itens] of groups){const total=+itens.reduce((s,a)=>s+a.valorPago,0).toFixed(2);totalGeral+=total;const ref=window.db.collection('financeiro').doc(),placa=itens[0]?.placa||'',veiculo=itens[0]?.veiculo||'',especialOficial=itens.some(a=>a.comissaoOficial===true);batch.set(ref,{tenantId:window.J.tid,tipo:'Saída',status:'Pago',isComissao:true,isComissaoPagamento:true,categoria:especialOficial?'pagamento_comissao_cliente_oficial':'pagamento_comissao_os_servico',origem:especialOficial?'pagamento_comissao_cliente_oficial':'pagamento_comissao_detalhado',comissaoClienteOficial:especialOficial,mecId:mec.id,mecNome:mec.nome||'',vinculo:`E_${mec.id}`,osId,placa,veiculo,valor:total,pgto:forma,venc:data,dataPgto:data,pagoEm:agora,pagamentoComissaoId:paymentId,desc:`Pagamento comissão — ${mec.nome} — O.S. ${placa||String(osId).slice(-6)}`,nota:obs,alocacoesComissao:itens,itensComissaoPagos:itens,createdAt:agora,updatedAt:agora});const haviaPendente=(window.J?.financeiro||[]).some(f=>f?.isComissao===true&&String(f.mecId||'')===String(mec.id)&&String(f.osId||'')===String(osId)&&!isCanceled(f)&&!isPaid(f));await consumePending(batch,mec.id,osId,total,agora,paymentId);const residual=+itens.reduce((sum,a)=>sum+Math.max(0,n(a.valorComissaoPrevista)-n(a.valorJaPagoAntes)-n(a.valorPago)),0).toFixed(2);if(!haviaPendente&&residual>.001){const pendRef=window.db.collection('financeiro').doc();batch.set(pendRef,{tenantId:window.J.tid,tipo:'Saída',status:'Pendente',isComissao:true,categoria:itens.some(a=>a.comissaoOficial===true)?'comissao_cliente_oficial_viatura_parcial':'comissao_os_servico_parcial',origem:itens.some(a=>a.comissaoOficial===true)?'saldo_comissao_cliente_oficial':'saldo_pagamento_comissao_detalhado',mecId:mec.id,mecNome:mec.nome||'',vinculo:`E_${mec.id}`,osId,placa,veiculo,valor:residual,pgto:'A Combinar',venc:data,desc:`Saldo de comissão — ${mec.nome} — O.S. ${placa||String(osId).slice(-6)}`,servicosComissao:itens.map(a=>({key:a.servicoKey,desc:a.servico,valorComissao:Math.max(0,n(a.valorComissaoPrevista)-n(a.valorJaPagoAntes)-n(a.valorPago)),baseServico:a.baseServico,percentual:a.percentual})),createdAt:agora,updatedAt:agora});}
-      const osRef=window.db.collection('ordens_servico').doc(osId);
-      const servicosPagos=itens.map(a=>a.servico).filter(Boolean).join('; ');
-      batch.update(osRef,{timeline:firebase.firestore.FieldValue.arrayUnion({dt:agora,user:window.J?.nome||'Gestor',userId:window.J?.uid||window.J?.fid||'',perfil:window.J?.role||'gestor',tipo:'pagamento_comissao',mecanicoId:mec.id,mecanicoNome:mec.nome||'',valor:total,pagamentoComissaoId:paymentId,acao:`Comissão paga para ${mec.nome}: ${money(total)}${servicosPagos?' — '+servicosPagos:''}${obs?' — '+obs:''}`}),comissaoAtualizadaEm:agora});
+    if(salvandoDetalhado){window.toast?.('Um pagamento já está sendo registrado.','warn');return;}
+    const mec=selectedFunc();
+    if(!mec){window.toast?.('Selecione o colaborador.','warn');return;}
+    const allocs=selectedAllocations();
+    if(!allocs.length){window.toast?.('Selecione ao menos um serviço e informe o valor pago.','warn');return;}
+    const linhasAtuais=rowsFor(mec);
+    const disponiveis=new Map(linhasAtuais.map(r=>[`${r.osId}|${r.servicoKey}`,r]));
+    const usados=new Set();
+    for(const a of allocs){
+      const key=`${a.osId}|${a.servicoKey}`;
+      const origem=disponiveis.get(key);
+      if(!origem || origem.semPercentual || origem.aguardandoExecucao || usados.has(key)){
+        window.toast?.(`Seleção de comissão desatualizada: ${a.servico}. Atualize a lista.`, 'warn');return;
+      }
+      usados.add(key);
+      // Nunca confiar no saldo/percentual enviado pelo DOM sem validar com o modelo atual.
+      if(centavos(a.valorComissaoPrevista)!==centavos(origem.previsto) || centavos(a.valorJaPagoAntes)!==centavos(origem.pago)){
+        window.toast?.(`Os valores de ${a.servico} mudaram. Atualize a seleção.`, 'warn');return;
+      }
+      if(centavos(a.valorPago)<=0 || centavos(a.valorPago)>centavos(origem.falta)){
+        window.toast?.(`Valor excede saldo de ${a.servico}: ${money(origem.falta)}.`, 'warn');return;
+      }
     }
-    await batch.commit();window.toast?.(`✓ Comissão registrada: ${money(totalGeral)} para ${mec.nome}`,'ok');if(typeof window.audit==='function')window.audit('RH/EQUIPE',`Pagamento detalhado de comissão ${money(totalGeral)} para ${mec.nome} em ${groups.size} O.S.`);window.fecharModal?.('modalPgtoRH');window.calcComissoes?.();
+    const groups=new Map();
+    allocs.forEach(a=>{if(!groups.has(a.osId))groups.set(a.osId,[]);groups.get(a.osId).push(a);});
+    if(groups.size>40){window.toast?.('Para preservar a operação atômica, selecione até 40 O.S. por pagamento.','warn');return;}
+    const database=window.db;
+    const agora=new Date().toISOString(),data=$id('rhPgtoData')?.value||agora.slice(0,10);
+    const forma=$id('rhPgtoForma')?.value||'PIX',obs=$id('rhPgtoObs')?.value||'';
+    const paymentId=database.collection('financeiro').doc().id;
+    const actor=window.J?.nome||'Gestor',actorId=window.J?.uid||window.J?.fid||'';
+    const totalGeral=+allocs.reduce((s,a)=>s+a.valorPago,0).toFixed(2);
+    salvandoDetalhado=true;
+    try{
+      await database.runTransaction(async trx=>{
+        const refs=Array.from(groups.keys()).map(osId=>[osId,database.collection('ordens_servico').doc(osId)]);
+        const snapshots=new Map();
+        for(const [osId,ref] of refs){
+          const snap=await trx.get(ref);
+          if(!snap.exists)throw new Error(`O.S. ${osId} não encontrada.`);
+          const atual=snap.data()||{};
+          if(String(atual.tenantId||'')!==String(window.J.tid||''))throw new Error('Oficina divergente na O.S.');
+          const local=(window.J?.os||[]).find(o=>String(o.id)===String(osId));
+          if(local?.updatedAt&&atual.updatedAt&&String(local.updatedAt)!==String(atual.updatedAt))throw new Error(`O.S. atualizada em outro dispositivo. Reabra comissões antes de pagar (${osId}).`);
+          if(/^cancel/i.test(String(atual.status||'')))throw new Error(`O.S. cancelada (${osId}).`);
+          snapshots.set(osId,{ref,atual});
+        }
+        // Também relê saldos financeiros reais para não reusar um pendente
+        // que outro pagamento já consumiu/cancelou.
+        const pendingRefs=new Map();
+        for(const [osId,entry] of snapshots){
+          const ctrl=entry.atual.comissaoControleV26?.[String(mec.id)]||{};
+          const pend=(window.J?.financeiro||[]).filter(f=>f?.id&&f.isComissao===true&&String(f.mecId||'')===String(mec.id)&&String(f.osId||'')===String(osId)&&!isCanceled(f)&&!isPaid(f));
+          const ids=new Set(pend.map(f=>String(f.id)));
+          if(ctrl.saldoId)ids.add(String(ctrl.saldoId));
+          for(const id of ids)pendingRefs.set(id,database.collection('financeiro').doc(id));
+        }
+        const pendSnap=new Map();
+        for(const [id,ref] of pendingRefs)pendSnap.set(id,await trx.get(ref));
+        // TODAS as leituras da transação estão concluídas neste ponto.
+        for(const [osId,itens] of groups){
+          const {ref:osRef,atual}=snapshots.get(osId);
+          const allControl={...(atual.comissaoControleV26||{})};
+          const mecControl={...(allControl[String(mec.id)]||{})};
+          const pagosCentavos={...(mecControl.pagosCentavos||{})};
+          const total=+itens.reduce((s,a)=>s+a.valorPago,0).toFixed(2);
+          const placa=itens[0]?.placa||'',veiculo=itens[0]?.veiculo||'';
+          const especialOficial=itens.some(a=>a.comissaoOficial===true);
+          const liberados=linhasAtuais.filter(r=>String(r.osId)===String(osId)&&!r.semPercentual&&!r.aguardandoExecucao);
+          for(const a of itens){
+            const anterior=Math.max(centavos(a.valorJaPagoAntes),Number(pagosCentavos[a.servicoKey]||0));
+            const previsto=centavos(a.valorComissaoPrevista),parcela=centavos(a.valorPago);
+            if(anterior+parcela>previsto){throw new Error(`Pagamento duplicado/excedente bloqueado: ${a.servico} na O.S. ${placa||osId}. Reabra o extrato.`);}
+            pagosCentavos[a.servicoKey]=anterior+parcela;
+          }
+          const residualCent=liberados.reduce((s,r)=>s+Math.max(0,centavos(r.previsto)-Math.max(centavos(r.pago),Number(pagosCentavos[r.servicoKey]||0))),0);
+          const residual=+(residualCent/100).toFixed(2);
+          const pendExistentes=Array.from(pendSnap.values()).filter(s=>s.exists&&
+            String(s.data()?.osId||'')===String(osId)&&String(s.data()?.mecId||'')===String(mec.id)&&
+            String(s.data()?.tenantId||'')===String(window.J.tid)&&!isCanceled(s.data())&&!isPaid(s.data()))
+            .sort((a,b)=>String(a.data()?.venc||a.data()?.createdAt||'').localeCompare(String(b.data()?.venc||b.data()?.createdAt||'')));
+          let restante=centavos(total);
+          for(const p of pendExistentes){
+            if(restante<=0)break;
+            const fin=p.data(),atualCent=centavos(fin.valor||0),usar=Math.min(atualCent,restante),novoCent=atualCent-usar;
+            if(usar<=0)continue;
+            trx.update(p.ref,novoCent<=0?{
+              status:'Cancelado',valor:0,compensadoPorPagamentoComissao:true,
+              pagamentoComissaoId:paymentId,motivoCancelamento:'Saldo pago em comissão detalhada',updatedAt:agora
+            }:{valor:novoCent/100,totalComissaoJaPago:+(n(fin.totalComissaoJaPago||0)+usar/100).toFixed(2),pagamentoComissaoId:paymentId,updatedAt:agora});
+            restante-=usar;
+          }
+          // Apenas a primeira transação sem título pendente cria um saldo;
+          // o ID fica na O.S., impedindo a duplicação no próximo dispositivo.
+          if(!pendExistentes.length&&residualCent>0){
+            const pendRef=database.collection('financeiro').doc();
+            mecControl.saldoId=pendRef.id;
+            trx.set(pendRef,{
+              tenantId:window.J.tid,tipo:'Saída',status:'Pendente',isComissao:true,
+              categoria:especialOficial?'comissao_cliente_oficial_viatura_parcial':'comissao_os_servico_parcial',
+              origem:especialOficial?'saldo_comissao_cliente_oficial':'saldo_pagamento_comissao_detalhado',
+              mecId:mec.id,mecNome:mec.nome||'',vinculo:`E_${mec.id}`,
+              osId,placa,veiculo,valor:residual,pgto:'A Combinar',venc:data,
+              desc:`Saldo de comissão — ${mec.nome} — O.S. ${placa||String(osId).slice(-6)}`,
+              servicosComissao:liberados.map(r=>({key:r.servicoKey,desc:r.servico,
+                valorComissao:Math.max(0,(centavos(r.previsto)-Math.max(centavos(r.pago),Number(pagosCentavos[r.servicoKey]||0)))/100),
+                baseServico:r.base,percentual:r.percentual})),createdAt:agora,updatedAt:agora
+            });
+          }
+          // Cada O.S. recebe o próprio lançamento integral, mesmo no pagamento em lote.
+          const pagamentoRef=database.collection('financeiro').doc();
+          trx.set(pagamentoRef,{
+            tenantId:window.J.tid,tipo:'Saída',status:'Pago',isComissao:true,isComissaoPagamento:true,
+            categoria:especialOficial?'pagamento_comissao_cliente_oficial':'pagamento_comissao_os_servico',
+            origem:especialOficial?'pagamento_comissao_cliente_oficial':'pagamento_comissao_detalhado',
+            comissaoClienteOficial:especialOficial,mecId:mec.id,mecNome:mec.nome||'',vinculo:`E_${mec.id}`,
+            osId,placa,veiculo,valor:total,pgto:forma,venc:data,dataPgto:data,pagoEm:agora,
+            pagamentoComissaoId:paymentId,registroPor:actor,registroPorId:actorId,
+            situacaoComissao:residualCent>0?'parcial':'quitada',saldoComissaoDepois:residual,
+            desc:`Pagamento comissão — ${mec.nome} — O.S. ${placa||String(osId).slice(-6)}`,
+            nota:obs,alocacoesComissao:itens,itensComissaoPagos:itens,createdAt:agora,updatedAt:agora
+          });
+          mecControl.pagosCentavos=pagosCentavos;
+          mecControl.ultimoPagamentoId=paymentId;
+          mecControl.updatedAt=agora;
+          allControl[String(mec.id)]=mecControl;
+          const servicosPagos=itens.map(a=>a.servico).filter(Boolean).join('; ');
+          trx.update(osRef,{
+            comissaoControleV26:allControl,comissaoAtualizadaEm:agora,
+            timeline:firebase.firestore.FieldValue.arrayUnion({
+              dt:agora,user:actor,userId:actorId,perfil:window.J?.role||'gestor',
+              tipo:'pagamento_comissao',mecanicoId:mec.id,mecanicoNome:mec.nome||'',
+              valor:total,pagamentoComissaoId:paymentId,saldoPendente:residual,
+              situacao:residualCent>0?'parcial':'quitada',
+              acao:`Comissão ${residualCent>0?'parcialmente paga':'quitada'} para ${mec.nome}: ${money(total)}. Saldo estimado: ${money(residual)}${servicosPagos?' — '+servicosPagos:''}${obs?' — '+obs:''}`
+            })
+          });
+        }
+      });
+      window.toast?.(`✓ Pagamento de comissão registrado: ${money(totalGeral)} para ${mec.nome} em ${groups.size} O.S.`, 'ok');
+      if(typeof window.audit==='function')try{window.audit('RH/EQUIPE',`Pagamento de comissão ${money(totalGeral)} para ${mec.nome} em ${groups.size} O.S. (ID ${paymentId})`);}catch(_){}
+      window.fecharModal?.('modalPgtoRH');window.calcComissoes?.();
+    }catch(e){console.error('[Comissões] pagamento transacional:',e);window.toast?.('Pagamento NÃO efetuado: '+(e?.message||e),'err');}
+    finally{salvandoDetalhado=false;}
   }
 
   function summaryByFunc(func){
@@ -242,6 +382,17 @@
     window.thiaEnsureDataFor?.('equipe');
     box.innerHTML=(window.J?.equipe||[]).map(f=>({f,s:summaryByFunc(f)})).filter(x=>x.s.qtdServicos>0||x.s.pendente>0||x.s.pago>0).map(({f,s})=>`<div class="com-card" style="cursor:pointer;align-items:center;min-width:0;max-width:100%;box-sizing:border-box" onclick="window.abrirComissaoColaboradorV21('${esc(f.id)}')"><div style="min-width:0"><div class="com-nome" style="overflow-wrap:anywhere">${esc(f.nome)}</div><div style="font-family:var(--fm);font-size:.6rem;color:var(--muted)">${s.qtdServicos} SERVIÇO(S) · PAGO ${money(s.pago)} · FALTA ${money(s.pendente)}${s.semPercentual?` · <span style="color:var(--warn)">${s.semPercentual} SEM %</span>`:''}${s.aguardando?` · <span style="color:var(--warn)">${s.aguardando} AGUARDANDO</span>`:''}</div></div><div style="text-align:right"><div class="com-val">${money(s.pendente)}</div><div style="font-family:var(--fm);font-size:.56rem;color:var(--cyan);margin-top:3px">DETALHAR / PAGAR</div></div></div>`).join('')||'<div style="text-align:center;color:var(--muted);padding:20px;">Sem serviços atribuídos ou comissões registradas</div>';
   }
+
+  // Fonte única para a IA financeira: reaproveita rowsFor, rateios e pagamentos reais.
+  window.thiaComissoesResumoV26=function(mecId){
+    const mec=(window.J?.equipe||[]).find(f=>String(f.id)===String(mecId));
+    if(!mec)return null;
+    const linhas=rowsFor(mec);
+    return {mecId:mec.id,linhas,
+      previsto:+linhas.reduce((s,r)=>s+n(r.previsto),0).toFixed(2),
+      pago:+linhas.reduce((s,r)=>s+n(r.pago),0).toFixed(2),
+      pendente:+linhas.filter(r=>!r.semPercentual&&!r.aguardandoExecucao).reduce((s,r)=>s+n(r.falta),0).toFixed(2)};
+  };
 
   const oldPrep=window.prepPgtoRH;window.prepPgtoRH=function(){if(typeof oldPrep==='function')oldPrep.apply(this,arguments);ensureUI();toggle();};
   const oldSave=window.salvarPgtoRH;window.salvarPgtoRH=function(){return $id('rhPgtoTipo')?.value==='Pagamento Comissão'?saveDetailed():(typeof oldSave==='function'?oldSave.apply(this,arguments):undefined);};

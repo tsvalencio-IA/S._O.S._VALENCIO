@@ -1518,7 +1518,8 @@ async function uploadEquipeCloudinary(file){
     type:data.resource_type || (/^video\//.test(file.type||'') ? 'video' : 'image'),
     name:file.name || '',
     bytes:data.bytes || finalFile.size || file.size || 0,
-    uploadedAt:new Date().toISOString()
+    uploadedAt:data.created_at && !Number.isNaN(Date.parse(data.created_at)) ? new Date(data.created_at).toISOString() : new Date().toISOString(),
+    uploadHorarioOrigem:data.created_at ? 'cloudinary' : 'dispositivo'
   };
 }
 
@@ -2399,12 +2400,7 @@ async function salvarOS(){
           registouAlgo = true;
       }
 
-      const oldMedia = (oldOS.media || oldOS.fotos || []).length;
-      const newMedia = (JSON.parse($('mediaArray').value || '[]')).length;
-      if (newMedia > oldMedia) {
-          tl.push({ dt: new Date().toISOString(), user: funcUser, acao: `Anexou ${newMedia - oldMedia} foto(s) de evidência.` });
-          registouAlgo = true;
-      }
+      // As evidências são auditadas por URL individual após compor o payload.
 
       if (!registouAlgo) {
           tl.push({ dt: new Date().toISOString(), user: funcUser, acao: `Atualizou os detalhes da O.S.` });
@@ -2444,19 +2440,21 @@ async function salvarOS(){
     total: t,
     pecas,
     servicos,
-    media:JSON.parse($('mediaArray').value||'[]'),
+    media:prepararVinculoEvidenciasEquipe(JSON.parse($('mediaArray').value||'[]'), osBaseEquipe.media || osBaseEquipe.fotos || []),
     chkComb:$v('chkComb'),chkPneuDia:parseInt($('chkPD')?.value||100),chkPneuTra:parseInt($('chkPT')?.value||100),chkObs:$v('chkObs'),
     chkPainel:$('chkPainel')?.value||'',chkPressao:$('chkPressao')?.value||'',
     chkCar:$('chkCar')?.value||'',chkDoc:$('chkDoc')?.value||'',
     timeline:tl,updatedAt:new Date().toISOString()
   };
 
+  auditarMidiasIndividualEquipe(p.timeline, p.media, osBaseEquipe.media || osBaseEquipe.fotos || []);
+
   const osAntigaAprovacao = id ? (dbOS.find(x => x.id === id) || {}) : {};
   const UOS = window.JOS || window.JarvisOSUtils || {};
   if (id && UOS.hasApproval?.(osAntigaAprovacao)) {
     // O.S. aprovada: equipe/mecânico não pode remover/editar o orçamento aprovado/reprovado.
     // Mantém orçamento, aprovação, total e histórico financeiro como estavam; equipe só muda status operacional,
-    // diagnóstico/checklist/mídia/timeline e execução interna dos itens aprovados.
+    // diagnóstico/checklist/mídia/timeline e execução interna dos itens aprovados; o status permanece exclusivo do gestor.
     p.pecas = osAntigaAprovacao.pecas || [];
     p.servicos = osAntigaAprovacao.servicos || [];
     p.total = osAntigaAprovacao.total || p.total;
@@ -2541,8 +2539,39 @@ async function salvarOS(){
   }
 
   let osIdSalva=id;
-  if(id) await db.collection('ordens_servico').doc(id).update(p);
-  else{p.createdAt=new Date().toISOString();const refNovaOS=await db.collection('ordens_servico').add(p);osIdSalva=refNovaOS.id;}
+  if(id) {
+    // Alterações técnicas são gravadas sem reescrever o status definido pelo gestor.
+    // A transação recusa uma edição baseada em O.S. que mudou de status/aprovação
+    // entre a abertura e o salvamento, evitando perda de mudanças simultâneas.
+    const ref=db.collection('ordens_servico').doc(id);
+    const ultimoStatus=String(osBaseEquipe.status||'Aguardando');
+    const aprovacaoAnterior=JSON.stringify({aprovacao:osBaseEquipe.aprovacao||null,itensAprovados:osBaseEquipe.itensAprovados||[]});
+    const eventosNovos=tl.slice((osBaseEquipe.timeline||[]).length);
+    const obsNova=($v('osObsEquipeNova')||'').trim();
+    delete p.status; // A equipe nunca grava o status de uma O.S. já existente.
+    delete p.timeline;
+    delete p.observacoesEquipe;
+    try {
+      await db.runTransaction(async trx=>{
+        const snap=await trx.get(ref);
+        if(!snap.exists)throw new Error('O.S. não encontrada.');
+        const atual=snap.data()||{};
+        if((osAtualPreservar.updatedAt && String(atual.updatedAt||'')!==String(osAtualPreservar.updatedAt)) ||
+           String(atual.status||'Aguardando')!==ultimoStatus ||
+           JSON.stringify({aprovacao:atual.aprovacao||null,itensAprovados:atual.itensAprovados||[]})!==aprovacaoAnterior){
+          throw new Error('O gestor atualizou o status/aprovação desta O.S. Reabra a ficha para editar sem sobrescrever dados recentes.');
+        }
+        const mudanca={...p};
+        if(eventosNovos.length)mudanca.timeline=firebase.firestore.FieldValue.arrayUnion(...eventosNovos);
+        if(obsNova)mudanca.observacoesEquipe=firebase.firestore.FieldValue.arrayUnion({dt:p.updatedAt,usuario:J.nome||'Equipe',usuarioId:J.fid||'',perfil:J.role||'equipe',interno:true,visivelCliente:false,texto:obsNova});
+        trx.update(ref,mudanca);
+      });
+    }catch(e){toast('O.S. não salva: '+(e?.message||e),'err');return;}
+  } else {
+    p.createdAt=new Date().toISOString();
+    const refNovaOS=await db.collection('ordens_servico').add(p);
+    osIdSalva=refNovaOS.id;
+  }
   const obsAuditada=($v('osObsEquipeNova')||'').trim();
   if(obsAuditada) await auditarEquipeOperacao('OS',`Observação na O.S. #${String(osIdSalva||'').slice(-6).toUpperCase()}: ${obsAuditada}`,{osId:osIdSalva||null,origem:'equipe_observacao'});
 
@@ -2594,7 +2623,7 @@ function renderGaleriaFotosEquipe(){
   const foto=_equipeGaleriaFotos[_equipeGaleriaIndex];
   const img=ov.querySelector('[data-eq-galeria-img]');
   if(img){img.src=foto.url;img.alt=`Foto ${_equipeGaleriaIndex+1} da O.S.`;}
-  const c=ov.querySelector('[data-eq-galeria-count]'); if(c)c.textContent=`Foto ${_equipeGaleriaIndex+1} de ${_equipeGaleriaFotos.length}`;
+  const c=ov.querySelector('[data-eq-galeria-count]'); if(c)c.textContent=`Foto ${_equipeGaleriaIndex+1} de ${_equipeGaleriaFotos.length} | Enviada: ${dataHoraEvidenciaEquipe(foto.uploadedAt)} | Na O.S.: ${dataHoraEvidenciaEquipe(foto.importedAt)}`;
   ov.querySelectorAll('[data-eq-nav]').forEach(b=>b.style.visibility=_equipeGaleriaFotos.length>1?'visible':'hidden');
 }
 function navegarGaleriaFotosEquipe(delta){
@@ -2635,6 +2664,44 @@ function abrirGaleriaFotosEquipe(indiceMedia){
   document.addEventListener('keydown',_equipeGaleriaKeydown);renderGaleriaFotosEquipe();
 }
 
+function dataHoraEvidenciaEquipe(value) {
+  if (!value) return 'Não registrada (arquivo antigo)';
+  const d = typeof value?.toDate === 'function' ? value.toDate() : new Date(value);
+  if (Number.isNaN(d.getTime())) return 'Não registrada (arquivo antigo)';
+  return d.toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+function prepararVinculoEvidenciasEquipe(lista, mediaAntiga) {
+  const urlsAntigas = new Set((Array.isArray(mediaAntiga) ? mediaAntiga : []).map(m => typeof m === 'string' ? m : m?.url || m?.secure_url || '').filter(Boolean));
+  const agora = new Date().toISOString();
+  return (Array.isArray(lista) ? lista : []).map(m => {
+    const url = typeof m === 'string' ? m : m?.url || m?.secure_url || '';
+    if (!url || urlsAntigas.has(url)) return m;
+    const item = typeof m === 'string' ? {url:m,type:'image'} : {...m};
+    if (!item.importedAt) item.importedAt = agora;
+    if (!item.importedPor) item.importedPor = J.nome || 'Equipe';
+    return item;
+  });
+}
+function escMediaEquipe(v) {
+  return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function auditarMidiasIndividualEquipe(timeline, novas, antigas) {
+  const getUrl = m => typeof m === 'string' ? m : m?.url || m?.secure_url || '';
+  const prev = new Map((Array.isArray(antigas) ? antigas : []).map(m=>[getUrl(m),m]).filter(([url])=>url));
+  const cur = new Map((Array.isArray(novas) ? novas : []).map(m=>[getUrl(m),m]).filter(([url])=>url));
+  for (const [url,m] of cur) {
+    if (prev.has(url)) continue;
+    const video = /^video/i.test(String(m?.type || ''));
+    timeline.push({dt:m?.importedAt || new Date().toISOString(),user:J.nome||'Equipe',tipo:'evidencia_adicionada',
+      acao:`Anexou ${video?'vídeo':'imagem'}: ${m?.name || url.split('/').pop().split('?')[0] || 'arquivo'}; enviado em ${dataHoraEvidenciaEquipe(m?.uploadedAt)}; importado na O.S. em ${dataHoraEvidenciaEquipe(m?.importedAt)}.`,
+      midiaUrl:url,midiaTipo:video?'video':'imagem',enviadoEm:m?.uploadedAt||null,importadoEm:m?.importedAt||null});
+  }
+  for (const [url,m] of prev) {
+    if (cur.has(url)) continue;
+    timeline.push({dt:new Date().toISOString(),user:J.nome||'Equipe',tipo:'evidencia_removida',
+      acao:`Removeu evidência: ${m?.name || url.split('/').pop().split('?')[0] || 'arquivo'}.`,midiaUrl:url});
+  }
+}
 function renderMediaGrid(){
   const media=JSON.parse($('mediaArray')?.value||'[]');
   $('mediaGrid').innerHTML=media.map((m,i)=>{
@@ -2642,6 +2709,7 @@ function renderMediaGrid(){
     const isVideo=/^video$/i.test(String(m?.type||''))||/^video\//i.test(String(m?.type||''));
     return `<div class="media-item">
       ${isVideo?`<video src="${url}" controls preload="metadata"></video>`:`<img src="${url}" loading="lazy" referrerpolicy="no-referrer" onclick="abrirGaleriaFotosEquipe(${i})" style="cursor:zoom-in" alt="Foto ${i+1} da O.S.">`}
+      <span style="position:absolute;bottom:0;left:0;right:0;z-index:1;pointer-events:none;background:rgba(8,16,30,.93);padding:3px;color:#e2e8f0;font-size:.53rem;line-height:1.3;overflow-wrap:anywhere;">Envio: ${escMediaEquipe(dataHoraEvidenciaEquipe(m?.uploadedAt))}<span style="display:block">Na O.S.: ${escMediaEquipe(dataHoraEvidenciaEquipe(m?.importedAt))}</span></span>
       <button type="button" class="media-del" onclick="event.stopPropagation();rmMedia(${i})">✕</button>
     </div>`;
   }).join('');
@@ -2909,13 +2977,13 @@ function aplicarSugestaoIA() {
 <script src="js/final-1010-regras-os.js"></script>
 <script src="js/theme.js"></script>
 <script src="js/hardening-comercial.js?v=26.13.0"></script>
-<script src="js/ia.js?v=26.21.0"></script>
+<script src="js/ia.js?v=26.24.2"></script>
 <script src="js/catalogos-ia.js?v=19.0.0"></script>
 <script src="js/uix-theme-fix.js"></script>
 <script src="js/equipe-comissoes-v21.js?v=26.1.0"></script>
 <script src="js/equipe-usabilidade-v262.js?v=26.2.0"></script>
-<script src="js/equipe-firestore-economico-v265.js?v=26.5.0"></script>
+<script src="js/equipe-firestore-economico-v265.js?v=26.24.2"></script>
 <script src="js/thia-firestore-runtime-v2612.js?v=26.13.0"></script>
-<script src="js/equipe-firestore-profissional-v2612.js?v=26.12.0"></script>
+<script src="js/equipe-firestore-profissional-v2612.js?v=26.24.2"></script>
 </body>
 </html>

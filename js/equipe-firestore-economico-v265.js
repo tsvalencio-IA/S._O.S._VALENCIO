@@ -62,7 +62,7 @@
     if(state.osUnsub&&!force)return;
     if(force&&state.osUnsub){try{state.osUnsub();}catch(_){}state.osUnsub=null;}
     if(!state.loaded.os)await cache('os','ordens_servico',applyOS);
-    if(!force&&fresh('os')&&dbOS?.length)return;
+    // O cache hidrata a tela, mas nunca substitui o listener em tempo real.
     statusEquipeDados('Sincronizando pátio da equipe...', 'warn');
     const q=query('ordens_servico');if(!q)return;
     state.osUnsub=q.onSnapshot({includeMetadataChanges:true},snap=>{
@@ -96,7 +96,7 @@
   function wrapSave(){
     if(typeof W.salvarOS==='function'&&!W.salvarOS.__eqEco265){
       const original=W.salvarOS;
-      const wrapped=function(){const out=original.apply(this,arguments);Promise.resolve(out).finally(()=>{cache('os','ordens_servico',applyOS);cache('estoque','estoqueItems',applyEstoque);});return out;};
+      const wrapped=function(){return original.apply(this,arguments);}; // O onSnapshot atualiza O.S.; não reaplicar cache antigo após salvar.
       wrapped.__eqEco265=true;wrapped.__original=original;W.salvarOS=wrapped;
     }
   }

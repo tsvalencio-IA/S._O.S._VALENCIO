@@ -237,10 +237,8 @@
       const original = W.salvarOS;
       const wrapped = function () {
         const out = original.apply(this, arguments);
-        Promise.resolve(out).finally(() => {
-          loadStock(false);
-          if (!roleAll()) startMechanic(false);
-        });
+        // A sessão já mantém listeners ativos; não refazer consulta de estoque a cada salvamento.
+        Promise.resolve(out).then(() => { if (!roleAll()) startOS(false); }).catch(() => {});
         return out;
       };
       wrapped.__thiaEquipeProV2612 = true;

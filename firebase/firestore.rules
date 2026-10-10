@@ -83,7 +83,17 @@ service cloud.firestore {
     // ─── /clientes ────────────────────────────────────────────────
     match /clientes/{id} {
       allow read:   if sameTenantRead() || (isCli() && resource.data.userId == request.auth.uid);
-      allow create: if sameTenantWrite() && (isAdmin() || isSuper());
+      allow create: if sameTenantWrite() && (isAdmin() || isSuper() || (
+        isMec() && request.resource.data.cadastradoVia == 'equipe_os'
+        && request.resource.data.tipoCliente == 'b2c'
+        && request.resource.data.categoriaComercial == 'comum'
+        && request.resource.data.frotista == false
+        && request.resource.data.keys().hasOnly([
+          'tenantId','nome','wpp','doc','docLimpo','email','login','pin',
+          'tipoCliente','categoriaComercial','frotista','createdAt','updatedAt',
+          'cadastradoVia','cadastradoPor','cadastradoPorId'
+        ])
+      ));
       allow update: if sameTenantRead() && noTenantSwitch() && (isAdmin() || isSuper());
       allow delete: if false; // soft delete via campo deletedAt
     }
@@ -91,7 +101,17 @@ service cloud.firestore {
     // ─── /veiculos ────────────────────────────────────────────────
     match /veiculos/{id} {
       allow read:   if sameTenantRead();
-      allow create: if sameTenantWrite() && (isAdmin() || isSuper());
+      allow create: if sameTenantWrite() && (isAdmin() || isSuper() || (
+        isMec() && request.resource.data.cadastradoVia == 'equipe_os'
+        && request.resource.data.clienteId is string
+        && exists(/databases/$(database)/documents/clientes/$(request.resource.data.clienteId))
+        && get(/databases/$(database)/documents/clientes/$(request.resource.data.clienteId)).data.tenantId == userTenant()
+        && request.resource.data.keys().hasOnly([
+          'tenantId','clienteId','tipo','placa','modelo','marca','ano','km',
+          'cor','chassis','chassi','createdAt','updatedAt',
+          'cadastradoVia','cadastradoPor','cadastradoPorId'
+        ])
+      ));
       allow update: if sameTenantRead() && noTenantSwitch() && (isAdmin() || isSuper());
       allow delete: if false;
     }
@@ -139,7 +159,18 @@ service cloud.firestore {
       allow read: if sameTenantRead()
                   || (isCli() && clienteEhDono(resource.data.clienteId));
       allow create: if sameTenantWrite() && isStaff();
-      allow update: if sameTenantRead() && noTenantSwitch() && isStaff();
+      allow update: if sameTenantRead() && noTenantSwitch() && isStaff()
+        // O mecânico não pode mudar status nem lançar recebimento operacional.
+        && (!isMec() || (
+          (!('status' in resource.data) || request.resource.data.status == resource.data.status)
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'recebidaOperacional','valorRecebidoOperacional',
+            'recebidaOperacionalAtualizadoEm','recebidaOperacionalPor',
+            'recebidaOperacionalPorId','recebidaOperacionalEm',
+            'recebidaOperacionalMarcadaPor','recebidaOperacionalDesmarcadaEm',
+            'recebidaOperacionalDesmarcadaPor'
+          ])
+        ));
       allow delete: if false;
 
       // ─── ITENS — operacional, sem preço ─────────────────────────
