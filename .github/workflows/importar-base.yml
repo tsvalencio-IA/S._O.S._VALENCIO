@@ -1,0 +1,61 @@
+name: Importar base SAAS-2 em homologacao
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/importar-base.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  importar-base:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout do repositorio novo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Copiar origem fixa, sem historico e sem chaves
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --heads origin refs/heads/homologacao | grep -q .; then
+            echo "::error::Branch homologacao ja existe. Sem sobrescrita."
+            exit 1
+          fi
+          git clone -q https://github.com/tsvalencio-IA/SAAS-2.git "$RUNNER_TEMP/saas2-origem"
+          git -C "$RUNNER_TEMP/saas2-origem" checkout -q --detach 9aeacd0da5dfbe444e4f069f5f36e203a0738391
+          test "$(git -C "$RUNNER_TEMP/saas2-origem" rev-parse HEAD^{tree})" = "3d175349a2b8c2354ab7f98e2fe3a1e6facd6989"
+          git checkout -b homologacao
+          rsync -a --exclude=.git --exclude='capacitor-android/keystore/' "$RUNNER_TEMP/saas2-origem/" ./
+          rm -f .github/workflows/importar-base.yml
+          cat >> .gitignore <<'EOF'
+
+          # Seguranca - nunca versionar segredos e chaves de assinatura
+          *.jks
+          *.keystore
+          *.p12
+          *.pfx
+          .env
+          .env.*
+          !*.env.example
+          capacitor-android/keystore/
+          EOF
+          if find . -type f \( -iname '*.jks' -o -iname '*.keystore' -o -iname '*.p12' -o -iname '*.pfx' \) -not -path './.git/*' | grep -q .; then
+            echo "::error::Chaves de assinatura detectadas: bloqueando."
+            exit 1
+          fi
+          if grep -RIl --exclude-dir=.git --include='*.js' --include='*.json' --include='*.md' --include='*.html' 'BEGIN PRIVATE KEY' . | grep -q .; then
+            echo "::error::Chave privada embutida detectada: bloqueando."
+            exit 1
+          fi
+          count="$(find . -type f -not -path './.git/*' | wc -l)"
+          if [ "$count" -ne 312 ]; then
+            echo "::error::Esperados 312 arquivos apos excluir 2 sensiveis, obtidos $count."
+            exit 1
+          fi
+          git add -A
+          git -c user.name='S.O.S. VALENCIO CI' -c user.email='actions@users.noreply.github.com' commit -m 'chore: importar base integral SAAS-2 para homologacao sem chaves'
+          git push origin HEAD:refs/heads/homologacao
+          echo "Base integral em homologacao. Proibido promover a producao sem testes."
