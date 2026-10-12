@@ -1808,9 +1808,9 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
 
 
 
-  // Aba adicional, independente do template/cálculos PMSP: inclui todas as fotos
-  // vinculadas à O.S., preservando links para originais e legenda de cada uma.
-  async function inserirFotosDaOSExcelJS(wb, os) {
+  // Galeria anexada à MESMA planilha agrupada, após totais e assinaturas.
+  // A área B:H original é preservada integralmente; nenhuma coluna/cálculo é movido.
+  async function inserirFotosDaOSExcelJS(wb, ws, os, linhaInicial) {
     let mediaAtual = [];
     const idAberto = String(document.getElementById('osId')?.value || '');
     if (idAberto && idAberto === String(os?.id || '')) {
@@ -1822,73 +1822,130 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
       : [...(Array.isArray(os?.fotos) ? os.fotos : []), ...(Array.isArray(os?.media) ? os.media : []), ...mediaAtual]
           .map(m => typeof m === 'string' ? {url:m,type:'image'} : m)
           .filter(m => /^https?:\/\//i.test(String(m?.url || m?.secure_url || '')));
-    const fotos = evidencias.filter(m => !/^video/i.test(String(m.type || 'image')));
-    const videos = evidencias.filter(m => /^video/i.test(String(m.type || 'image')));
-    const ws = wb.addWorksheet('FOTOS DA OS');
-    ws.columns = [{width:46},{width:56},{width:28}];
-    ws.mergeCells('A1:C2');
-    ws.getCell('A1').value = 'REGISTRO FOTOGRÁFICO DA ORDEM DE SERVIÇO';
-    ws.getCell('A1').font = {name:'Arial',size:15,bold:true,color:{argb:'FFFFFFFF'}};
-    ws.getCell('A1').fill = {type:'pattern',pattern:'solid',fgColor:{argb:'FF102232'}};
-    ws.getCell('A1').alignment = {vertical:'middle',horizontal:'center'};
-    ws.getRow(1).height = 25;
-    ws.getRow(2).height = 18;
-    ws.getCell('A3').value = 'O.S.: ' + String(os?.numero || os?.id || '—');
-    ws.getCell('B3').value = 'Fotos: ' + fotos.length + ' | Vídeos: ' + videos.length;
-    ws.getCell('C3').value = 'Origens preservadas';
-    ws.getRow(3).height = 22;
-    const indisponiveis=[];
-    for (let i = 0; i < fotos.length; i++) {
-      const f = fotos[i];
-      const row = 5 + i * 2;
-      const url = String(f.url || f.secure_url || '');
-      const desc = String(f.descricao || f.legenda || f.obs || '').trim();
-      ws.getRow(row).height = 151;
-      ws.getRow(row + 1).height = 10;
-      ws.getCell('B'+row).value = desc || 'Foto ' + (i+1) + ' — sem descrição cadastrada';
-      ws.getCell('B'+row).alignment = {vertical:'top',wrapText:true};
-      ws.getCell('B'+row).font = {name:'Arial',size:10,color:{argb:'FF24364B'}};
-      ws.getCell('C'+row).value = {text:'ABRIR FOTO ORIGINAL',hyperlink:url};
-      ws.getCell('C'+row).font = {color:{argb:'FF1769AA'},underline:true,size:9};
-      ws.getCell('C'+row).alignment = {vertical:'top',wrapText:true};
-      ws.getCell('B'+(row+1)).value = String(f.origem || 'Galeria da O.S.') + (f.name ? ' | '+String(f.name) : '');
-      ws.getCell('B'+(row+1)).font = {name:'Arial',size:8,color:{argb:'FF66798D'}};
-      let urlFinal = url;
-      if (url.includes('cloudinary.com') && url.includes('/upload/')) {
-        urlFinal = url.replace('/upload/', '/upload/w_560,h_420,c_fit,q_auto,f_jpg/');
+    const fotos = evidencias.filter(m => !/^video/i.test(String(m?.type || 'image')));
+    const videos = evidencias.filter(m => /^video/i.test(String(m?.type || 'image')));
+    const indisponiveis = [];
+    if (!fotos.length && !videos.length) return {total:0,indisponiveis,ultimaLinha:linhaInicial-1};
+
+    const corTitulo = {type:'pattern',pattern:'solid',fgColor:{argb:'FF172D44'}};
+    const corClaro = {type:'pattern',pattern:'solid',fgColor:{argb:'FFF3F6FA'}};
+    const corFonte = {name:'Arial',size:9,color:{argb:'FF28394B'}};
+    const margemFoto = 2;
+    const inicio = linhaInicial + margemFoto;
+    const titulo = ws.getRow(inicio);
+    titulo.hidden = false;
+    titulo.height = 28;
+    ws.mergeCells('B'+inicio+':H'+inicio);
+    const h1=ws.getCell('B'+inicio);
+    h1.value='REGISTRO FOTOGRÁFICO DA O.S. — '+fotos.length+' FOTO(S)';
+    h1.font={name:'Arial',bold:true,size:12,color:{argb:'FFFFFFFF'}};
+    h1.fill=corTitulo;
+    h1.alignment={horizontal:'center',vertical:'middle'};
+    const linhaDescricao = inicio+1;
+    ws.getRow(linhaDescricao).hidden=false;
+    ws.getRow(linhaDescricao).height=23;
+    ws.mergeCells('B'+linhaDescricao+':H'+linhaDescricao);
+    const subtitulo=ws.getCell('B'+linhaDescricao);
+    subtitulo.value='Evidências da O.S. — imagens na própria planilha, com legenda e acesso ao arquivo original';
+    subtitulo.font={name:'Arial',size:8.5,color:{argb:'FF556B80'}};
+    subtitulo.alignment={horizontal:'center',vertical:'middle',wrapText:true};
+
+    // Usar B:D para foto e E:H para legenda evita a sobreposição vista na aba anterior.
+    // Cada cartão ocupa nove linhas próprias; nenhuma foto invade os totais/assinaturas.
+    const linhasPorFoto=9;
+    const alturaLinha=17;
+    let ultimaLinha=linhaDescricao;
+    for (let i=0;i<fotos.length;i++) {
+      const f=fotos[i];
+      const pos=inicio+3+i*linhasPorFoto;
+      const fim=pos+linhasPorFoto-1;
+      const url=String(f.url || f.secure_url || '');
+      const desc=String(f.descricao || f.legenda || f.observacao || f.obs || '').trim();
+      for (let row=pos;row<=fim;row++) {
+        const l=ws.getRow(row);
+        l.hidden=false;
+        l.height=alturaLinha;
+        ['B','D','E','F','G','H'].forEach(c=>{
+          const cell=ws.getCell(c+row);
+          cell.fill=corClaro;
+        });
       }
-      // Tenta a imagem otimizada, depois a original; nunca elimina a URL legada.
-      let fotoXlsx = await imagemUrlParaDataURLAssinatura(urlFinal);
-      if (!fotoXlsx && urlFinal !== url) fotoXlsx = await imagemUrlParaDataURLAssinatura(url);
-      if (fotoXlsx) {
+      ws.mergeCells('E'+pos+':H'+(pos+3));
+      const legenda=ws.getCell('E'+pos);
+      legenda.value='FOTO '+(i+1)+' / '+fotos.length+'\n'+(desc || 'Sem descrição cadastrada');
+      legenda.font={name:'Arial',bold:false,size:9,color:{argb:'FF25374A'}};
+      legenda.alignment={vertical:'middle',horizontal:'left',wrapText:true,indent:1};
+      ws.mergeCells('E'+(pos+4)+':H'+(pos+5));
+      const origem=ws.getCell('E'+(pos+4));
+      origem.value=String(f.origem || 'Galeria da O.S.');
+      origem.font={name:'Arial',size:8,italic:true,color:{argb:'FF63778A'}};
+      origem.alignment={vertical:'middle',wrapText:true,indent:1};
+      ws.mergeCells('E'+(pos+6)+':H'+(pos+7));
+      const link=ws.getCell('E'+(pos+6));
+      link.value={text:'ABRIR FOTO ORIGINAL',hyperlink:url};
+      link.font={name:'Arial',size:9,underline:true,color:{argb:'FF1366A3'}};
+      link.alignment={vertical:'middle',indent:1};
+
+      // Miniatura reduzida sem crop nem deformação; link conserva a original.
+      let urlFoto=url;
+      if (url.includes('cloudinary.com') && url.includes('/upload/')) {
+        urlFoto=url.replace('/upload/','/upload/w_560,h_420,c_fit,q_auto,f_jpg/');
+      }
+      let img=await imagemUrlParaDataURLAssinatura(urlFoto);
+      if (!img && urlFoto!==url) img=await imagemUrlParaDataURLAssinatura(url);
+      if (img) {
         try {
-          const id = wb.addImage({base64:fotoXlsx.base64,extension:fotoXlsx.extension});
-          ws.addImage(id,{tl:{col:0.10,row:row-1+0.08},ext:{width:296,height:194},editAs:'oneCell'});
-        } catch (erroImg) {
+          const dim=await new Promise(resolve=>{
+            const el=new Image();
+            el.onload=()=>resolve({w:el.naturalWidth||el.width||1,h:el.naturalHeight||el.height||1});
+            el.onerror=()=>resolve({w:4,h:3});
+            el.src=img.base64;
+          });
+          const fator=Math.min(285/Math.max(1,dim.w),158/Math.max(1,dim.h));
+          const id=wb.addImage({base64:img.base64,extension:img.extension});
+          ws.addImage(id,{
+            tl:{col:1.15,row:pos-1+0.18},
+            ext:{width:Math.max(1,Math.round(dim.w*fator)),height:Math.max(1,Math.round(dim.h*fator))},
+            editAs:'oneCell'
+          });
+        } catch(erro) {
           indisponiveis.push(i+1);
-          ws.getCell('A'+row).value = 'Foto '+(i+1)+' — imagem não embutida; use o link';
-          console.warn('[PMSP XLSX] Falha imagem',i+1,erroImg);
+          ws.getCell('B'+pos).value='Imagem não embutida — use o link ao lado';
+          console.warn('[PMSP XLSX] Evidência não incorporada',i+1,erro);
         }
       } else {
         indisponiveis.push(i+1);
-        ws.getCell('A'+row).value = 'Foto '+(i+1)+' — imagem não embutida; use o link';
+        ws.getCell('B'+pos).value='Imagem não embutida — use o link ao lado';
       }
+      ultimaLinha=fim;
     }
     if (videos.length) {
-      const linha = 5 + fotos.length * 2;
-      ws.getCell('A'+linha).value = 'VÍDEOS VINCULADOS À O.S. (links)';
-      ws.getCell('A'+linha).font = {bold:true,color:{argb:'FF122E4C'}};
-      videos.forEach((v,i) => {
-        const row = linha + i + 1;
-        ws.getCell('A'+row).value = 'Vídeo '+(i+1);
-        ws.getCell('B'+row).value = v.descricao || v.name || 'Sem descrição';
-        ws.getCell('C'+row).value = {text:'ABRIR VÍDEO',hyperlink:String(v.url || '')};
+      const linhaVideos=ultimaLinha+2;
+      ws.getRow(linhaVideos).hidden=false;
+      ws.getRow(linhaVideos).height=24;
+      ws.mergeCells('B'+linhaVideos+':H'+linhaVideos);
+      const cab=ws.getCell('B'+linhaVideos);
+      cab.value='VÍDEOS DA O.S. — links para arquivos originais';
+      cab.fill=corTitulo;
+      cab.font={name:'Arial',bold:true,size:10,color:{argb:'FFFFFFFF'}};
+      cab.alignment={vertical:'middle'};
+      videos.forEach((v,i)=>{
+        const row=linhaVideos+1+i;
+        ws.getRow(row).hidden=false;
+        ws.getRow(row).height=29;
+        ws.mergeCells('B'+row+':D'+row);
+        ws.getCell('B'+row).value='Vídeo '+(i+1)+' — '+String(v.descricao||v.name||'sem descrição');
+        ws.getCell('B'+row).font=corFonte;
+        ws.getCell('B'+row).alignment={vertical:'middle',wrapText:true};
+        ws.mergeCells('E'+row+':H'+row);
+        const link=ws.getCell('E'+row);
+        link.value={text:'ABRIR VÍDEO',hyperlink:String(v.url||'')};
+        link.font={name:'Arial',size:9,underline:true,color:{argb:'FF1366A3'}};
+        link.alignment={vertical:'middle'};
+        ultimaLinha=row;
       });
     }
-    if (!fotos.length && !videos.length) ws.getCell('A5').value = 'Nenhuma evidência com URL associada à O.S.';
-    ws.pageSetup = {orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0};
-    ws.headerFooter.oddFooter = 'Powered by thIAguinho Soluções Digitais';
-    return {total:fotos.length,indisponiveis};
+    return {total:fotos.length,indisponiveis,ultimaLinha};
   }
 
   async function exportarComposicaoExcelJS(os, cli, veiculo) {
@@ -1984,6 +2041,9 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
     linhaResumoValor(ws, contratoRow, aprovacaoInfo?.ativa ? 'VALOR APROVADO / CONTRATO' : 'VALOR DO CONTRATO', contrato, { contrato: true });
     await inserirAssinaturaFinalAgrupadaExcelJS(wb, ws, assinaturaExportar, assinaturaStartRow);
     limparLinhasAbaixoExportar(ws, assinaturaEndRow);
+    // Separação de impressão, mantendo a galeria na mesma folha Excel (Plan1).
+    const galeriaExcelOS = await inserirFotosDaOSExcelJS(wb, ws, os, assinaturaEndRow+1);
+    if (galeriaExcelOS.total) ws.getRow(assinaturaEndRow).addPageBreak();
 
     ws.pageSetup = {
       ...ws.pageSetup,
@@ -1991,10 +2051,9 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
       fitToPage: true,
       fitToWidth: 1,
       fitToHeight: 0,
-      printArea: `A1:H${assinaturaEndRow}`
+      printArea: `A1:H${galeriaExcelOS.ultimaLinha}`
     };
 
-    const galeriaExcelOS = await inserirFotosDaOSExcelJS(wb, os);
     const fname = `${(dv.prefixo || String(os.id || '').slice(-6).toUpperCase() || 'OS')}_ITENS_AGRUPADOS.xlsx`;
     const out = await wb.xlsx.writeBuffer();
     const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
