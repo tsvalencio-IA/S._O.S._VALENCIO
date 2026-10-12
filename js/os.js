@@ -6081,19 +6081,45 @@ function prepararRegistroMidiasOS(lista, historico, responsavel) {
   });
 }
 
+window.atualizarDescricaoMidiaOS = function(indice, descricao) {
+  const el = $('osMediaArray');
+  if (!el) return;
+  let media;
+  try { media = JSON.parse(el.value || '[]'); } catch (_) { return; }
+  if (!Array.isArray(media) || indice < 0 || indice >= media.length) return;
+  const anterior = media[indice];
+  const item = typeof anterior === 'string' ? { url: anterior, type:'image' } : { ...anterior };
+  item.descricao = String(descricao || '').trim().slice(0, 420);
+  media[indice] = item;
+  el.value = JSON.stringify(media);
+  // A descrição será gravada pelo fluxo original de SALVAR O.S.
+};
+
 window.renderMediaOS = function() {
-  const media = JSON.parse($('osMediaArray')?.value || '[]');
-  if($('osMediaGrid')) {
-      $('osMediaGrid').innerHTML = media.map((m, i) => {
-        const url = String(m?.url || '').replace(/"/g, '&quot;');
-        const isVideo = /^video$/i.test(String(m?.type || '')) || /^video\//i.test(String(m?.type || ''));
-        return `<div class="media-item">
-          ${isVideo ? `<video src="${url}" controls preload="metadata"></video>` : `<img src="${url}" loading="lazy" referrerpolicy="no-referrer" onclick="window.abrirGaleriaFotosOS(${i})" style="cursor:zoom-in" alt="Foto ${i + 1} da O.S.">`}
-          <span class="media-registro-horario" style="position:absolute;bottom:0;left:0;right:0;z-index:1;pointer-events:none;display:block;font-size:.61rem;line-height:1.3;padding:4px;overflow-wrap:anywhere;background:rgba(8,16,30,.95);color:#e2e8f0;" title="Horário individual da evidência">Enviado: ${escOS(dataHoraEvidenciaOS(m?.uploadedAt))}<span style="display:block">Na O.S.: ${escOS(dataHoraEvidenciaOS(m?.importedAt))}</span></span>
-          <button type="button" class="media-del" onclick="event.stopPropagation();window.removerMediaOS(${i})" title="Remover">✕</button>
-        </div>`;
-      }).join('');
-  }
+  let media = [];
+  try { media = JSON.parse($('osMediaArray')?.value || '[]'); } catch (_) { media = []; }
+  if (!$('osMediaGrid')) return;
+  $('osMediaGrid').innerHTML = media.map((original, i) => {
+    const m = typeof original === 'string' ? { url:original, type:'image' } : original || {};
+    const url = String(m.url || m.secure_url || '').replace(/"/g, '&quot;');
+    const isVideo = /^video(?:\/|$)/i.test(String(m.type || ''));
+    const descricao = String(m.descricao || m.legenda || m.observacao || m.obs || '').slice(0,420);
+    const descricaoHtml = descricao.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    return `<div class="media-item" title="Enviado: ${escOS(dataHoraEvidenciaOS(m.uploadedAt))} • Vinculado: ${escOS(dataHoraEvidenciaOS(m.importedAt))}">
+      ${isVideo ? `<video src="${url}" controls preload="metadata"></video>` :
+        `<img src="${url}" loading="lazy" referrerpolicy="no-referrer" onclick="window.abrirGaleriaFotosOS(${i})" style="cursor:zoom-in" alt="Foto ${i+1} da O.S.">`}
+      <span class="media-registro-horario" style="position:absolute;top:0;left:0;right:0;z-index:1;pointer-events:none;display:block;font-size:.55rem;line-height:1.2;padding:3px 16px 3px 4px;background:rgba(8,16,30,.79);color:#e2e8f0;">
+        ${escOS(dataHoraEvidenciaOS(m.uploadedAt))}
+      </span>
+      <input type="text" maxlength="420" class="os-media-caption" data-idx="${i}"
+        value="${descricaoHtml}" placeholder="Descrição da foto (opcional)"
+        aria-label="Descrição da foto ${i+1}"
+        onchange="window.atualizarDescricaoMidiaOS(${i}, this.value)"
+        onclick="event.stopPropagation()"
+        style="position:absolute;z-index:2;bottom:0;left:0;right:0;width:100%;min-height:27px;border:0;border-top:1px solid rgba(255,255,255,.18);border-radius:0;padding:4px 6px;background:rgba(8,16,30,.91);color:#f1f5f9;font-size:.64rem;box-sizing:border-box;">
+      <button type="button" class="media-del" onclick="event.stopPropagation();window.removerMediaOS(${i})" title="Remover">✕</button>
+    </div>`;
+  }).join('');
 };
 
 window.removerMediaOS = function(idx) {
