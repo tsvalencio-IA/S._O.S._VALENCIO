@@ -42,7 +42,11 @@ assert.ok(pdf.includes('const imagens = media.filter'),'gerador de PDF real usa 
 assert.ok(!/\.slice\(\s*0,\s*12\s*\)/.test(pdf),'PDF sem limite de 12 fotos');
 assert.ok(pdf.includes('window.thiaEvidenciasOS.coletar'),'PDF reúne fontes');
 assert.ok(pdf.includes('const descricao = String(m.descricao'),'legenda nas fotos');
-assert.ok(pdf.includes('REGISTRO CRONOLÓGICO DAS EVIDÊNCIAS'),'índice mantido');
+assert.ok(!pdf.includes('REGISTRO CRONOLÓGICO DAS EVIDÊNCIAS'),'sem tabela cronológica no PDF real');
+assert.ok(pdf.includes("const dataMidiaPdf = m.uploadedAt || m.importedAt || ''"),'data/hora individual da foto');
+assert.ok(pdf.includes("const tarjaHoraPdf = tipoDataMidiaPdf + ': ' + horaDaFotoPdf"),'tarja dentro do cartão da foto');
+assert.ok(pdf.includes("doc.rect(x+.15,y+thumbH-7.4,thumbW-.3,7.25,'F')"),'horário desenhado sobre a imagem');
+assert.ok(pdf.includes("dataHoraEvidenciaOS(dataMidiaPdf)"),'não inventar datas para fotos antigas');
 assert.ok(core.includes('window.atualizarDescricaoMidiaOS'),'legenda gravável');
 assert.ok(core.includes('item.descricao = String(descricao'),'persistência campo descricao');
 const excel=read('js/exportar-pmsp.js');
@@ -57,4 +61,4 @@ assert.ok(jarvis.includes('js/os.js?v=26.25.0'),'cache atualizado');
 const oficial=read('clienteOficial.html');
 assert.ok(oficial.includes('window.thiaEvidenciasOS.fotos(os)'),'portal oficial usa fotos sem duplicidade');
 for (const f of ['js/cilia.js','js/cilia-api.js','js/tabela-tempa.js','js/exportar-pmsp.js']) assert.ok(fs.statSync(path.join(__dirname,f)).size>100);
-console.log('OK: 22 verificações de legendas, 17 fotos, checklist, PDF sem limite, XLSX com imagens e links.');
+console.log('OK: verificações de 17 fotos, horário dentro da foto, sem tabela cronológica, PDF e XLSX.');
