@@ -6843,6 +6843,19 @@ window.gerarPDFOS = async function(opcoes = {}) {
         doc.setTextColor(95,110,125);
         doc.text('Imagem indisponível — consulte o link', x + 2, y + thumbH/2, {maxWidth:thumbW-4});
       }
+      // Horário no próprio cartão fotográfico, sem tabela cronológica separada.
+      // Prefere o envio original; só utiliza a vinculação à O.S. como fallback.
+      const dataMidiaPdf = m.uploadedAt || m.importedAt || '';
+      const tipoDataMidiaPdf = m.uploadedAt ? 'Enviado' : (m.importedAt ? 'Na O.S.' : 'Arquivo antigo');
+      const horaDaFotoPdf = dataMidiaPdf ? dataHoraEvidenciaOS(dataMidiaPdf) : 'Data/hora não registrada';
+      const tarjaHoraPdf = tipoDataMidiaPdf + ': ' + horaDaFotoPdf;
+      doc.setFillColor(28,39,58);
+      doc.rect(x+.15,y+thumbH-7.4,thumbW-.3,7.25,'F');
+      doc.setFont('helvetica','normal');
+      doc.setTextColor(255,255,255);
+      doc.setFontSize(5.8);
+      const linhasHoraPdf = doc.splitTextToSize(tarjaHoraPdf, thumbW-3);
+      doc.text(linhasHoraPdf.slice(0,2),x+1.4,y+thumbH-4.6);
       doc.setFillColor(235,239,244);
       doc.rect(x+.15, y+thumbH, thumbW-.3, legendaH-.15, 'F');
       doc.setFont('helvetica','bold');
@@ -6863,26 +6876,6 @@ window.gerarPDFOS = async function(opcoes = {}) {
       doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(120,78,45);
       doc.text(indisponiveis + ' foto(s) não carregaram; endereços originais conservados no registro da O.S.',margem,y+3);
       y+=8;
-    }
-  }
-  if (incluirImagensPDF && media.length) {
-    const registros = media.filter(m => !!(m?.url || m?.secure_url)).map((m, i) => {
-      const url = String(m.url || m.secure_url || '');
-      const tipo = /^video/i.test(String(m.type || 'image')) ? 'VÍDEO' : 'IMAGEM';
-      return [String(i+1), tipo, String(m.descricao || m.legenda || m.obs || m.origem || 'Sem descrição'),
-        String(m.name || url.split('/').pop().split('?')[0] || 'evidência'),
-        dataHoraEvidenciaOS(m.uploadedAt), dataHoraEvidenciaOS(m.importedAt)];
-    });
-    if (registros.length) {
-      if (y > ph - 46) { doc.addPage(); y = 12; }
-      linhaTitulo('REGISTRO CRONOLÓGICO DAS EVIDÊNCIAS');
-      doc.autoTable({startY:y,theme:'grid',margin:{left:margem,right:margem,bottom:22},
-        head:[['#','Tipo','Descrição','Arquivo','Envio','Vínculo à O.S.']],body:registros,
-        styles:{fontSize:6.3,cellPadding:1.1,overflow:'linebreak'},
-        headStyles:{fillColor:[38,51,67],textColor:[255,255,255]},
-        columnStyles:{0:{cellWidth:8},1:{cellWidth:15},2:{cellWidth:45},3:{cellWidth:42},4:{cellWidth:38},5:{cellWidth:38}}
-      });
-      y=doc.lastAutoTable.finalY+8;
     }
   }
 
