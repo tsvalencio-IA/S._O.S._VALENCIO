@@ -85,7 +85,7 @@ jobs:
           echo 'e2a88214b4f6e378c91da49b6804ee65c4607055e0befa7905f9435f806bef73  js/tabela-tempa.js' | sha256sum -c
           # O exportador de planilhas foi alterado intencionalmente para anexar fotos, sem mudanças em Cília ou Tempária.
           node --check js/exportar-pmsp.js
-          grep -Fq "await inserirFotosDaOSExcelJS(wb, os);" js/exportar-pmsp.js
+          grep -Fq "await inserirFotosDaOSExcelJS(wb, ws, os, assinaturaEndRow+1)" js/exportar-pmsp.js
           grep -Fq "inserirComposicaoOS(ws, 18, linhasPecas, linhasServ" js/exportar-pmsp.js
       - name: Regressao funcional simulada de pecas, NF, servicos e IA
         shell: bash
