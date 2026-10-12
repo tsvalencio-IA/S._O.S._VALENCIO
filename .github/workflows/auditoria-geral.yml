@@ -91,6 +91,7 @@ jobs:
           node TESTES_REGRESSAO_SOS_VALENCIO.js
           node TESTES_IA_PERIODOS_E_FLUXOS_20261010.js
           node TESTES_PERMISSOES_20261010.js
+          node TESTES_FOTOS_OS_PDF_XLSX_20261012.js
       - name: Registrar limitacoes
         run: |
           echo "Estes testes NAO incluem regras Firestore publicadas, Firebase real, Cloudinary, permissao Android, pagamento bancario nem UI multiplos perfis."
