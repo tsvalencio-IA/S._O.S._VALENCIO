@@ -25,6 +25,7 @@ jobs:
           node TESTES_REGRESSAO_SOS_VALENCIO.js
           node TESTES_IA_PERIODOS_E_FLUXOS_20261010.js
           node TESTES_PERMISSOES_20261010.js
+          node TESTES_FOTOS_OS_PDF_XLSX_20261012.js
           if git ls-files | grep -Ei '\.(jks|keystore|p12|pfx)$'; then echo "Segredo bloqueado"; exit 1; fi
   android-web:
     needs: validar
@@ -65,6 +66,9 @@ jobs:
           chmod +x scripts/prepare-capacitor-www.sh
           ./scripts/prepare-capacitor-www.sh
           for f in ia.js os.js core.js comissoes-os-v21.js; do cmp "js/$f" "capacitor-android/www/js/$f"; done
+          cmp js/os-evidencias-export.js capacitor-android/www/js/os-evidencias-export.js
+          cmp js/exportar-pmsp.js capacitor-android/www/js/exportar-pmsp.js
+          cmp clienteOficial.html capacitor-android/www/clienteOficial.html
       - name: Capacitor
         working-directory: capacitor-android
         run: |
