@@ -5976,6 +5976,8 @@ window.renderGaleriaFotoOS = function() {
   const count = overlay.querySelector('[data-os-galeria-count]');
   const prev = overlay.querySelector('[data-os-galeria-prev]');
   const next = overlay.querySelector('[data-os-galeria-next]');
+  const legenda = overlay.querySelector('[data-os-galeria-legenda]');
+  if (legenda) legenda.textContent = String(foto.descricao || foto.legenda || foto.obs || '').trim();
   if (img) { img.src = foto.url; img.alt = `Foto ${idx + 1} da O.S.`; }
   if (count) count.textContent = `Foto ${idx + 1} de ${fotos.length} | Enviada: ${dataHoraEvidenciaOS(foto.uploadedAt)} | Na O.S.: ${dataHoraEvidenciaOS(foto.importedAt)}`;
   if (prev) prev.style.visibility = fotos.length > 1 ? 'visible' : 'hidden';
@@ -6012,7 +6014,7 @@ window.baixarFotoGaleriaOS = async function() {
 window.abrirGaleriaFotosOS = function(indiceMedia) {
   let media = [];
   try { media = JSON.parse($('osMediaArray')?.value || '[]'); } catch (_) { media = []; }
-  const fotos = media.map((m, mediaIndex) => ({ ...m, mediaIndex }))
+  const fotos = media.map((m, mediaIndex) => ({ ...(typeof m === 'string' ? {url:m,type:'image'} : m), mediaIndex }))
     .filter(m => m?.url && !/^video$/i.test(String(m.type || 'image')) && !/^video\//i.test(String(m.type || '')));
   if (!fotos.length) return;
   const pos = Math.max(0, fotos.findIndex(f => Number(f.mediaIndex) === Number(indiceMedia)));
@@ -6039,6 +6041,7 @@ window.abrirGaleriaFotosOS = function(indiceMedia) {
         <img data-os-galeria-img alt="Foto da O.S." style="max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;user-select:none;-webkit-user-drag:none;">
         <button data-os-galeria-next type="button" onclick="window.navegarGaleriaFotosOS(1)" aria-label="Próxima foto" style="position:absolute;right:10px;z-index:2;width:48px;height:64px;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.55);color:#fff;font-size:30px;border-radius:6px;cursor:pointer;">›</button>
       </div>
+      <div data-os-galeria-legenda style="min-height:20px;text-align:center;color:#b8c3d2;font-size:.72rem;padding:4px 10px;"></div>
     </div>`;
   overlay.addEventListener('click', e => { if (e.target === overlay) window.fecharGaleriaFotosOS(); });
   let touchX = null;
