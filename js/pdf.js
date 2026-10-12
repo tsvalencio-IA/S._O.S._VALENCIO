@@ -290,101 +290,135 @@ window.gerarPDFOS = async function() {
     doc.text('Assinatura do Cliente', ml + 32, sigY + 4, { align: 'center' });
     doc.text('Assinatura do Técnico', pw / 2 + 36, sigY + 4, { align: 'center' });
 
-    // ─── PÁGINA DE FOTOS / PROVAS DA O.S. (NOVO) ────────────────
-    // Se a OS tem fotos no Cloudinary, monta uma grade de miniaturas em página nova
-    const midiasOS = (os.media || os.fotos || []).filter(m => {
-      const url = typeof m === 'string' ? m : (m?.url || m?.secure_url || '');
-      return url && /^https?:\/\//i.test(url);
-    }).map(m => typeof m === 'string' ? {url:m,type:'image'} : m);
-    const fotosOS = midiasOS.filter(m => !/^video/i.test(String(m.type || 'image'))).map(m => m.url || m.secure_url);
+    // ─── GALERIA INTEGRAL DA O.S. / LEGENDA DISCRETA ────────────
+    // Reúne mídia legada + atual + fotos dos checklists anexados, sem duplicar URL.
+    let mediaAtualOS = [];
+    if (String(document.getElementById('osId')?.value || '') === String(osId || '')) {
+      try { mediaAtualOS = JSON.parse(document.getElementById('osMediaArray')?.value || '[]'); }
+      catch (_) { mediaAtualOS = []; }
+    }
+    const midiasOS = typeof window.thiaEvidenciasOS?.coletar === 'function'
+      ? window.thiaEvidenciasOS.coletar(os, { mediaAtual: mediaAtualOS })
+      : [...(Array.isArray(os.fotos) ? os.fotos : []), ...(Array.isArray(os.media) ? os.media : []), ...mediaAtualOS]
+          .map(m => typeof m === 'string' ? { url: m, type: 'image' } : m)
+          .filter(m => /^https?:\/\//i.test(String(m?.url || m?.secure_url || '')));
+    const fotosOS = midiasOS.filter(m => !/^video/i.test(String(m.type || 'image')));
     const horaMidia = valor => {
-      if (!valor) return 'Não registrado (legado)';
-      const d = typeof valor?.toDate === 'function' ? valor.toDate() : new Date(valor);
-      return Number.isNaN(d.getTime()) ? 'Não registrado (legado)' : d.toLocaleString('pt-BR', {
-        day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'
+      if (!valor) return 'Não registrada (arquivo antigo)';
+      let d;
+      try {
+        d = typeof valor?.toDate === 'function' ? valor.toDate()
+          : (valor?.seconds || valor?._seconds) ? new Date(Number(valor.seconds || valor._seconds) * 1000) : new Date(valor);
+      } catch (_) { return 'Não registrada (arquivo antigo)'; }
+      return Number.isNaN(d.getTime()) ? 'Não registrada (arquivo antigo)' : d.toLocaleString('pt-BR', {
+        day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit'
       });
     };
-
-    if (fotosOS.length > 0) {
-      doc.addPage();
-      let yFotos = 18;
-      // Cabeçalho da página de fotos
-      doc.setFillColor(bR, bG, bB);
-      doc.rect(0, 0, pw, 14, 'F');
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(255, 255, 255);
-      doc.text('GALERIA DE PROVAS — ' + osNum, ml, 9);
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`${fotosOS.length} foto(s) registrada(s) durante o atendimento`, pw - mr, 9, { align: 'right' });
-
-      // Grid 2 colunas × N linhas; cada thumb 85×60mm
+    let fotosIndisponiveis = 0;
+    if (fotosOS.length) {
       const cols = 2;
-      const thumbW = (pw - ml - mr - 8) / cols;  // 8mm gap
-      const thumbH = thumbW * 0.7;  // proporção 4:3 ish
-      yFotos = 22;
-
+      const espaco = 8;
+      const thumbW = (mr - ml - espaco) / cols;
+      const thumbH = 58;
+      const legendaH = 13;
+      const linhaH = thumbH + legendaH + 6;
+      let yFotos = 22;
+      const cabecalhoFotos = () => {
+        doc.setFillColor(bR, bG, bB);
+        doc.rect(0, 0, pw, 14, 'F');
+        doc.setFont('helvetica','bold');
+        doc.setTextColor(255,255,255);
+        doc.setFontSize(10);
+        doc.text('GALERIA DE PROVAS — ' + osNum, ml, 9);
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(7.5);
+        doc.text(fotosOS.length + ' foto(s) vinculada(s) à O.S.', mr, 9, {align:'right'});
+      };
+      doc.addPage();
+      cabecalhoFotos();
       for (let i = 0; i < fotosOS.length; i++) {
-        const col = i % cols;
-        const x = ml + col * (thumbW + 8);
-
-        // Quebra de página se for estourar
-        if (yFotos + thumbH > ph - 20) {
+        if (i % cols === 0 && yFotos + linhaH > ph - 20) {
           doc.addPage();
-          yFotos = 18;
+          cabecalhoFotos();
+          yFotos = 22;
         }
-
+        const foto = fotosOS[i];
+        const col = i % cols;
+        const x = ml + col * (thumbW + espaco);
+        const url = String(foto.url || foto.secure_url || '');
+        let urlFinal = url;
+        // c_fit é obrigatório: nunca cortar uma evidência para caber na página.
+        if (url.includes('cloudinary.com') && url.includes('/upload/')) {
+          urlFinal = url.replace('/upload/', '/upload/w_600,h_450,c_fit,q_auto,f_jpg/');
+        }
+        doc.setFillColor(247,248,251);
+        doc.rect(x, yFotos, thumbW, thumbH + legendaH, 'F');
+        doc.setDrawColor(205,211,220);
+        doc.setLineWidth(.25);
+        doc.rect(x, yFotos, thumbW, thumbH + legendaH);
         try {
-          // Carrega imagem do Cloudinary (com transformação para reduzir tamanho)
-          const url = fotosOS[i];
-          // Se for Cloudinary, aplica transformação para 600x450 jpg (mais leve)
-          let urlFinal = url;
-          if (url.includes('cloudinary.com') && url.includes('/upload/')) {
-            urlFinal = url.replace('/upload/', '/upload/w_600,h_450,c_fill,q_auto,f_jpg/');
+          let img;
+          try { img = await _loadImage(urlFinal); }
+          catch (erroImagem) {
+            if (urlFinal === url) throw erroImagem;
+            img = await _loadImage(url);
           }
-          const img = await _loadImage(urlFinal, 5000);  // timeout 5s
-          // Determina formato pela extensão
-          const fmt = /\.png/i.test(url) ? 'PNG' : 'JPEG';
-          doc.addImage(img, fmt, x, yFotos, thumbW, thumbH, undefined, 'FAST');
-          // Borda
-          doc.setDrawColor(200, 200, 200);
-          doc.setLineWidth(0.2);
-          doc.rect(x, yFotos, thumbW, thumbH);
-          // Legenda
-          doc.setFontSize(6.5);
-          doc.setTextColor(120, 120, 120);
-          doc.text(`Foto ${i + 1}/${fotosOS.length}`, x + 1, yFotos + thumbH + 3);
-        } catch (e) {
-          // Falha ao carregar — desenha placeholder
-          doc.setFillColor(245, 245, 245);
-          doc.rect(x, yFotos, thumbW, thumbH, 'F');
+          const props = doc.getImageProperties(img);
+          const r = Math.min((thumbW - 3) / props.width, (thumbH - 3) / props.height);
+          const w = props.width * r, h = props.height * r;
+          doc.addImage(img, 'PNG', x + (thumbW - w) / 2, yFotos + (thumbH - h) / 2, w, h, undefined, 'FAST');
+        } catch (erro) {
+          fotosIndisponiveis++;
+          doc.setFont('helvetica','normal');
           doc.setFontSize(7);
-          doc.setTextColor(180, 180, 180);
-          doc.text('(imagem indisponível)', x + thumbW / 2, yFotos + thumbH / 2, { align: 'center' });
-          console.warn('Foto não carregou:', fotosOS[i]);
+          doc.setTextColor(110,115,125);
+          doc.text('Imagem indisponível; URL no registro', x + thumbW / 2, yFotos + thumbH/2, {align:'center'});
+          console.warn('[OS PDF] Não foi possível incorporar foto', i + 1, erro);
         }
-
-        // Quando completa a linha, avança yFotos
-        if (col === cols - 1) yFotos += thumbH + 8;
+        doc.setFillColor(235,238,243);
+        doc.rect(x + .15, yFotos + thumbH, thumbW - .3, legendaH - .15, 'F');
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(6.6);
+        doc.setTextColor(65,75,87);
+        doc.text('Foto ' + (i+1) + ' de ' + fotosOS.length, x + 2, yFotos + thumbH + 4);
+        const descricao = String(foto.descricao || foto.legenda || foto.obs || '').trim();
+        if (descricao) {
+          doc.setFont('helvetica','normal');
+          doc.setFontSize(6.5);
+          doc.setTextColor(80,88,100);
+          const linhas = doc.splitTextToSize(descricao, thumbW - 4);
+          doc.text(linhas.slice(0,2), x + 2, yFotos + thumbH + 7.6);
+        }
+        if (col === cols - 1) yFotos += linhaH;
       }
-      // Volta para a última página da OS para não bagunçar o rodapé
-      doc.setPage(1);
     }
-    // Metadados de TODAS as evidências (inclusive vídeos não embutidos e
-    // imagens além da grade), preservando a ausência de data no legado.
+    // Índice completo (inclusive vídeos com URL e legendas não truncadas).
     if (midiasOS.length) {
       doc.addPage();
-      doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(40,50,65);
-      doc.text('REGISTRO CRONOLÓGICO DAS EVIDÊNCIAS',ml,16);
-      doc.autoTable({startY:21,theme:'grid',margin:{left:ml,right:pw-mr},
-        head:[['#','Tipo','Arquivo','Enviado','Importado na O.S.']],
-        body:midiasOS.map((m,i)=>[String(i+1),/^video/i.test(String(m.type||''))?'VÍDEO':'IMAGEM',
-          String(m.name || (m.url||m.secure_url||'').split('/').pop().split('?')[0] || 'Evidência'),
-          horaMidia(m.uploadedAt),horaMidia(m.importedAt)]),
-        styles:{fontSize:7,cellPadding:2,overflow:'linebreak'},
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(10);
+      doc.setTextColor(40,50,65);
+      doc.text('REGISTRO CRONOLÓGICO DAS EVIDÊNCIAS', ml, 16);
+      doc.autoTable({
+        startY:21, theme:'grid', margin:{left:ml,right:pw-mr,bottom:22},
+        head:[['#','Tipo','Descrição','Arquivo','Envio','Vínculo à O.S.']],
+        body:midiasOS.map((m,i) => {
+          const url = String(m.url || m.secure_url || '');
+          return [String(i+1), /^video/i.test(String(m.type || '')) ? 'VÍDEO' : 'IMAGEM',
+            String(m.descricao || m.legenda || m.obs || m.origem || 'Sem descrição'),
+            String(m.name || url.split('/').pop().split('?')[0] || 'Evidência'),
+            horaMidia(m.uploadedAt), horaMidia(m.importedAt)];
+        }),
+        styles:{fontSize:6.5,cellPadding:1.6,overflow:'linebreak'},
         headStyles:{fillColor:[bR,bG,bB],textColor:[255,255,255]},
-        columnStyles:{0:{cellWidth:9},1:{cellWidth:20},2:{cellWidth:48},3:{cellWidth:48},4:{cellWidth:52}}});
+        columnStyles:{0:{cellWidth:8},1:{cellWidth:14},2:{cellWidth:44},3:{cellWidth:40},4:{cellWidth:38},5:{cellWidth:38}}
+      });
+      if (fotosIndisponiveis) {
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(7);
+        doc.setTextColor(130,60,50);
+        doc.text(fotosIndisponiveis + ' foto(s) não puderam ser incorporadas; consultar os anexos originais da O.S.',ml,ph-22);
+      }
       doc.setPage(1);
     }
 
