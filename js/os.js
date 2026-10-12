@@ -6806,7 +6806,7 @@ window.gerarPDFOS = async function(opcoes = {}) {
        ...(Array.isArray(osAtual.media) ? osAtual.media : []), ...mediaAtual]
         .map(m => typeof m === 'string' ? {url:m,type:'image'} : m)
         .filter(m => /^https?:\/\//i.test(String(m?.url || m?.secure_url || '')));
-  // Antes: .slice(0,12) descartava todas as fotos posteriores à décima segunda.
+  // Não limitar a quantidade de fotos; preservar toda a cronologia da O.S.
   const imagens = media.filter(m => m && !/^video/i.test(String(m?.type || 'image')) && (m.url || m.secure_url));
   if (incluirImagensPDF && imagens.length) {
     linhaTitulo('EVIDÊNCIAS DIGITAIS — ' + imagens.length + ' FOTO(S)');
