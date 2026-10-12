@@ -1,4 +1,5 @@
 name: Integracao RC Android Web Windows
+# RC4: PDF com data/hora minima; fotos na Plan1 do XLSX PMSP, depois das assinaturas.
 # RC PDF: data/hora integrada ao quadro de cada foto, sem listagem cronologica.
 on:
   push:
