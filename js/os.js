@@ -6794,54 +6794,92 @@ window.gerarPDFOS = async function(opcoes = {}) {
     y = doc.lastAutoTable.finalY + 5;
   }
 
-  let media = [];
-  try { media = JSON.parse(document.getElementById('osMediaArray')?.value || '[]'); } catch(e) { media = []; }
-  const imagens = media.filter(m => m && !/^video/i.test(String(m?.type || 'image')) && m.url).slice(0, 12);
+  // Evidências da O.S. e checklists anexados, incluindo legados e fotos em edição.
+  let mediaAtual = [];
+  try { mediaAtual = JSON.parse(document.getElementById('osMediaArray')?.value || '[]'); } catch (_) { mediaAtual = []; }
+  const media = typeof window.thiaEvidenciasOS?.coletar === 'function'
+    ? window.thiaEvidenciasOS.coletar(osAtual, {mediaAtual})
+    : [...(Array.isArray(osAtual.fotos) ? osAtual.fotos : []),
+       ...(Array.isArray(osAtual.media) ? osAtual.media : []), ...mediaAtual]
+        .map(m => typeof m === 'string' ? {url:m,type:'image'} : m)
+        .filter(m => /^https?:\/\//i.test(String(m?.url || m?.secure_url || '')));
+  // Antes: .slice(0,12) descartava todas as fotos posteriores à décima segunda.
+  const imagens = media.filter(m => m && !/^video/i.test(String(m?.type || 'image')) && (m.url || m.secure_url));
   if (incluirImagensPDF && imagens.length) {
-    linhaTitulo('EVIDÊNCIAS DIGITAIS');
-    const thumbW = 55, thumbH = 38, gap = 5;
-    let x = margem;
-    let count = 0;
-    for (const m of imagens) {
-      if (y + thumbH > ph - 18) { doc.addPage(); y = 12; x = margem; }
-      const img = await carregarImagem(m.url);
-      doc.setDrawColor(190, 198, 210);
-      doc.rect(x, y, thumbW, thumbH);
-      if (img) {
-        const ratio = Math.min(thumbW / img.w, thumbH / img.h);
-        const w = img.w * ratio;
-        const h = img.h * ratio;
-        doc.addImage(img.data, 'JPEG', x + (thumbW - w) / 2, y + (thumbH - h) / 2, w, h);
-      } else {
-        doc.setFontSize(7);
-        doc.setTextColor(120, 130, 145);
-        doc.text('Imagem não carregada', x + 3, y + 19);
+    linhaTitulo('EVIDÊNCIAS DIGITAIS — ' + imagens.length + ' FOTO(S)');
+    const thumbW = 55, thumbH = 38, gap = 5, legendaH = 11, passoLinha = thumbH + legendaH + 7;
+    let indisponiveis = 0;
+    for (let i = 0; i < imagens.length; i++) {
+      if (i % 3 === 0 && y + passoLinha > ph - 22) {
+        doc.addPage();
+        y = 12;
+        linhaTitulo('EVIDÊNCIAS DIGITAIS — CONTINUAÇÃO');
       }
-      count++;
-      x += thumbW + gap;
-      if (count % 3 === 0) { x = margem; y += thumbH + 8; }
+      const m = imagens[i];
+      const col = i % 3;
+      const x = margem + col * (thumbW + gap);
+      const url = String(m.url || m.secure_url || '');
+      doc.setFillColor(247,248,251);
+      doc.rect(x, y, thumbW, thumbH + legendaH, 'F');
+      doc.setDrawColor(190,198,210);
+      doc.setLineWidth(.22);
+      doc.rect(x, y, thumbW, thumbH + legendaH);
+      // As fotos são ajustadas sem cortar ou deformar a evidência.
+      let img = await Promise.race([
+        carregarImagem(url),
+        new Promise(resolve => setTimeout(() => resolve(null), 9000))
+      ]);
+      if (img) {
+        const ratio = Math.min((thumbW-2) / img.w, (thumbH-2) / img.h);
+        const w = img.w * ratio, h = img.h * ratio;
+        doc.addImage(img.data, 'JPEG', x + (thumbW-w)/2, y + (thumbH-h)/2, w, h);
+      } else {
+        indisponiveis++;
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(6);
+        doc.setTextColor(95,110,125);
+        doc.text('Imagem indisponível — consulte o link', x + 2, y + thumbH/2, {maxWidth:thumbW-4});
+      }
+      doc.setFillColor(235,239,244);
+      doc.rect(x+.15, y+thumbH, thumbW-.3, legendaH-.15, 'F');
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(6.1);
+      doc.setTextColor(69,79,92);
+      doc.text('Foto ' + (i+1) + ' / ' + imagens.length, x + 1.5, y + thumbH + 3.3);
+      const descricao = String(m.descricao || m.legenda || m.observacao || m.obs || '').trim();
+      if (descricao) {
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(6);
+        doc.setTextColor(75,82,92);
+        doc.text(doc.splitTextToSize(descricao,thumbW-3).slice(0,2),x+1.5,y+thumbH+6.5);
+      }
+      if (col === 2 || i === imagens.length-1) y += passoLinha;
     }
-    if (count % 3 !== 0) y += thumbH + 8;
+    if (indisponiveis) {
+      if (y > ph-34) {doc.addPage();y=12;}
+      doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(120,78,45);
+      doc.text(indisponiveis + ' foto(s) não carregaram; endereços originais conservados no registro da O.S.',margem,y+3);
+      y+=8;
+    }
   }
   if (incluirImagensPDF && media.length) {
-    // Índice completo, incluindo vídeos e imagens além das 12 miniaturas.
-    // Histórico sem horário explícito é assinalado como legado: nunca inferir data.
-    const registros = media.filter(m => typeof m === 'string' ? !!m : !!m?.url).map((m, i) => {
-      const item = typeof m === 'string' ? {url:m,type:'image'} : m;
-      const tipo = /^video/i.test(String(item.type || 'image')) ? 'VÍDEO' : 'IMAGEM';
-      return [String(i+1),tipo,String(item.name || item.url.split('/').pop().split('?')[0] || 'evidência'),
-        dataHoraEvidenciaOS(item.uploadedAt),dataHoraEvidenciaOS(item.importedAt)];
+    const registros = media.filter(m => !!(m?.url || m?.secure_url)).map((m, i) => {
+      const url = String(m.url || m.secure_url || '');
+      const tipo = /^video/i.test(String(m.type || 'image')) ? 'VÍDEO' : 'IMAGEM';
+      return [String(i+1), tipo, String(m.descricao || m.legenda || m.obs || m.origem || 'Sem descrição'),
+        String(m.name || url.split('/').pop().split('?')[0] || 'evidência'),
+        dataHoraEvidenciaOS(m.uploadedAt), dataHoraEvidenciaOS(m.importedAt)];
     });
     if (registros.length) {
-      if (y > ph - 45) { doc.addPage(); y = 12; }
+      if (y > ph - 46) { doc.addPage(); y = 12; }
       linhaTitulo('REGISTRO CRONOLÓGICO DAS EVIDÊNCIAS');
-      doc.autoTable({ startY:y, theme:'grid', margin:{left:margem,right:margem},
-        head:[['#','Tipo','Arquivo','Envio','Vínculo à O.S.']], body:registros,
-        styles:{fontSize:6.8,cellPadding:1.1,overflow:'linebreak'},
+      doc.autoTable({startY:y,theme:'grid',margin:{left:margem,right:margem,bottom:22},
+        head:[['#','Tipo','Descrição','Arquivo','Envio','Vínculo à O.S.']],body:registros,
+        styles:{fontSize:6.3,cellPadding:1.1,overflow:'linebreak'},
         headStyles:{fillColor:[38,51,67],textColor:[255,255,255]},
-        columnStyles:{0:{cellWidth:9},1:{cellWidth:18},2:{cellWidth:48},3:{cellWidth:53},4:{cellWidth:53}}
+        columnStyles:{0:{cellWidth:8},1:{cellWidth:15},2:{cellWidth:45},3:{cellWidth:42},4:{cellWidth:38},5:{cellWidth:38}}
       });
-      y = doc.lastAutoTable.finalY + 8;
+      y=doc.lastAutoTable.finalY+8;
     }
   }
 
