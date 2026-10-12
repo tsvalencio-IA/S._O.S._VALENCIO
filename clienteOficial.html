@@ -355,6 +355,7 @@ body{background:var(--bg0);color:var(--text);font-family:var(--ff);min-height:10
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore-compat.js"></script>
 <script src="js/config.js?v=26.13.0"></script>
+<script src="js/os-evidencias-export.js?v=26.25.0"></script>
 <script src="js/links-publicos.js?v=26.24.0"></script>
 <script src="js/tenant-modules.js"></script>
 <script src="js/os-utils.js?v=22.4.1"></script>
@@ -886,11 +887,15 @@ function _buildOSCard(os){
     return `<div class="detalhe-row"><span>${esc(p.desc||'—')}${badgeAprovacao('peca-'+idx)}<br><small style="color:var(--muted)">${q}× ${moeda(vl)}</small></span><span class="detalhe-val" style="text-align:right">${riscado}${moeda(vf)}</span></div>`;
   }).join('');
 
-  const fotos=((os.media||[]).concat(os.fotos||[])).filter(m=>m);
+  const fotos = typeof window.thiaEvidenciasOS?.fotos === 'function'
+    ? window.thiaEvidenciasOS.fotos(os)
+    : [...(Array.isArray(os.fotos)?os.fotos:[]), ...(Array.isArray(os.media)?os.media:[])]
+        .map(m=>typeof m==='string'?{url:m,type:'image'}:m)
+        .filter(m=>m && (m.url||m.secure_url) && !/^video/i.test(String(m.type||'image')));
   const fotosHtml=fotos.length?`
     <div style="margin-top:18px">
       <div style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Evidências / Fotos</div>
-      <div class="media-grid">${fotos.map(m=>`<div class="media-item"><img src="${esc(m.url||m)}" loading="lazy" onclick="window.open('${esc(m.url||m)}','_blank')"></div>`).join('')}</div>
+      <div class="media-grid">${fotos.map((m,i)=>`<div class="media-item" style="position:relative" data-href="${esc(m.url||m.secure_url||'')}"><img src="${esc(m.url||m.secure_url||'')}" loading="lazy" alt="Foto ${i+1} da O.S." onclick="window.open(this.parentNode.dataset.href,'_blank','noopener')">${m.descricao||m.legenda||m.obs?`<div style="position:absolute;bottom:0;left:0;right:0;padding:4px;background:rgba(5,14,26,.88);color:#fff;font-size:.56rem;line-height:1.35;text-align:center;pointer-events:none">${esc(m.descricao||m.legenda||m.obs)}</div>`:''}</div>`).join('')}</div>
     </div>`:'';
 
   // Linha do tempo: apenas mudanças de status (filtra logs de auditoria técnica)
