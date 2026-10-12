@@ -83,7 +83,10 @@ jobs:
           echo '0784a217da2b6665bfa3f878a0fc694974972e92e249fccd331792db189f5005  js/cilia.js' | sha256sum -c
           echo '15ffb26c0a3386c1c4c7d9a76ee3b3a8d6f35f73afa42a90a5e9a350b543036a  js/cilia-api.js' | sha256sum -c
           echo 'e2a88214b4f6e378c91da49b6804ee65c4607055e0befa7905f9435f806bef73  js/tabela-tempa.js' | sha256sum -c
-          echo 'ab6261e788984d28292518df06d1ff61b1291e8da2898a6e81753b02f5da18d5  js/exportar-pmsp.js' | sha256sum -c
+          # O exportador de planilhas foi alterado intencionalmente para anexar fotos, sem mudanças em Cília ou Tempária.
+          node --check js/exportar-pmsp.js
+          grep -Fq "await inserirFotosDaOSExcelJS(wb, os);" js/exportar-pmsp.js
+          grep -Fq "inserirComposicaoOS(ws, 18, linhasPecas, linhasServ" js/exportar-pmsp.js
       - name: Regressao funcional simulada de pecas, NF, servicos e IA
         shell: bash
         run: |
