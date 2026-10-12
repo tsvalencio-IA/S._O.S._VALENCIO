@@ -6843,19 +6843,18 @@ window.gerarPDFOS = async function(opcoes = {}) {
         doc.setTextColor(95,110,125);
         doc.text('Imagem indisponível — consulte o link', x + 2, y + thumbH/2, {maxWidth:thumbW-4});
       }
-      // Horário no próprio cartão fotográfico, sem tabela cronológica separada.
-      // Prefere o envio original; só utiliza a vinculação à O.S. como fallback.
+      // Carimbo mínimo, em linha única, dentro da imagem; não inventa horário.
       const dataMidiaPdf = m.uploadedAt || m.importedAt || '';
-      const tipoDataMidiaPdf = m.uploadedAt ? 'Enviado' : (m.importedAt ? 'Na O.S.' : 'Arquivo antigo');
-      const horaDaFotoPdf = dataMidiaPdf ? dataHoraEvidenciaOS(dataMidiaPdf) : 'Data/hora não registrada';
-      const tarjaHoraPdf = tipoDataMidiaPdf + ': ' + horaDaFotoPdf;
-      doc.setFillColor(28,39,58);
-      doc.rect(x+.15,y+thumbH-7.4,thumbW-.3,7.25,'F');
+      const dataHoraOriginalPdf = dataMidiaPdf ? dataHoraEvidenciaOS(dataMidiaPdf) : '';
+      const horaCompactaPdf = dataHoraOriginalPdf
+        ? String(dataHoraOriginalPdf).replace(/,\s*/g, ' ').replace(/(\d{2}:\d{2}):\d{2}\b/g, '$1')
+        : 'Sem data registrada';
+      doc.setFillColor(40,47,57);
+      doc.rect(x + 0.25, y + thumbH - 4, thumbW - 0.5, 3.75, 'F');
       doc.setFont('helvetica','normal');
-      doc.setTextColor(255,255,255);
-      doc.setFontSize(5.8);
-      const linhasHoraPdf = doc.splitTextToSize(tarjaHoraPdf, thumbW-3);
-      doc.text(linhasHoraPdf.slice(0,2),x+1.4,y+thumbH-4.6);
+      doc.setFontSize(4.4);
+      doc.setTextColor(244,246,249);
+      doc.text(horaCompactaPdf, x + 1.6, y + thumbH - 1.3, {maxWidth:thumbW - 3.2});
       doc.setFillColor(235,239,244);
       doc.rect(x+.15, y+thumbH, thumbW-.3, legendaH-.15, 'F');
       doc.setFont('helvetica','bold');
