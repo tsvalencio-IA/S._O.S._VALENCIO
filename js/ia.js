@@ -236,6 +236,11 @@
   function extrairPeriodoNaturalIA(texto) {
     const explicito = extrairPeriodoPergunta(texto);
     if (explicito) return Object.assign({ origem: 'data_explicita' }, explicito);
+    const mesNumerico = String(texto || '').match(/(?:^|[^0-9])(0?[1-9]|1[0-2])[\/-](20\d{2})(?!\d)/);
+    if (mesNumerico) {
+      const d = new Date(Number(mesNumerico[2]), Number(mesNumerico[1]) - 1, 1, 12);
+      return { inicio: primeiroDiaMesISO(d), fim: ultimoDiaMesISO(d), origem: 'mes_numerico' };
+    }
     const q = norm(texto);
     const agora = new Date();
     const hoje = hojeISO();
@@ -2392,7 +2397,7 @@
     ].join('') : '';
     if (modoRelatorio === 'resumo') {
       const fonte = controleComissao?.linhas || null;
-      let totalPrevisto=0, totalPago=0, totalPendente=0, pagamentosCompletos=true;
+      let totalPrevisto=0, totalPago=0, totalPendente=0, totalAguardando=0, pagamentosCompletos=true;
       const linhasResumo=[], idsValidos=[];
       for (const item of lista) {
         const {os,servicos,statusOperacional} = item;
@@ -2421,6 +2426,10 @@
         if(!oficial&&base<=0)continue;
         const pago=fonte&&valores.length?+valores.reduce((s,r)=>s+num(r.pago||0),0).toFixed(2):null;
         const falta=pago===null?null:+Math.max(0,previsto-pago).toFixed(2);
+        const aguardando=+valores.filter(r=>r.aguardandoExecucao===true)
+          .reduce((s,r)=>s+Math.max(0,num(r.falta||0)),0).toFixed(2);
+        const liberado=pago===null?null:+valores.filter(r=>!r.aguardandoExecucao&&!r.semPercentual)
+          .reduce((s,r)=>s+Math.max(0,num(r.falta||0)),0).toFixed(2);
         const datas=[
           ...servicos.confirmados.map(s=>s?.data),
           ...servicos.registrados.map(s=>s?.data),
@@ -2439,16 +2448,16 @@
           : '<br>&nbsp;&nbsp;Parte atribuída ao '+esc(nome)+': <strong>'+moeda(base)+'</strong> | recebe (50%): <strong>'+moeda(previsto)+'</strong>';
         const pagamento=podeVerValores?(pago===null
           ? '<br>&nbsp;&nbsp;<small>Pagamento não confirmado nesta consulta.</small>'
-          : '<br>&nbsp;&nbsp;Pago: '+moeda(pago)+' | falta: <strong>'+moeda(falta)+'</strong>'):'';
+          : '<br>&nbsp;&nbsp;Pago: '+moeda(pago)+' | liberado para pagar: <strong>'+moeda(liberado)+'</strong> | aguardando execução/finalização: <strong>'+moeda(aguardando)+'</strong>'):'';
         linhasResumo.push(cab+valor+pagamento);
         idsValidos.push(os.id);
         totalPrevisto+=previsto;
         if(pago===null)pagamentosCompletos=false;
-        else {totalPago+=pago;totalPendente+=falta;}
+        else {totalPago+=pago;totalPendente+=liberado;totalAguardando+=aguardando;}
       }
       if(!linhasResumo.length)return 'Não encontrei atendimento com valor atribuído a <strong>'+esc(nome)+'</strong>'+periodoRotuloIA(periodoInformado)+'. Vínculos antigos e serviços terceirizados não foram tratados como pagamento.';
-      const valoresFinais=podeVerValores?'<br><br><strong>Total a receber:</strong> '+moeda(totalPrevisto)+
-        (pagamentosCompletos?' | <strong>Pago:</strong> '+moeda(totalPago)+' | <strong>Falta:</strong> '+moeda(totalPendente):' | pagamentos não totalmente confirmados'):'';
+      const valoresFinais=podeVerValores?'<br><br><strong>Total previsto:</strong> '+moeda(totalPrevisto)+
+        (pagamentosCompletos?' | <strong>Pago:</strong> '+moeda(totalPago)+' | <strong>Liberado para pagar:</strong> '+moeda(totalPendente)+' | <strong>Aguardando execução/finalização:</strong> '+moeda(totalAguardando):' | pagamentos não totalmente confirmados'):'';
       const botao=podeVerValores?acaoPagamentoComissaoIA(func,idsValidos):'';
       return '<strong>Atendimentos de '+esc(nome)+periodoRotuloIA(periodoInformado)+' ('+linhasResumo.length+' O.S.):</strong><br><br>'+linhasResumo.join('<br><br>')+valoresFinais+(botao?'<br>'+botao.replace('REGISTRAR COMISSÃO','REGISTRAR PAGAMENTO'):'');
     }
