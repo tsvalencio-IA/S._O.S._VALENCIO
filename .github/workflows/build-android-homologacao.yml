@@ -69,7 +69,7 @@ jobs:
           NODE
           node --check js/ia.js
           node --check js/theme.js
-          grep -q 'html.sos-android-app' css/android-app.css
+          grep -q 'html.sos-premium-ui' css/android-app.css
           grep -q "sos_valencio_android_shell" js/theme.js
           grep -Fq 'js/ia.js?v=26.25.4' jarvis.html
           grep -Fq 'const exatos=clientes.filter' js/ia.js
