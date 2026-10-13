@@ -41,4 +41,18 @@ for density, size in sizes.items():
         dest = folder / name
         assert dest.is_file() and dest.stat().st_size > 0, str(dest)
 
-print("Ícones Android gerados: mdpi, hdpi, xhdpi, xxhdpi, xxxhdpi.")
+# Android 8+ usa o recurso adaptive-icon XML. Ele deve apontar para o
+# PNG novo em @mipmap, não para o vector drawable padrão do Capacitor.
+adaptive = """<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@android:color/black" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>
+"""
+adaptive_dir = RES / "mipmap-anydpi-v26"
+adaptive_dir.mkdir(parents=True, exist_ok=True)
+for name in ("ic_launcher.xml", "ic_launcher_round.xml"):
+    (adaptive_dir / name).write_text(adaptive, encoding="utf-8")
+    assert "@mipmap/ic_launcher_foreground" in (adaptive_dir / name).read_text(encoding="utf-8")
+
+print("Ícones Android gerados: mdpi, hdpi, xhdpi, xxhdpi, xxxhdpi + adaptive icon Android 8+.")
