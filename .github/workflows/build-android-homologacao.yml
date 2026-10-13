@@ -40,13 +40,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          command -v sdkmanager
+          sdkroot="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          sdkmanager_path="$(find "$sdkroot/cmdline-tools" -type f -name sdkmanager -print | sort -V | tail -1)"
+          test -n "$sdkmanager_path"
+          test -x "$sdkmanager_path"
+          echo "SDK: $sdkmanager_path"
           set +o pipefail
-          yes | sdkmanager --licenses
+          yes | "$sdkmanager_path" --licenses
           rc=${PIPESTATUS[1]}
           set -o pipefail
           test "$rc" -eq 0
-          sdkmanager --list_installed >/dev/null
+          "$sdkmanager_path" --list_installed >/dev/null
 
       - name: Verificar app e origem segura
         shell: bash
