@@ -510,7 +510,15 @@
   function acaoPagamentoComissaoIA(func, osIds) {
     const id = String(func?.id || func?.uid || '').trim();
     if (!id) return '';
-    const ids = Array.from(new Set((osIds || []).map(v => String(v || '').trim()).filter(Boolean))).slice(0, 80);
+    // Oferecer ação apenas para comissões liberadas segundo o mesmo resumo do RH.
+    const resumo = typeof W.thiaComissoesResumoV26 === 'function' ? W.thiaComissoesResumoV26(id) : null;
+    if (!Array.isArray(resumo?.linhas)) return '';
+    const disponiveis = new Set(resumo.linhas.filter(r =>
+      !r.aguardandoExecucao && !r.semPercentual && num(r.falta) > 0.009
+    ).map(r => String(r.osId || '').trim()).filter(Boolean));
+    if (!disponiveis.size) return '';
+    const ids = Array.from(new Set((osIds || []).map(v => String(v || '').trim()).filter(v => disponiveis.has(v)))).slice(0, 80);
+    if (!ids.length) return '';
     return `<br><button type="button" data-mec-id="${esc(id)}" data-os-ids="${esc(ids.join(','))}" onclick="window.thiaAbrirComissaoIA && window.thiaAbrirComissaoIA(this)" style="margin-top:8px;padding:7px 10px;border:1px solid rgba(0,212,255,.42);border-radius:4px;background:rgba(0,212,255,.08);color:var(--cyan,#00d4ff);font-family:var(--fm);font-size:.62rem;font-weight:800;letter-spacing:.5px;cursor:pointer;">SELECIONAR O.S. / REGISTRAR COMISSÃO — ${esc(func.nome || func.usuario || 'COLABORADOR')}</button>`;
   }
 
@@ -1119,7 +1127,12 @@
     const m=String(texto||'').match(/\bcliente\s+["“”']?(.+?)(?=\s+(?:que|quais|fizeram|fez|foram|foi|teve|tiveram|entregues?|entregaram|em|no|na|durante|entre|neste|nessa|esta|esse|com|sem|mes|mês|ano|semana)\b|["“”'?!.,]|$)/i);
     const termo=norm(m?.[1]||'').trim();
     if(!termo||termo.length<3)return null;
-    const matches=(ctx.clientes||[]).filter(c=>[c.nome,c.razaoSocial,c.fantasia,c.nomeFantasia,c.apelido].some(v=>norm(v).includes(termo)));
+    const aliases=c=>[c.nome,c.razaoSocial,c.fantasia,c.nomeFantasia,c.apelido]
+      .map(v=>norm(v).replace(/\s+/g,' ').trim()).filter(Boolean);
+    const clientes=ctx.clientes||[];
+    // Nome exatamente igual tem prioridade; nomes parciais somente quando não há um exato.
+    const exatos=clientes.filter(c=>aliases(c).includes(termo));
+    const matches=exatos.length?exatos:clientes.filter(c=>aliases(c).some(v=>v.includes(termo)));
     if(matches.length>1)return {mensagem:'Existem '+matches.length+' cadastros semelhantes a '+esc(termo)+': '+matches.map(c=>esc(c.nome||c.razaoSocial||c.fantasia)).join('; ')+'. Informe o nome completo.'};
     if(!matches.length)return {mensagem:'Cliente '+esc(termo)+' não localizado nos dados carregados.'};
     return {cliente:matches[0]};
