@@ -1,0 +1,95 @@
+name: "APK Android - S.O.S. Valencio (homologacao)"
+on:
+  push:
+    branches: [homologacao]
+    paths:
+      - 'capacitor-android/capacitor.config.js'
+      - 'capacitor-android/android-overrides/**'
+      - 'scripts/prepare-capacitor-www.sh'
+      - 'scripts/build-android-homologacao.sh'
+      - '.github/workflows/build-android-homologacao.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apk-android-homologacao
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout branch de homologacao
+        uses: actions/checkout@v4
+
+      - name: Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Verificar app e origem segura
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const c = require('./capacitor-android/capacitor.config.js');
+          if (c.appId !== 'br.com.thiaguinho.saas') throw Error('Identidade Android inesperada');
+          if (c.server?.url !== 'https://tsvalencio-ia.github.io/S._O.S._VALENCIO/selecionar-perfil.html') throw Error('Origem web inesperada');
+          if (!c.plugins?.Camera || !c.plugins?.StatusBar) throw Error('Plugins preexistentes ausentes');
+          console.log('Configuração Android segura e identidade preservada.');
+          NODE
+          node --check js/ia.js
+          grep -Fq 'js/ia.js?v=26.25.4' jarvis.html
+          grep -Fq 'const exatos=clientes.filter' js/ia.js
+
+      - name: Preparar arquivos web atuais
+        run: bash scripts/prepare-capacitor-www.sh
+
+      - name: Instalar Capacitor
+        working-directory: capacitor-android
+        run: npm install --no-audit --no-fund
+
+      - name: Gerar plataforma Android
+        working-directory: capacitor-android
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: Aplicar integrações Android existentes
+        run: bash scripts/build-android-homologacao.sh
+
+      - name: Compilar APK Android instalavel de teste
+        working-directory: capacitor-android/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Conferir integridade do APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=capacitor-android/android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          unzip -t "$apk" | tail -1
+          sha256sum "$apk"
+          cp "$apk" "SOS-Valencio-homologacao-${GITHUB_RUN_NUMBER}.apk"
+
+      - name: Disponibilizar APK para instalacao e teste
+        uses: actions/upload-artifact@v4
+        with:
+          name: SOS-Valencio-Android-homologacao
+          path: SOS-Valencio-homologacao-*.apk
+          if-no-files-found: error
+          retention-days: 30
