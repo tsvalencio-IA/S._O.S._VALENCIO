@@ -1352,6 +1352,65 @@
     return linhas.join('<br>');
   }
 
+
+  // Consulta operacional: pergunta o modelo e exige a placa se houver mais de um.
+  // Atribuição/rateio não comprova execução por um mecânico.
+  function responderAutorPorModeloIA(texto,q,ctx) {
+    const anterior=contextoConversaIA.pendenteServicoModelo;
+    const placa=placaLimpa(String(texto||'').trim());
+    const respostaPlaca=anterior && Date.now()-anterior.em < 30*60*1000 &&
+      /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(placa) && anterior.placas.includes(placa);
+    const pergunta=q.match(/\b(?:quem|qual mecanico|qual funcionario)\b.*?\b(?:trocou|trocaram|substituiu|realizou|executou|instalou|fez)\b\s+(?:a|o|as|os)?\s*(.{3,75}?)\s+(?:da|do|de|no|na)\s+(?:renault\s+)?([a-z][a-z0-9-]{2,35})\s*\??$/);
+    if(!respostaPlaca&&!pergunta)return null;
+    const servico=respostaPlaca?anterior.servico:pergunta[1].trim();
+    const modelo=respostaPlaca?anterior.modelo:pergunta[2].trim();
+    const candidatos=new Map();
+    (ctx.veiculos||[]).forEach(v=>{
+      if(norm([v.marca,v.modelo].join(' ')).includes(modelo) && placaLimpa(v.placa))
+        candidatos.set(placaLimpa(v.placa),v.modelo||modelo);
+    });
+    (ctx.os||[]).forEach(o=>{
+      const v=veiculoDeOS(ctx,o);
+      const nome=norm([v.modelo,o.veiculoSnapshot?.modelo,o.veiculoModelo,o.modelo].join(' '));
+      if(nome.includes(modelo)&&placaOS(ctx,o))candidatos.set(placaOS(ctx,o),v.modelo||o.veiculoSnapshot?.modelo||modelo);
+    });
+    if(!respostaPlaca&&!candidatos.size)return 'Não localizei veículo '+esc(modelo)+' nos cadastros/O.S. carregados. Informe a placa para consultar diretamente.';
+    const placas=respostaPlaca?[placa]:Array.from(candidatos.keys());
+    if(placas.length>1){
+      contextoConversaIA.pendenteServicoModelo={modelo,servico,placas,em:Date.now()};
+      return 'Localizei '+placas.length+' veículos '+esc(modelo)+': '+placas.map(p=>esc(p)+' ('+esc(candidatos.get(p)||modelo)+')').join('; ')+
+        '.<br><strong>Qual é a placa?</strong> Digite a placa para conferir o serviço '+esc(servico)+'.';
+    }
+    contextoConversaIA.pendenteServicoModelo=null;
+    const selecionada=placas[0];
+    const termos=norm(servico).split(/\s+/).filter(t=>t.length>2&&!/^(troca|trocar|substituicao|substituir|servico|manutencao)$/.test(t));
+    const registros=[];
+    (ctx.os||[]).filter(o=>placaOS(ctx,o)===selecionada).forEach(o=>{
+      (Array.isArray(o.servicos)?o.servicos:[]).forEach((sv,i)=>{
+        const descricao=norm(sv.desc||sv.descricao||sv.nome||'');
+        if(!termos.length||!termos.every(t=>descricao.includes(t)))return;
+        const exec=o.execucaoItens?.[sv.key||'servico-'+i]||{};
+        const status=norm(exec.status||sv.statusExecucao||'').replace(/[_-]/g,' ');
+        const comprovado=/^(executado|executado obs|concluido|finalizado|feito|realizado)$/.test(status)||sv.executado===true;
+        const id=exec.executorId||exec.mecId||exec.mecanicoId||'';
+        const pessoa=(ctx.equipe||[]).find(e=>String(e.id||'')===String(id||''))?.nome ||
+          exec.executorNome||exec.mecNome||exec.mecanicoNome||'';
+        const atribuicoes=(Array.isArray(sv.rateiosComissao)?sv.rateiosComissao:[])
+          .map(x=>x.mecNome||(ctx.equipe||[]).find(e=>String(e.id||'')===String(x.mecId||''))?.nome)
+          .filter(Boolean);
+        const responsabilidade=comprovado
+          ? (pessoa?'Executor identificado no registro: '+esc(pessoa):'Execução registrada, sem identificação inequívoca do executor')
+          : 'Execução não confirmada'+(atribuicoes.length?' | atribuído a: '+esc(atribuicoes.join(', ')):'');
+        const data=comprovado?dataBR(exec.atualizadoEm||exec.data||exec.em||sv.executadoEm||''):'';
+        registros.push('- O.S. #'+esc(String(o.numero||o.id||'').slice(-6).toUpperCase())+
+          ' | '+esc(sv.desc||sv.descricao||servico)+' | '+responsabilidade+
+          (data&&data!=='-'?' | data '+esc(data):''));
+      });
+    });
+    if(!registros.length)return 'Não encontrei lançamento do serviço '+esc(servico)+' nas O.S. carregadas da placa '+esc(selecionada)+'. Não é possível afirmar quem o realizou.';
+    return '<strong>Serviço '+esc(servico)+' — '+esc(modelo)+' — '+esc(selecionada)+':</strong><br>'+registros.join('<br>');
+  }
+
   function responderJarvisDadosPrecisos(texto, q, ctx, opts) {
     // Uma placa válida sempre tem prioridade. Sem esta trava, palavras genéricas
     // como "serviço" podiam ser confundidas com o cadastro "SERVIÇO TERCEIRIZADO".
@@ -1498,6 +1557,9 @@
     const q = norm(texto);
     const keys = new Set();
     const placa = extrairPlaca(texto);
+    if (/\bquem\b.*\b(trocou|substituiu|executou|fez|realizou)\b/.test(q) || W.__thiaIAContextoConversacional?.pendenteServicoModelo) {
+      keys.add('os'); keys.add('clientes'); keys.add('veiculos'); keys.add('equipe');
+    }
     const atividadePessoa = /\b(fez|realizou|executou|trabalhou|atendeu|atendimento|atividade|atividades|servicos?|tarefas?)\b/.test(q)
       && !placa;
 
@@ -3629,6 +3691,8 @@
       if (sup) return sup;
     }
 
+    const buscaPorModelo=responderAutorPorModeloIA(texto,q,ctx);
+    if(buscaPorModelo)return aplicarComportamento(buscaPorModelo);
     const entregasCliente=responderEntregaHistoricaIA(texto,q,ctx);
     if(entregasCliente)return aplicarComportamento(entregasCliente);
     const respostaDadosPrecisos = responderJarvisDadosPrecisos(texto, q, ctx, opts);
