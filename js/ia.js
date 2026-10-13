@@ -1058,9 +1058,9 @@
     const pecas = itens.filter(i => i.tipo === 'peca');
     const fmt = (lista, rotulo) => {
       if (!lista.length) return '';
-      const executados = lista.filter(i => i.executado).slice(0,8);
-      const legados = lista.filter(i => !i.executado && i.legadoFinalizado).slice(0,8);
-      const aprovados = lista.filter(i => !i.executado && !i.legadoFinalizado && i.aprovado).slice(0,8);
+      const executados = lista.filter(i => i.executado);
+      const legados = lista.filter(i => !i.executado && i.legadoFinalizado);
+      const aprovados = lista.filter(i => !i.executado && !i.legadoFinalizado && i.aprovado);
       const linhas=[];
       if(executados.length) linhas.push(`${rotulo} com execu&ccedil;&atilde;o confirmada: ${executados.map(i=>esc(i.desc||'-')).join('; ')}`);
       if(legados.length) linhas.push(`${rotulo} em O.S. finalizada sem confirma&ccedil;&atilde;o individual: ${legados.map(i=>esc(i.desc||'-')).join('; ')}`);
@@ -1114,14 +1114,54 @@
     return datas;
   }
 
+
+  function clienteHistoricoSeguroIA(texto,ctx){
+    const m=String(texto||'').match(/\bcliente\s+["“”']?(.+?)(?=\s+(?:que|quais|fizeram|fez|foram|foi|teve|tiveram|entregues?|entregaram|em|no|na|durante|entre|neste|nessa|esta|esse|com|sem|mes|mês|ano|semana)\b|["“”'?!.,]|$)/i);
+    const termo=norm(m?.[1]||'').trim();
+    if(!termo||termo.length<3)return null;
+    const matches=(ctx.clientes||[]).filter(c=>[c.nome,c.razaoSocial,c.fantasia,c.nomeFantasia,c.apelido].some(v=>norm(v).includes(termo)));
+    if(matches.length>1)return {mensagem:'Existem '+matches.length+' cadastros semelhantes a '+esc(termo)+': '+matches.map(c=>esc(c.nome||c.razaoSocial||c.fantasia)).join('; ')+'. Informe o nome completo.'};
+    if(!matches.length)return {mensagem:'Cliente '+esc(termo)+' não localizado nos dados carregados.'};
+    return {cliente:matches[0]};
+  }
+
+  function entregaComprovadaIA(os){
+    if(!isEntregueOS(os))return '';
+    const diretas=[os.entregueEm,os.dataEntrega,os.entregaEm,os.dataEntregue].map(dataISO).filter(Boolean);
+    const eventos=(Array.isArray(os.timeline)?os.timeline:[]).filter(ev=>{
+      const t=norm([ev.tipo,ev.tipoEvento,ev.acao,ev.msg,ev.mensagem,ev.statusNovo].join(' '));
+      return /entregue|veiculo entregue|entrega do veiculo|status.*entreg/.test(t) && !/previsao|previsto|agendad|cancelad|desfeito/.test(t);
+    }).map(ev=>dataISO(ev.dt||ev.data||ev.ts||ev.createdAt)).filter(Boolean);
+    return [...diretas,...eventos].sort().at(-1)||'';
+  }
+
+  function responderEntregaHistoricaIA(texto,q,ctx){
+    if(!/\bcliente\b/.test(q)||!/entreg/.test(q)||!/veicul|carro|o\.s\.|ordem|ordens/.test(q))return null;
+    const periodo=extrairPeriodoNaturalIA(texto);
+    if(!periodo)return null;
+    const escolha=clienteHistoricoSeguroIA(texto,ctx);
+    if(escolha?.mensagem)return escolha.mensagem;
+    const cli=escolha?.cliente||clientePorPerguntaDiretaIA(ctx,texto);
+    if(!cli)return 'Informe o nome completo do cliente para consultar as entregas.';
+    const lista=(ctx.os||[]).filter(o=>String(o.clienteId||'')===String(cli.id||'') && periodoContem(periodo,entregaComprovadaIA(o)))
+      .sort((a,b)=>entregaComprovadaIA(a).localeCompare(entregaComprovadaIA(b)));
+    const nome=cli.nome||cli.razaoSocial||cli.fantasia||'Cliente';
+    if(!lista.length)return 'Nenhuma entrega com data comprovada de '+esc(nome)+periodoRotuloIA(periodo)+'. Status Entregue sem data não comprova entrega na semana.';
+    return '<strong>Veículos entregues de '+esc(nome)+periodoRotuloIA(periodo)+' ('+lista.length+' O.S.):</strong><br>'+
+      lista.map(o=>'- <strong>'+esc(placaOS(ctx,o)||'-')+'</strong> | '+esc(veiculoDeOS(ctx,o).modelo||o.veiculoSnapshot?.modelo||'-')+
+        ' | '+esc(dataBR(entregaComprovadaIA(o)))+' | O.S. #'+esc(String(o.numero||o.id||'').slice(-6).toUpperCase())).join('<br>');
+  }
+
   function responderAtendimentosClientePeriodoIA(texto, q, ctx, opts) {
     const periodo = extrairPeriodoNaturalIA(texto);
     if (!periodo) return null;
     const falaCliente = /cliente|frota|frotista|carros?|veiculos?/.test(q);
     const falaAtendimento = /atend|vieram|veio|entraram|entrada|passaram|fizemos|fizeram|feito|servic|resumo/.test(q);
     if (!falaCliente || !falaAtendimento) return null;
-    const cliente = clientePorPerguntaDiretaIA(ctx, texto) || clienteFiltroDaPergunta(texto, q, ctx)?.cliente || null;
-    if (!cliente) return null;
+    const escolha=clienteHistoricoSeguroIA(texto,ctx);
+    if(escolha?.mensagem)return escolha.mensagem;
+    const cliente=escolha?.cliente||clientePorPerguntaDiretaIA(ctx,texto)||clienteFiltroDaPergunta(texto,q,ctx)?.cliente||null;
+    if(!cliente)return null;
     const id=String(cliente.id||'');
     let lista=(ctx.os||[]).filter(os => {
       if(id && (String(os?.clienteId||'')===id || String(os?.cliente?.id||'')===id)) return true;
@@ -1137,7 +1177,7 @@
     const nome=cliente.nome||cliente.razaoSocial||cliente.fantasia||cliente.id||'cliente';
     if(!lista.length) return `N&atilde;o encontrei O.S./atendimento de <strong>${esc(nome)}</strong>${periodoRotuloIA(periodo)}.`;
     const veiculos=new Set(lista.map(os=>placaOS(ctx,os)||os.veiculoId||os.id));
-    const linhas=lista.slice(0,60).map(os=>{
+    const linhas=lista.map(os=>{
       const v=veiculoDeOS(ctx,os);
       const placa=placaOS(ctx,os)||'-';
       const modelo=v.modelo||os.veiculoSnapshot?.modelo||os.veiculoModelo||os.veiculo||os.tipoVeiculo||'-';
@@ -3589,6 +3629,8 @@
       if (sup) return sup;
     }
 
+    const entregasCliente=responderEntregaHistoricaIA(texto,q,ctx);
+    if(entregasCliente)return aplicarComportamento(entregasCliente);
     const respostaDadosPrecisos = responderJarvisDadosPrecisos(texto, q, ctx, opts);
     if (respostaDadosPrecisos) return aplicarComportamento(respostaDadosPrecisos);
 
