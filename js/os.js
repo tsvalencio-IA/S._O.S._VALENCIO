@@ -3567,11 +3567,10 @@ function osReconciliarPecasReaisParaClienteComumOS(os, pecasAtuais, pecasReaisAt
   const o = os || {};
   const visiveis = Array.isArray(pecasAtuais) ? pecasAtuais.slice() : [];
   const reais = Array.isArray(pecasReaisAtuais) ? pecasReaisAtuais : (Array.isArray(o.pecasReais) ? o.pecasReais : []);
-  // Dados de compra/NF e peças realmente trocadas pertencem ao controle
-  // interno *177: nunca criar item de orçamento automaticamente por reabertura.
-  // A rotina legada fica acessível APENAS para O.S. com opt-in explícito
-  // anterior, preservando eventuais fluxos comerciais deliberadamente configurados.
-  if (osClienteOficialSeguroOS(o) || o.permitirNFNoOrcamento !== true) return visiveis;
+  // Cliente comum: a peça vinculada pela NF integra o orçamento da O.S.
+  // Peças excluídas intencionalmente continuam ocultas (controle abaixo).
+  // Cliente oficial: a NF permanece somente no controle real interno *177.
+  if (osClienteOficialSeguroOS(o)) return visiveis;
   reais.forEach(real => {
     const origemNF = real && (real.origem === 'nf_entrada' || real.statusAplicacao === 'comprada_vinculada_nf' || real.nfId || real.origemNFItemKey);
     if (!origemNF) return;
