@@ -40,3 +40,21 @@ Arquivos:
 - Caso persista lentidão/travamento no computador afetado, coletar versão do Windows, memória RAM, CPU, nome do antivírus e o arquivo `%APPDATA%\SOS-VALENCIO-HOMOLOGACAO-PC\diagnostico-inicializacao.log`, sem compartilhar credenciais.
 
 **Conclusão:** candidato Windows com instalação e inicialização realmente testadas no runner, não versão final certificada para todos os perfis e equipamentos.
+
+
+## Complemento — auditoria aprofundada do acesso Windows (13/10/2026)
+- **Falha comprovada na homologação anterior:** os testes aprovavam apenas a tela inicial com os cinco perfis; não testavam a tela de login, a presença do SDK Firebase nem o template local da planilha.
+- **Correção no programa:** `electron/main.js` aceita o teste `--sos-smoke-login` e verifica a renderização da tela de login, a existência das bibliotecas Firebase compat e a leitura real do template PMSP dentro do arquivo empacotado.
+- **Falha de compatibilidade identificada:** `js/exportar-pmsp.js` usava `fetch()` para ler o template local XLSX em dois fluxos. No contexto Electron `file://`, `fetch` de arquivo local pode ser bloqueado. Foi criada uma ponte IPC de **leitura única e restrita** ao template `assets/templates/I-30003_PLANILHA_DE_CUSTOS.xlsx`. O fluxo remoto/customizado e o Web/Android continuam em `fetch`.
+- **Segurança:** o método IPC rejeita outros caminhos e janelas remetentes; `contextIsolation`, `webSecurity` e `nodeIntegration:false` são mantidos.
+- **Teste automatizado Windows:** `TESTES_WINDOWS_TEMPLATE_PMSP.js` verificou o desvio da leitura local, o fallback de template remoto e a preservação Web/Android.
+- **Execução GitHub Actions:** https://github.com/tsvalencio-IA/S._O.S._VALENCIO/actions/runs/38409272398 — concluída com sucesso.
+- O executável empacotado e a cópia **instalada por NSIS** abriram a seleção de perfis, a tela de login e carregaram o template PMSP real. Log: `SMOKE_LOGIN_APROVADO`, `SMOKE_MODELO_XLSX_APROVADO`.
+- O executável permaneceu ativo no teste de 12 segundos, usando aproximadamente **92,6 MB no processo principal**, não contando os subprocessos Electron.
+- Release privada de teste: https://github.com/tsvalencio-IA/S._O.S._VALENCIO/releases/tag/windows-auditado-4
+
+### Limitações mantidas
+- Não houve autenticação com credenciais reais, navegação autenticada no Jarvis nem operações de O.S. em ambiente isolado. Portanto a integração financeira e os fluxos completos não podem ser declarados aprovados.
+- O travamento relatado no computador do usuário não foi reproduzido. Sem logs de Eventos do Windows, antivírus e configuração da máquina, a causa **permanece desconhecida**.
+- Não fornecer garantias absolutas de estabilidade ou sugerir desabilitar antivírus/SmartScreen. Instalações de teste devem acontecer com versão de homologação e após encerramento do software anterior.
+- As configurações Firebase continuam relacionadas ao banco original. Evitar alterações em registros reais durante testes.
