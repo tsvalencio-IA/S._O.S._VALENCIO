@@ -70,14 +70,14 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
-          npx electron-builder --win nsis --x64 --publish never --config.appId=br.com.thiaguinho.sosvalencio.homologacao.pc --config.productName=SOS-VALENCIO-TESTE-PC --config.asar=true --config.directories.output=dist-windows-auditoria --config.win.artifactName=SOS-VALENCIO-TESTE-WINDOWS-INSTALADOR-1.0.26-12-x64.exe --config.nsis.oneClick=false --config.nsis.perMachine=false --config.nsis.allowToChangeInstallationDirectory=true --config.nsis.createDesktopShortcut=false
+          npx electron-builder --win nsis --x64 --publish never --config.appId=br.com.thiaguinho.sosvalencio.homologacao.pc --config.productName=SOS-VALENCIO-TESTE-PC --config.asar=true --config.directories.output=dist-windows-installer --config.win.artifactName=SOS-VALENCIO-TESTE-WINDOWS-INSTALADOR-1.0.26-12-x64.exe --config.nsis.oneClick=false --config.nsis.perMachine=false --config.nsis.allowToChangeInstallationDirectory=true --config.nsis.createDesktopShortcut=false
           if ($LASTEXITCODE -ne 0) { throw 'Build NSIS falhou' }
-          if (-not (Test-Path 'dist-windows-auditoria/SOS-VALENCIO-TESTE-WINDOWS-INSTALADOR-1.0.26-12-x64.exe')) { throw 'Instalador ausente' }
+          if (-not (Test-Path 'dist-windows-installer/SOS-VALENCIO-TESTE-WINDOWS-INSTALADOR-1.0.26-12-x64.exe')) { throw 'Instalador ausente' }
       - name: Testar instalacao NSIS e executavel instalado
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          $installer=(Resolve-Path 'dist-windows-auditoria/SOS-VALENCIO-TESTE-WINDOWS-INSTALADOR-1.0.26-12-x64.exe').Path
+          $installer=(Resolve-Path 'dist-windows-installer/SOS-VALENCIO-TESTE-WINDOWS-INSTALADOR-1.0.26-12-x64.exe').Path
           $dest=Join-Path $env:RUNNER_TEMP 'SOSVALENCIO-PC-TESTE-INSTALADO'
           $p=Start-Process -FilePath $installer -ArgumentList @('/S',"/D=$dest") -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Instalacao falhou: $($p.ExitCode)" }
@@ -99,5 +99,5 @@ jobs:
         run: |
           $sha=git rev-parse HEAD
           $tag="windows-auditado-$env:GITHUB_RUN_NUMBER"
-          gh release create $tag 'dist-windows-auditoria/SOS-VALENCIO-TESTE-WINDOWS-INSTALADOR-1.0.26-12-x64.exe' 'dist-windows-auditoria/SOS-VALENCIO-WINDOWS-PASTA-PORTATIL-X64.zip' --repo $env:GITHUB_REPOSITORY --target $sha --prerelease --title 'S.O.S. VALENCIO Windows auditado (homologacao)' --notes 'NSIS realmente instalado e executado; abertura dos cinco perfis validada no runner Windows. Dados locais isolados. Firebase continua apontando para projeto original: nao editar dados reais. Compatibilidade com o PC do usuario ainda depende de teste nesse hardware.'
+          gh release create $tag 'dist-windows-installer/SOS-VALENCIO-TESTE-WINDOWS-INSTALADOR-1.0.26-12-x64.exe' 'dist-windows-auditoria/SOS-VALENCIO-WINDOWS-PASTA-PORTATIL-X64.zip' --repo $env:GITHUB_REPOSITORY --target $sha --prerelease --title 'S.O.S. VALENCIO Windows auditado (homologacao)' --notes 'NSIS realmente instalado e executado; abertura dos cinco perfis validada no runner Windows. Dados locais isolados. Firebase continua apontando para projeto original: nao editar dados reais. Compatibilidade com o PC do usuario ainda depende de teste nesse hardware.'
           if ($LASTEXITCODE -ne 0) { throw 'Release nao publicada' }
