@@ -55,7 +55,7 @@ const viatura={
   id:'of1', numero:'JFUQ4R', clienteId:'pms', placa:'EPX9844',
   veiculo:'GOL', kmEntrada:95757, status:'Orcamento',
   createdAt:'2026-06-29', mecId:'m2',
-  comissaoOficialOS:{ativa:true,rateios:[{mecId:'th',mecNome:'THALIS',valor:700,atribuidoEm:'2026-10-01'}]},
+  comissaoOficialOS:{ativa:true,atualizadoEm:'2026-10-13',rateios:[{mecId:'th',mecNome:'THALIS',valor:700}]},
   servicos:[{desc:'PINTAR CAPUZ',valor:518.89,mecId:'m2',lancadoEm:'2026-10-01',tipoExecucao:'interna'}]
 };
 const oficialCliente=[{id:'pms',nome:'52 BPM POLICIA MILITAR',tipoCliente:'governo'}];

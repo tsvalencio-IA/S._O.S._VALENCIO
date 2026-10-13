@@ -2134,6 +2134,10 @@
       if (acordo.dataConfiavel && periodoContem(periodo,acordo.data)) return true;
       if (eventosRelacaoFuncionarioIA(os,func).some(ev=>periodoContem(periodo,ev?.dt||ev?.data||ev?.createdAt||ev?.ts))) return true;
       if (periodoContem(periodo,dataFinalizacaoConfiavelIA(os))) return true;
+      // O valor combinado pertence a viatura. Uma atividade datada na O.S. permite
+      // localiza-la no periodo sem atribuir os servicos individuais ao responsavel.
+      if ((Array.isArray(os?.servicos) ? os.servicos : []).some(s=>
+          periodoContem(periodo,dataLancamentoServicoIA(os,s,{estrito:true}).data))) return true;
       return false;
     }
     const atribuida = osAtribuidaFuncionario(os, func);
@@ -2422,7 +2426,10 @@
           ...servicos.registrados.map(s=>s?.data),
           ...(servicos.operacionais||[]).map(s=>s?.data),
           ...(periodoInformado&&periodoContem(periodo,dataFinalizacaoConfiavelIA(os))?[dataFinalizacaoConfiavelIA(os)]:[]),
-          ...(oficial?[responsabilidadeOficialFuncionarioIA(os,func)?.data]:[])
+          ...(oficial?[
+            responsabilidadeOficialFuncionarioIA(os,func)?.data,
+            ...(Array.isArray(os?.servicos) ? os.servicos : []).map(s=>dataLancamentoServicoIA(os,s,{estrito:true}).data)
+          ]:[])
         ].map(dataISO).filter(d=>d&&(!periodoInformado||periodoContem(periodo,d)));
         const data=datas.length?dataBR(datas.sort().at(-1)):(periodoInformado?'Sem data individual':dataBR(dataPrincipalOS(os))||'-');
         const km=os?.kmEntrada??os?.km??v?.kmEntrada??'';
