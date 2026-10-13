@@ -970,11 +970,10 @@
           if (!pecaReal) pecaReal = Object.assign({}, depoisItem, d, { nfId, nf: nfPayload.numero, nfNumero: nfPayload.numero, origem: 'nf_entrada', registradoEm: agora });
           if (typeof W.thiaNFMergePecasReais === 'function') plan.pecasReais = W.thiaNFMergePecasReais(plan.pecasReais, [pecaReal]);
           else plan.pecasReais.push(pecaReal);
-          // NF nao implica servico executado ou venda; excecao apenas com autorizacao persistida.
-            if (os.permitirNFNoOrcamento === true &&
-                !(typeof W.thiaNFOSClienteOficial === 'function' && W.thiaNFOSClienteOficial(os))) {
+          // NF editada em cliente comum: refletir no orçamento, sem restaurar itens excluídos.
+          if (!(typeof W.thiaNFOSClienteOficial === 'function' && W.thiaNFOSClienteOficial(os))) {
             const vis = typeof W.thiaNFPecaOrcamentoFromReal === 'function' ? W.thiaNFPecaOrcamentoFromReal(pecaReal) : null;
-            if (vis) {
+            if (vis && !(typeof W.thiaNFPecaOcultaNaOS === 'function' && W.thiaNFPecaOcultaNaOS(os, vis))) {
               if (typeof W.thiaNFMergePecasOrcamento === 'function') plan.pecas = W.thiaNFMergePecasOrcamento(plan.pecas, [vis]);
               else plan.pecas.push(vis);
             }
