@@ -7,10 +7,11 @@ const os = require('os');
 const path = require('path');
 const { fileURLToPath } = require('url');
 
-const smoke = process.argv.includes('--sos-smoke-test');
+const loginSmoke = process.argv.includes('--sos-smoke-login');
+const smoke = loginSmoke || process.argv.includes('--sos-smoke-test');
 const useGpu = process.argv.includes('--sos-enable-gpu');
 const appRoot = path.resolve(__dirname, '..');
-const startupTimeoutMs = smoke ? 25000 : 35000;
+const startupTimeoutMs = loginSmoke ? 65000 : (smoke ? 25000 : 35000);
 
 app.setName('S.O.S. VALENCIO TESTE');
 app.setPath('userData', path.join(app.getPath('appData'), 'SOS-VALENCIO-HOMOLOGACAO-PC'));
@@ -114,10 +115,33 @@ function createWindow() {
       "({title:document.title, cards:document.querySelectorAll('.profile-card').length, profiles:Array.from(document.querySelectorAll('.profile-name')).map(el=>el.textContent.trim())})"
     );
     if(info.cards!==5 || !info.title.includes('thIAguinho')) throw new Error('Perfis indisponíveis');
-    diagnostic('SMOKE_APROVADO','cinco perfis renderizados');
+    diagnostic('SMOKE_PERFIS_APROVADO','cinco perfis renderizados');
+    if (loginSmoke) {
+      // Validar a segunda tela do aplicativo REAL, com Firebase compat carregado,
+      // sem autenticar e sem ler/escrever documentos de produção.
+      diagnostic('LOGIN_CARREGANDO');
+      await win.loadFile(path.join(appRoot,'index.html'));
+      const login = await win.webContents.executeJavaScript(`({
+        form: !!document.getElementById('loginForm'),
+        user: !!document.getElementById('usr'),
+        pwd: !!document.getElementById('pwd'),
+        functionReady: typeof window.autenticar === 'function',
+        firebaseLoaded: !!window.firebase && typeof window.firebase.firestore === 'function' &&
+          typeof window.firebase.auth === 'function',
+        firebaseApps: window.firebase?.apps?.length || 0,
+        page: location.pathname
+      })`);
+      if (!login.form || !login.user || !login.pwd || !login.functionReady ||
+          !login.firebaseLoaded || !login.firebaseApps ||
+          !String(login.page).endsWith('/index.html')) {
+        throw new Error('Login ou Firebase nao carregou corretamente');
+      }
+      diagnostic('SMOKE_LOGIN_APROVADO','login e bibliotecas Firebase carregados');
+    }
+    diagnostic('SMOKE_APROVADO',loginSmoke ? 'cinco perfis e login validados' : 'cinco perfis renderizados');
     app.exit(0);
-  }).catch(()=>{
-    diagnostic('ERRO_ABERTURA_TELA');
+  }).catch((erro)=>{
+    diagnostic('ERRO_ABERTURA_TELA', String(erro?.message || erro || 'erro desconhecido').replace(/[\r\n]+/g,' ').slice(0,120));
     if (smoke) app.exit(25);
     else if(!win.isDestroyed()) {
       win.show();
