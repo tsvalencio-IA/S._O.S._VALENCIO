@@ -1,17 +1,10 @@
 /// <reference types="@capacitor/cli" />
 
 /**
- * thIAguinho ERP — Configuração do Capacitor para Android
- *
- * IMPORTANTE: o app aponta para o GitHub Pages.
- * Quando você atualizar o código no GitHub, o app já estará atualizado
- * (não precisa republicar APK toda vez que mexer no HTML/JS).
- *
- * Para fazer um app "offline-only" (sem GitHub Pages), troque:
- *   server: { url: 'https://...', cleartext: true }
- * por:
- *   webDir: 'www'
- *
+ * thIAguinho ERP — Android do S.O.S. Valêncio.
+ * Carrega a publicação HTTPS de homologação para conteúdo web atualizado.
+ * Mudanças nativas exigem novo APK; versões web dependem da publicação Pages.
+ * Preserva os plugins e a identidade Android já existentes.
  * Powered by thIAguinho Soluções Digitais
  */
 const config = {
