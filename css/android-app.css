@@ -1,11 +1,11 @@
 /*
- * S.O.S. VALÊNCIO · visual Android exclusivo · 26.25.5
+ * S.O.S. VALÊNCIO · visual unificado web e Android · 26.25.6
  * Estritamente cosmético: nenhuma estrutura, permissão ou ação é alterada.
- * Ativado apenas por js/theme.js quando aberto pelo APK Capacitor.
- * Desktop e navegador móvel comuns mantêm seus estilos originais.
+ * Ativado via js/theme.js no APK e nas páginas web aprovadas.
+ * Telas operacionais não incluídas no escopo mantêm seus estilos originais.
  */
-html.sos-android-app[data-theme="dark"] { --sos-gold:#f2be55; --sos-gold-2:#d69a25; --sos-blue:#237cf5; }
-html.sos-android-app[data-theme="dark"] {
+html.sos-premium-ui[data-theme="dark"] { --sos-gold:#f2be55; --sos-gold-2:#d69a25; --sos-blue:#237cf5; }
+html.sos-premium-ui[data-theme="dark"] {
   --bg:#050e1d; --bg-primary:#050e1d; --bg-secondary:#07182d;
   --surf:#0b1b32; --surf-0:#071628; --surf-1:#0c1d34; --surf-2:#102842; --surf-3:#183453;
   --border:rgba(107,169,230,.19); --border-med:rgba(126,185,246,.22); --border2:rgba(99,169,235,.30);
@@ -17,193 +17,193 @@ html.sos-android-app[data-theme="dark"] {
   --success:#25ce9c; --warn:#efb849;
   color-scheme:dark;
 }
-html.sos-android-app[data-theme="dark"] body {
+html.sos-premium-ui[data-theme="dark"] body {
   background-color:#051122;
   background-image:radial-gradient(ellipse at 85% 0%,rgba(28,91,176,.24),transparent 65%);
 }
-html.sos-android-app[data-theme="dark"] body::before {
+html.sos-premium-ui[data-theme="dark"] body::before {
   background-image:linear-gradient(rgba(76,151,230,.022) 1px,transparent 1px),
     linear-gradient(90deg,rgba(76,151,230,.022) 1px,transparent 1px);
   background-size:42px 42px;
 }
 /* Marca aprovada: sem alterar o texto do usuário, os cadastros ou os IDs. */
-html.sos-android-app[data-theme="dark"] .login-logo-wrap::before {
+html.sos-premium-ui[data-theme="dark"] .login-logo-wrap::before {
   content:"";display:block;width:min(51vw,182px);height:min(51vw,182px);
   margin:0 auto 6px;background:url('../assets/sos-valencio-android-icon.svg') center/contain no-repeat;
   filter:drop-shadow(0 16px 23px rgba(0,0,0,.55));
 }
-html.sos-android-app[data-theme="dark"] .login-logo-mark {display:none!important;}
-html.sos-android-app[data-theme="dark"] .brand-header .brand-logo {
+html.sos-premium-ui[data-theme="dark"] .login-logo-mark {display:none!important;}
+html.sos-premium-ui[data-theme="dark"] .brand-header .brand-logo {
   width:136px;height:136px;margin:0 auto 12px;border-radius:30px;
   border:1px solid rgba(246,198,96,.38);font-size:0;color:transparent;
   background:#062143 url('../assets/sos-valencio-android-icon.svg') center/cover no-repeat;
   box-shadow:0 13px 40px rgba(0,0,0,.40),0 0 0 4px rgba(242,190,85,.055);
 }
-html.sos-android-app[data-theme="dark"] .brand-header .brand-logo::after {display:none;}
-html.sos-android-app[data-theme="dark"] .brand-header .brand-title {color:#f6c45c;letter-spacing:1.5px;font-weight:900;}
-html.sos-android-app[data-theme="dark"] .brand-header .brand-subtitle {color:#bfd3ea;font-size:.72rem;letter-spacing:1px;}
-html.sos-android-app[data-theme="dark"] .container {max-width:520px;padding:22px 18px max(24px,env(safe-area-inset-bottom));}
-html.sos-android-app[data-theme="dark"] .brand-header {margin-bottom:24px;}
-html.sos-android-app[data-theme="dark"] .section-label {color:#efc77c;}
-html.sos-android-app[data-theme="dark"] .profile-grid {gap:11px;}
-html.sos-android-app[data-theme="dark"] .profile-card {
+html.sos-premium-ui[data-theme="dark"] .brand-header .brand-logo::after {display:none;}
+html.sos-premium-ui[data-theme="dark"] .brand-header .brand-title {color:#f6c45c;letter-spacing:1.5px;font-weight:900;}
+html.sos-premium-ui[data-theme="dark"] .brand-header .brand-subtitle {color:#bfd3ea;font-size:.72rem;letter-spacing:1px;}
+html.sos-premium-ui[data-theme="dark"] .container {max-width:520px;padding:22px 18px max(24px,env(safe-area-inset-bottom));}
+html.sos-premium-ui[data-theme="dark"] .brand-header {margin-bottom:24px;}
+html.sos-premium-ui[data-theme="dark"] .section-label {color:#efc77c;}
+html.sos-premium-ui[data-theme="dark"] .profile-grid {gap:11px;}
+html.sos-premium-ui[data-theme="dark"] .profile-card {
   background:linear-gradient(145deg,rgba(19,48,82,.95),rgba(8,27,51,.98));
   border:1px solid rgba(105,170,234,.22);
   border-radius:17px;padding:16px 15px;gap:13px;
   box-shadow:0 7px 23px rgba(0,0,0,.17);
 }
-html.sos-android-app[data-theme="dark"] .profile-card::before {background:#eab44d;width:3px;}
-html.sos-android-app[data-theme="dark"] .profile-name {color:#f8fbff;font-size:1.09rem;}
-html.sos-android-app[data-theme="dark"] .profile-desc {color:#aec4dd;line-height:1.42;}
-html.sos-android-app[data-theme="dark"] .profile-arrow {color:#efc062;}
-html.sos-android-app[data-theme="dark"] .profile-icon {
+html.sos-premium-ui[data-theme="dark"] .profile-card::before {background:#eab44d;width:3px;}
+html.sos-premium-ui[data-theme="dark"] .profile-name {color:#f8fbff;font-size:1.09rem;}
+html.sos-premium-ui[data-theme="dark"] .profile-desc {color:#aec4dd;line-height:1.42;}
+html.sos-premium-ui[data-theme="dark"] .profile-arrow {color:#efc062;}
+html.sos-premium-ui[data-theme="dark"] .profile-icon {
   background:rgba(41,106,171,.17);border-color:rgba(106,168,238,.21);
   border-radius:13px;
 }
 /* Login real: os campos, LGPD, lembrança de sessão e eventos permanecem intactos. */
-html.sos-android-app[data-theme="dark"] .login-page {
+html.sos-premium-ui[data-theme="dark"] .login-page {
   align-items:center;justify-content:center;
   padding:22px 16px max(40px,env(safe-area-inset-bottom));
   background:
     radial-gradient(ellipse at 51% 10%,rgba(29,96,175,.38),transparent 57%),
     linear-gradient(160deg,#081a32 0%,#051020 65%,#020914 100%);
 }
-html.sos-android-app[data-theme="dark"] .login-card {
+html.sos-premium-ui[data-theme="dark"] .login-card {
   max-width:435px;padding:24px 22px 27px;
   border:1px solid rgba(245,193,87,.24);
   border-radius:22px;
   background:linear-gradient(165deg,rgba(13,38,72,.96),rgba(5,19,38,.98));
   box-shadow:0 20px 75px rgba(0,0,0,.45),0 0 38px rgba(28,92,185,.12);
 }
-html.sos-android-app[data-theme="dark"] .login-card::before {
+html.sos-premium-ui[data-theme="dark"] .login-card::before {
   left:17%;right:17%;height:2px;
   background:linear-gradient(90deg,transparent,#f4c65e,transparent);
 }
-html.sos-android-app[data-theme="dark"] .login-logo-wrap {margin-bottom:20px;}
-html.sos-android-app[data-theme="dark"] .login-title {color:#f0c469;letter-spacing:1px;text-align:center;font-weight:900;}
-html.sos-android-app[data-theme="dark"] .login-sub {color:#bdd0e6;text-align:center;}
-html.sos-android-app[data-theme="dark"] .login-page .input {
+html.sos-premium-ui[data-theme="dark"] .login-logo-wrap {margin-bottom:20px;}
+html.sos-premium-ui[data-theme="dark"] .login-title {color:#f0c469;letter-spacing:1px;text-align:center;font-weight:900;}
+html.sos-premium-ui[data-theme="dark"] .login-sub {color:#bdd0e6;text-align:center;}
+html.sos-premium-ui[data-theme="dark"] .login-page .input {
   background:#09213f;border-color:rgba(110,172,237,.28);
   border-radius:11px;min-height:48px;color:#f3f8ff;
 }
-html.sos-android-app[data-theme="dark"] .login-page .input:focus {
+html.sos-premium-ui[data-theme="dark"] .login-page .input:focus {
   border-color:#e7b957;box-shadow:0 0 0 3px rgba(235,183,72,.11);
 }
-html.sos-android-app[data-theme="dark"] .login-page .form-label {color:#c6d6ea;}
-html.sos-android-app[data-theme="dark"] .login-page .btn-brand,
-html.sos-android-app[data-theme="dark"] .login-page #btnLogin {
+html.sos-premium-ui[data-theme="dark"] .login-page .form-label {color:#c6d6ea;}
+html.sos-premium-ui[data-theme="dark"] .login-page .btn-brand,
+html.sos-premium-ui[data-theme="dark"] .login-page #btnLogin {
   min-height:49px;border-radius:11px;border:0;
   background:linear-gradient(110deg,#f5d27a,#efb545 57%,#ca861f);
   color:#102039;font-weight:900;box-shadow:0 8px 22px rgba(194,130,23,.23);
 }
-html.sos-android-app[data-theme="dark"] .login-page .remember-row label {color:#a6bdd5;}
+html.sos-premium-ui[data-theme="dark"] .login-page .remember-row label {color:#a6bdd5;}
 /* Painel real (mesmos dados, sem KPIs ou atalhos fictícios). */
-html.sos-android-app[data-theme="dark"] .sidebar {
+html.sos-premium-ui[data-theme="dark"] .sidebar {
   background:linear-gradient(180deg,#0d2542,#06162b 74%);
   border-right:1px solid rgba(239,188,84,.16);
 }
-html.sos-android-app[data-theme="dark"] .sb-logo {padding:17px 14px;border-bottom-color:rgba(239,188,84,.15);}
-html.sos-android-app[data-theme="dark"] .sb-logo .logo-mark {
+html.sos-premium-ui[data-theme="dark"] .sb-logo {padding:17px 14px;border-bottom-color:rgba(239,188,84,.15);}
+html.sos-premium-ui[data-theme="dark"] .sb-logo .logo-mark {
   flex-shrink:0;width:47px;height:47px;border:0;border-radius:12px;
   background:url('../assets/sos-valencio-android-icon.svg') center/cover no-repeat;
   box-shadow:0 3px 11px rgba(0,0,0,.22);
 }
-html.sos-android-app[data-theme="dark"] .sb-logo .logo-mark::before,
-html.sos-android-app[data-theme="dark"] .sb-logo .logo-mark::after {display:none;}
-html.sos-android-app[data-theme="dark"] .sb-logo-text {font-size:.89rem;letter-spacing:1.25px;line-height:1.25;color:#f5c466;}
-html.sos-android-app[data-theme="dark"] .sb-logo-text small {color:#acc7e2;}
-html.sos-android-app[data-theme="dark"] .nav-section-label {color:#edbc61;letter-spacing:1.6px;}
-html.sos-android-app[data-theme="dark"] .nav-item {border-radius:10px;border-left-width:0;min-height:42px;}
-html.sos-android-app[data-theme="dark"] .nav-item.active {
+html.sos-premium-ui[data-theme="dark"] .sb-logo .logo-mark::before,
+html.sos-premium-ui[data-theme="dark"] .sb-logo .logo-mark::after {display:none;}
+html.sos-premium-ui[data-theme="dark"] .sb-logo-text {font-size:.89rem;letter-spacing:1.25px;line-height:1.25;color:#f5c466;}
+html.sos-premium-ui[data-theme="dark"] .sb-logo-text small {color:#acc7e2;}
+html.sos-premium-ui[data-theme="dark"] .nav-section-label {color:#edbc61;letter-spacing:1.6px;}
+html.sos-premium-ui[data-theme="dark"] .nav-item {border-radius:10px;border-left-width:0;min-height:42px;}
+html.sos-premium-ui[data-theme="dark"] .nav-item.active {
   background:linear-gradient(90deg,rgba(38,116,218,.4),rgba(23,81,151,.15));
   color:#eff8ff;box-shadow:inset 3px 0 #e9b85c;
 }
-html.sos-android-app[data-theme="dark"] .nav-item svg {fill:#87baf1;}
-html.sos-android-app[data-theme="dark"] .sb-user {border-top-color:rgba(233,184,92,.22);}
-html.sos-android-app[data-theme="dark"] .avatar {border-radius:11px;background:#143d67;color:#fff;}
-html.sos-android-app[data-theme="dark"] .user-name {color:#f8fbff;}
-html.sos-android-app[data-theme="dark"] .user-role {color:#efc56b;}
-html.sos-android-app[data-theme="dark"] .topbar {
+html.sos-premium-ui[data-theme="dark"] .nav-item svg {fill:#87baf1;}
+html.sos-premium-ui[data-theme="dark"] .sb-user {border-top-color:rgba(233,184,92,.22);}
+html.sos-premium-ui[data-theme="dark"] .avatar {border-radius:11px;background:#143d67;color:#fff;}
+html.sos-premium-ui[data-theme="dark"] .user-name {color:#f8fbff;}
+html.sos-premium-ui[data-theme="dark"] .user-role {color:#efc56b;}
+html.sos-premium-ui[data-theme="dark"] .topbar {
   background:linear-gradient(100deg,#0b2544,#081b35);
   border-bottom:1px solid rgba(244,196,96,.18);
 }
-html.sos-android-app[data-theme="dark"] .page-title {color:#fff;}
-html.sos-android-app[data-theme="dark"] .page-title span {color:#e9bd64;}
-html.sos-android-app[data-theme="dark"] .topbar-badge {background:#0e3154;border:1px solid rgba(89,146,208,.25);border-radius:8px;}
-html.sos-android-app[data-theme="dark"] .j-card,
-html.sos-android-app[data-theme="dark"] .kpi-card {
+html.sos-premium-ui[data-theme="dark"] .page-title {color:#fff;}
+html.sos-premium-ui[data-theme="dark"] .page-title span {color:#e9bd64;}
+html.sos-premium-ui[data-theme="dark"] .topbar-badge {background:#0e3154;border:1px solid rgba(89,146,208,.25);border-radius:8px;}
+html.sos-premium-ui[data-theme="dark"] .j-card,
+html.sos-premium-ui[data-theme="dark"] .kpi-card {
   background:linear-gradient(160deg,#112b4b,#0b1d35);
   border-color:rgba(99,168,237,.2);border-radius:14px;
   box-shadow:0 9px 22px rgba(0,0,0,.17);
 }
-html.sos-android-app[data-theme="dark"] .j-card-header {border-bottom-color:rgba(117,179,243,.13);}
-html.sos-android-app[data-theme="dark"] .j-card-title {color:#f5f9ff;font-weight:800;}
-html.sos-android-app[data-theme="dark"] .kpi-grid {gap:10px;}
-html.sos-android-app[data-theme="dark"] .kpi-card {padding:15px 12px;min-height:116px;}
-html.sos-android-app[data-theme="dark"] .kpi-value {color:#fff!important;font-size:1.8rem;}
-html.sos-android-app[data-theme="dark"] .kpi-label {color:#c2d3e9;font-size:.6rem;letter-spacing:.7px;}
-html.sos-android-app[data-theme="dark"] .kpi-sub {color:#94b1d0;font-size:.6rem;}
-html.sos-android-app[data-theme="dark"] .kpi-card.c-cyan {border-color:rgba(45,127,250,.45);background:linear-gradient(148deg,#175db4,#0b315d);}
-html.sos-android-app[data-theme="dark"] .kpi-card.c-success {border-color:rgba(35,206,147,.32);background:linear-gradient(148deg,#125e57,#092e37);}
-html.sos-android-app[data-theme="dark"] .kpi-card.c-warn {border-color:rgba(243,173,65,.38);background:linear-gradient(148deg,#815018,#3e2d21);}
-html.sos-android-app[data-theme="dark"] .kpi-card.c-danger {border-color:rgba(214,94,158,.42);background:linear-gradient(148deg,#68326a,#302347);}
-html.sos-android-app[data-theme="dark"] .kpi-card::after {height:3px;opacity:.8;}
-html.sos-android-app[data-theme="dark"] .j-input,
-html.sos-android-app[data-theme="dark"] .j-select,
-html.sos-android-app[data-theme="dark"] .j-textarea {background:#09213c;border-color:rgba(111,164,225,.25);border-radius:10px;}
-html.sos-android-app[data-theme="dark"] .btn-primary {background:#277fe8;color:#fff;border-radius:9px;font-weight:800;}
-html.sos-android-app[data-theme="dark"] .btn-outline {color:#bfe0ff;border-color:rgba(91,159,230,.38);border-radius:9px;}
-html.sos-android-app[data-theme="dark"] .btn-warn {border-color:rgba(240,193,95,.38);border-radius:9px;color:#f1c975;}
-html.sos-android-app[data-theme="dark"] .btn-ghost {border-radius:9px;}
-html.sos-android-app[data-theme="dark"] .j-table thead {background:#102a49;}
-html.sos-android-app[data-theme="dark"] .j-table th {color:#bcd1ea;}
-html.sos-android-app[data-theme="dark"] .modal {border-radius:15px;border-color:rgba(127,176,220,.25);}
-html.sos-android-app[data-theme="dark"] .modal-head {border-radius:15px 15px 0 0;}
+html.sos-premium-ui[data-theme="dark"] .j-card-header {border-bottom-color:rgba(117,179,243,.13);}
+html.sos-premium-ui[data-theme="dark"] .j-card-title {color:#f5f9ff;font-weight:800;}
+html.sos-premium-ui[data-theme="dark"] .kpi-grid {gap:10px;}
+html.sos-premium-ui[data-theme="dark"] .kpi-card {padding:15px 12px;min-height:116px;}
+html.sos-premium-ui[data-theme="dark"] .kpi-value {color:#fff!important;font-size:1.8rem;}
+html.sos-premium-ui[data-theme="dark"] .kpi-label {color:#c2d3e9;font-size:.6rem;letter-spacing:.7px;}
+html.sos-premium-ui[data-theme="dark"] .kpi-sub {color:#94b1d0;font-size:.6rem;}
+html.sos-premium-ui[data-theme="dark"] .kpi-card.c-cyan {border-color:rgba(45,127,250,.45);background:linear-gradient(148deg,#175db4,#0b315d);}
+html.sos-premium-ui[data-theme="dark"] .kpi-card.c-success {border-color:rgba(35,206,147,.32);background:linear-gradient(148deg,#125e57,#092e37);}
+html.sos-premium-ui[data-theme="dark"] .kpi-card.c-warn {border-color:rgba(243,173,65,.38);background:linear-gradient(148deg,#815018,#3e2d21);}
+html.sos-premium-ui[data-theme="dark"] .kpi-card.c-danger {border-color:rgba(214,94,158,.42);background:linear-gradient(148deg,#68326a,#302347);}
+html.sos-premium-ui[data-theme="dark"] .kpi-card::after {height:3px;opacity:.8;}
+html.sos-premium-ui[data-theme="dark"] .j-input,
+html.sos-premium-ui[data-theme="dark"] .j-select,
+html.sos-premium-ui[data-theme="dark"] .j-textarea {background:#09213c;border-color:rgba(111,164,225,.25);border-radius:10px;}
+html.sos-premium-ui[data-theme="dark"] .btn-primary {background:#277fe8;color:#fff;border-radius:9px;font-weight:800;}
+html.sos-premium-ui[data-theme="dark"] .btn-outline {color:#bfe0ff;border-color:rgba(91,159,230,.38);border-radius:9px;}
+html.sos-premium-ui[data-theme="dark"] .btn-warn {border-color:rgba(240,193,95,.38);border-radius:9px;color:#f1c975;}
+html.sos-premium-ui[data-theme="dark"] .btn-ghost {border-radius:9px;}
+html.sos-premium-ui[data-theme="dark"] .j-table thead {background:#102a49;}
+html.sos-premium-ui[data-theme="dark"] .j-table th {color:#bcd1ea;}
+html.sos-premium-ui[data-theme="dark"] .modal {border-radius:15px;border-color:rgba(127,176,220,.25);}
+html.sos-premium-ui[data-theme="dark"] .modal-head {border-radius:15px 15px 0 0;}
 /* A IA mantém o chat verdadeiro; os exemplos do mockup não viram botões falsos. */
-html.sos-android-app[data-theme="dark"] #s-ia>.j-card {border-radius:15px;}
-html.sos-android-app[data-theme="dark"] #s-ia .j-card-header {align-items:flex-start;}
-html.sos-android-app[data-theme="dark"] #s-ia .j-card-title {
+html.sos-premium-ui[data-theme="dark"] #s-ia>.j-card {border-radius:15px;}
+html.sos-premium-ui[data-theme="dark"] #s-ia .j-card-header {align-items:flex-start;}
+html.sos-premium-ui[data-theme="dark"] #s-ia .j-card-title {
   font-family:var(--ff,'Exo 2',sans-serif);
   font-size:1rem;letter-spacing:.35px;color:#f0c26a!important;
 }
-html.sos-android-app[data-theme="dark"] #s-ia #thiaIaLocalStatus {background:rgba(10,42,74,.85)!important;}
-html.sos-android-app[data-theme="dark"] #s-ia .ia-box {background:linear-gradient(160deg,#0c213e,#09192f);}
-html.sos-android-app[data-theme="dark"] #s-ia .ia-messages {background:transparent;}
-html.sos-android-app[data-theme="dark"] #s-ia .ia-msg {border-radius:13px;line-height:1.55;max-width:100%;}
-html.sos-android-app[data-theme="dark"] #s-ia .ia-msg.bot {
+html.sos-premium-ui[data-theme="dark"] #s-ia #thiaIaLocalStatus {background:rgba(10,42,74,.85)!important;}
+html.sos-premium-ui[data-theme="dark"] #s-ia .ia-box {background:linear-gradient(160deg,#0c213e,#09192f);}
+html.sos-premium-ui[data-theme="dark"] #s-ia .ia-messages {background:transparent;}
+html.sos-premium-ui[data-theme="dark"] #s-ia .ia-msg {border-radius:13px;line-height:1.55;max-width:100%;}
+html.sos-premium-ui[data-theme="dark"] #s-ia .ia-msg.bot {
   background:linear-gradient(145deg,#132f51,#0d2441);
   border:1px solid rgba(102,166,233,.25);
   padding:13px 14px;
 }
-html.sos-android-app[data-theme="dark"] #s-ia .ia-msg.bot strong {color:#80bfff;}
-html.sos-android-app[data-theme="dark"] #s-ia .ia-input-area {
+html.sos-premium-ui[data-theme="dark"] #s-ia .ia-msg.bot strong {color:#80bfff;}
+html.sos-premium-ui[data-theme="dark"] #s-ia .ia-input-area {
   background:rgba(5,17,34,.7);border-top:1px solid rgba(108,169,234,.16);gap:8px;
 }
-html.sos-android-app[data-theme="dark"] #s-ia #iaInput {min-height:47px;border-radius:10px;min-width:0;}
-html.sos-android-app[data-theme="dark"] #s-ia .ia-input-area .btn-primary {min-height:47px;}
+html.sos-premium-ui[data-theme="dark"] #s-ia #iaInput {min-height:47px;border-radius:10px;min-width:0;}
+html.sos-premium-ui[data-theme="dark"] #s-ia .ia-input-area .btn-primary {min-height:47px;}
 /* Ajustes em telefones sem comprometer os controles dos formulários. */
 @media(max-width:768px){
-  html.sos-android-app[data-theme="dark"] .sidebar {width:min(85vw,310px);}
-  html.sos-android-app[data-theme="dark"] .sidebar.open {transform:translateX(0);}
-  html.sos-android-app[data-theme="dark"] .topbar {padding:13px 12px 13px 64px;min-height:72px;}
-  html.sos-android-app[data-theme="dark"] .page-title {font-size:1.15rem;letter-spacing:.8px;}
-  html.sos-android-app[data-theme="dark"] .page-title span {font-size:.55rem;letter-spacing:1px;}
-  html.sos-android-app[data-theme="dark"] .topbar-actions {gap:6px;}
-  html.sos-android-app[data-theme="dark"] .topbar-badge {padding:4px 6px;font-size:.56rem;letter-spacing:0;}
-  html.sos-android-app[data-theme="dark"] .content {padding:12px 11px max(20px,env(safe-area-inset-bottom));}
-  html.sos-android-app[data-theme="dark"] .kpi-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
-  html.sos-android-app[data-theme="dark"] .kpi-card {min-height:118px;}
-  html.sos-android-app[data-theme="dark"] .j-card-header {padding:12px;}
-  html.sos-android-app[data-theme="dark"] .j-card-body {padding:12px;}
-  html.sos-android-app[data-theme="dark"] #s-ia .ia-input-area {display:flex;flex-wrap:wrap;}
-  html.sos-android-app[data-theme="dark"] #s-ia #iaInput {flex-basis:100%!important;}
-  html.sos-android-app[data-theme="dark"] #s-ia .ia-input-area .btn-primary {width:100%;justify-content:center;}
+  html.sos-premium-ui[data-theme="dark"] .sidebar {width:min(85vw,310px);}
+  html.sos-premium-ui[data-theme="dark"] .sidebar.open {transform:translateX(0);}
+  html.sos-premium-ui[data-theme="dark"] .topbar {padding:13px 12px 13px 64px;min-height:72px;}
+  html.sos-premium-ui[data-theme="dark"] .page-title {font-size:1.15rem;letter-spacing:.8px;}
+  html.sos-premium-ui[data-theme="dark"] .page-title span {font-size:.55rem;letter-spacing:1px;}
+  html.sos-premium-ui[data-theme="dark"] .topbar-actions {gap:6px;}
+  html.sos-premium-ui[data-theme="dark"] .topbar-badge {padding:4px 6px;font-size:.56rem;letter-spacing:0;}
+  html.sos-premium-ui[data-theme="dark"] .content {padding:12px 11px max(20px,env(safe-area-inset-bottom));}
+  html.sos-premium-ui[data-theme="dark"] .kpi-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+  html.sos-premium-ui[data-theme="dark"] .kpi-card {min-height:118px;}
+  html.sos-premium-ui[data-theme="dark"] .j-card-header {padding:12px;}
+  html.sos-premium-ui[data-theme="dark"] .j-card-body {padding:12px;}
+  html.sos-premium-ui[data-theme="dark"] #s-ia .ia-input-area {display:flex;flex-wrap:wrap;}
+  html.sos-premium-ui[data-theme="dark"] #s-ia #iaInput {flex-basis:100%!important;}
+  html.sos-premium-ui[data-theme="dark"] #s-ia .ia-input-area .btn-primary {width:100%;justify-content:center;}
 }
 @media(max-width:360px){
-  html.sos-android-app[data-theme="dark"] .kpi-value {font-size:1.45rem;}
-  html.sos-android-app[data-theme="dark"] .topbar-badge:first-child {display:none;}
-  html.sos-android-app[data-theme="dark"] .login-card {padding:22px 16px;}
+  html.sos-premium-ui[data-theme="dark"] .kpi-value {font-size:1.45rem;}
+  html.sos-premium-ui[data-theme="dark"] .topbar-badge:first-child {display:none;}
+  html.sos-premium-ui[data-theme="dark"] .login-card {padding:22px 16px;}
 }
 @media(prefers-reduced-motion:reduce){
-  html.sos-android-app[data-theme="dark"] .profile-card {animation:none!important;}
+  html.sos-premium-ui[data-theme="dark"] .profile-card {animation:none!important;}
 }
