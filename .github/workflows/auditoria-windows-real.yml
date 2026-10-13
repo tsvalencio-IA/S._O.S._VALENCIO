@@ -1,4 +1,5 @@
 name: Windows - Auditoria de Execucao Real
+# Inclui leitura do modelo XLSX via IPC mínimo, sem fetch(file://).
 on:
   push:
     branches: [main]
@@ -24,6 +25,8 @@ jobs:
           node --check electron/main.js
           node --check electron/preload.js
           node --check js/os.js
+          node --check js/exportar-pmsp.js
+          node TESTES_WINDOWS_TEMPLATE_PMSP.js
           node TESTES_REGRESSAO_SOS_VALENCIO.js
           node TESTES_IA_PERIODOS_E_FLUXOS_20261010.js
           node TESTES_PERMISSOES_20261010.js
