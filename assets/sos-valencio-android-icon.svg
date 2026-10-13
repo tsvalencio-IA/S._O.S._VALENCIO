@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs>
+<radialGradient id="bg" cx="48%" cy="20%" r="94%"><stop stop-color="#074c8d"/><stop offset=".48" stop-color="#05213d"/><stop offset="1" stop-color="#020917"/></radialGradient>
+<linearGradient id="gold" x1="0" x2=".75" y2="1"><stop stop-color="#fff0a2"/><stop offset=".4" stop-color="#ffc950"/><stop offset=".9" stop-color="#c48210"/></linearGradient>
+<linearGradient id="silver" x1="0" y1="0" x2=".3" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#d3eaff"/></linearGradient>
+<linearGradient id="border" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e5bb61"/><stop offset=".32" stop-color="#51c3ff"/><stop offset=".66" stop-color="#0b5599"/><stop offset="1" stop-color="#d6a444"/></linearGradient>
+</defs>
+<rect x="9" y="9" width="1006" height="1006" rx="165" fill="url(#border)"/>
+<rect x="24" y="24" width="976" height="976" rx="149" fill="url(#bg)"/>
+<path d="M99 116 Q146 45 271 43 L760 43 Q858 45 917 110" fill="none" stroke="#25a7fc" stroke-opacity=".34" stroke-width="8"/>
+<g transform="translate(672 330)"><rect x="-32" y="-222" width="64" height="102" rx="13" transform="rotate(0)" fill="url(#gold)"/>
+<rect x="-32" y="-222" width="64" height="102" rx="13" transform="rotate(30)" fill="url(#gold)"/>
+<rect x="-32" y="-222" width="64" height="102" rx="13" transform="rotate(60)" fill="url(#gold)"/>
+<rect x="-32" y="-222" width="64" height="102" rx="13" transform="rotate(90)" fill="url(#gold)"/>
+<rect x="-32" y="-222" width="64" height="102" rx="13" transform="rotate(120)" fill="url(#gold)"/>
+<rect x="-32" y="-222" width="64" height="102" rx="13" transform="rotate(150)" fill="url(#gold)"/>
+<rect x="-32" y="-222" width="64" height="102" rx="13" transform="rotate(180)" fill="url(#gold)"/>
+<rect x="-32" y="-222" width="64" height="102" rx="13" transform="rotate(210)" fill="url(#gold)"/>
+<rect x="-32" y="-222" width="64" height="102" rx="13" transform="rotate(240)" fill="url(#gold)"/>
+<rect x="-32" y="-222" width="64" height="102" rx="13" transform="rotate(270)" fill="url(#gold)"/>
+<rect x="-32" y="-222" width="64" height="102" rx="13" transform="rotate(300)" fill="url(#gold)"/>
+<rect x="-32" y="-222" width="64" height="102" rx="13" transform="rotate(330)" fill="url(#gold)"/><circle r="172" fill="url(#gold)"/><circle r="106" fill="#071d37"/></g>
+<path d="M73 517 Q490 489 944 517" stroke="#e9aa20" stroke-width="5" fill="none"/>
+<g>
+<path d="M131 319 Q153 295 211 286 L265 212 Q284 181 346 177 L489 177 Q557 181 574 212 L624 286 Q689 296 710 323 L711 429 Q704 454 670 460 L174 460 Q126 455 125 413 Z" fill="url(#silver)" stroke="#e5f1ff" stroke-width="9" stroke-linejoin="round"/>
+<path d="M267 279 L309 213 Q316 201 358 198 L478 198 Q515 200 532 215 L571 279 Z" fill="#04182f" stroke="#d2e6f5" stroke-width="9"/>
+<path d="M163 329 L272 356 278 391 201 384 Q171 373 163 329Z M608 354 L684 328 Q675 374 647 385 L575 391 Z" fill="#08213a"/>
+<path d="M314 361 Q426 389 531 358 L516 414 Q423 455 332 411Z" fill="#09243f"/>
+<rect x="173" y="439" width="109" height="47" rx="16" fill="#f7f9ff"/>
+<rect x="559" y="439" width="109" height="47" rx="16" fill="#f7f9ff"/>
+</g>
+<g transform="translate(696 400) rotate(-44)"><path d="M-25 -9 L-25 -96 C-77 -125 -82 -197 -47 -238 L-25 -198 L23 -198 L44 -238 C84 -198 77 -127 25 -95 L25 0 C25 27 8 46 0 47 C-12 47 -25 29 -25 0 Z" fill="#e3edfc" stroke="#bdcfe3" stroke-width="5"/></g>
+<text x="512" y="675" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="168" font-weight="900" fill="#000d20" stroke="#000c1c" stroke-width="12">S.O.S.</text>
+<text x="512" y="664" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="168" font-weight="900" fill="#ffffff">S.O.S.</text>
+<text x="512" y="814" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="119" font-weight="900" fill="url(#gold)" stroke="#c78a1e" stroke-width="2">VALÊNCIO</text>
+<line x1="115" y1="871" x2="905" y2="871" stroke="#d7a735" stroke-width="5"/>
+<text x="512" y="933" text-anchor="middle" letter-spacing="9" font-family="DejaVu Sans,Arial,sans-serif" font-size="33" font-weight="600" fill="#d8e6f8">GESTÃO AUTOMOTIVA</text>
+</svg>
