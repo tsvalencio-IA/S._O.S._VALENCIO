@@ -6,11 +6,21 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#060A14",
-  "theme_color": "#00D4FF",
+  "background_color": "#050e1d",
+  "theme_color": "#0b2544",
   "lang": "pt-BR",
-  "categories": ["productivity", "automotive", "business"],
+  "categories": [
+    "productivity",
+    "automotive",
+    "business"
+  ],
   "icons": [
+    {
+      "src": "assets/sos-valencio-android-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
     {
       "src": "assets/icon-192.png",
       "sizes": "192x192",
