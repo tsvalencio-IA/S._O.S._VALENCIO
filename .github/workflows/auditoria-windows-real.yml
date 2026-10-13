@@ -1,0 +1,103 @@
+name: Windows - Auditoria de Execucao Real
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/auditoria-windows-real.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  testar-windows:
+    runs-on: windows-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: homologacao
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Sintaxe e regressao
+        shell: pwsh
+        run: |
+          node --check electron/main.js
+          node --check electron/preload.js
+          node --check js/os.js
+          node TESTES_REGRESSAO_SOS_VALENCIO.js
+          node TESTES_IA_PERIODOS_E_FLUXOS_20261010.js
+          node TESTES_PERMISSOES_20261010.js
+          node TESTES_FOTOS_OS_PDF_XLSX_20261012.js
+          if ((Get-Content electron/main.js -Raw) -notmatch 'SOS-VALENCIO-HOMOLOGACAO-PC') { throw 'Dados locais sem isolamento' }
+      - name: Instalar dependencias e empacotar EXE com ASAR
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'npm install falhou' }
+          npx electron-builder --win dir --x64 --publish never --config.appId=br.com.thiaguinho.sosvalencio.homologacao.pc --config.productName=SOS-VALENCIO-TESTE-PC --config.asar=true --config.directories.output=dist-windows-auditoria
+          if ($LASTEXITCODE -ne 0) { throw 'Empacotamento Windows falhou' }
+          if (-not (Test-Path 'dist-windows-auditoria/win-unpacked/resources/app.asar')) { throw 'ASAR ausente' }
+      - name: Testar abertura real da tela e cinco perfis
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $exe = (Get-ChildItem 'dist-windows-auditoria/win-unpacked' -Filter '*.exe' -File | Select-Object -First 1).FullName
+          if (-not $exe) { throw 'EXE ausente' }
+          $p = Start-Process -FilePath $exe -ArgumentList '--sos-smoke-test' -PassThru
+          if (-not $p.WaitForExit(90000)) { taskkill.exe /T /F /PID $p.Id | Out-Null; throw 'EXE sem resposta' }
+          $code = $p.ExitCode
+          $log = Join-Path $env:APPDATA 'SOS-VALENCIO-HOMOLOGACAO-PC/diagnostico-inicializacao.log'
+          if (Test-Path $log) { Get-Content $log | Select-Object -Last 15 }
+          if ($code -ne 0) { throw "EXE falhou: $code" }
+          if (-not (Test-Path $log)) { throw 'Log de inicializacao ausente' }
+          if ((Get-Content $log -Raw) -notmatch 'SMOKE_APROVADO') { throw 'Janela e cinco perfis nao validados' }
+      - name: Testar abertura normal e memoria
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $exe=(Get-ChildItem 'dist-windows-auditoria/win-unpacked' -Filter '*.exe' -File | Select-Object -First 1).FullName
+          $p=Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 12
+          $p.Refresh()
+          if ($p.HasExited) { throw "App fechou inesperadamente: $($p.ExitCode)" }
+          Write-Host "Processo ativo apos 12s, memoria do principal: $([Math]::Round($p.WorkingSet64/1MB,1)) MB"
+          if ($p.WorkingSet64 -gt 1073741824) { throw 'Mais de 1GB no processo principal' }
+          taskkill.exe /T /F /PID $p.Id | Out-Null
+      - name: Gerar instalador verdadeiro NSIS sem conflitar com producao
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npx electron-builder --win nsis --x64 --publish never --config.appId=br.com.thiaguinho.sosvalencio.homologacao.pc --config.productName=SOS-VALENCIO-TESTE-PC --config.asar=true --config.directories.output=dist-windows-auditoria --config.win.artifactName=SOS-VALENCIO-TESTE-WINDOWS-INSTALADOR-1.0.26-12-x64.exe --config.nsis.oneClick=false --config.nsis.perMachine=false --config.nsis.allowToChangeInstallationDirectory=true --config.nsis.createDesktopShortcut=false
+          if ($LASTEXITCODE -ne 0) { throw 'Build NSIS falhou' }
+          if (-not (Test-Path 'dist-windows-auditoria/SOS-VALENCIO-TESTE-WINDOWS-INSTALADOR-1.0.26-12-x64.exe')) { throw 'Instalador ausente' }
+      - name: Testar instalacao NSIS e executavel instalado
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $installer=(Resolve-Path 'dist-windows-auditoria/SOS-VALENCIO-TESTE-WINDOWS-INSTALADOR-1.0.26-12-x64.exe').Path
+          $dest=Join-Path $env:RUNNER_TEMP 'SOSVALENCIO-PC-TESTE-INSTALADO'
+          $p=Start-Process -FilePath $installer -ArgumentList @('/S',"/D=$dest") -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Instalacao falhou: $($p.ExitCode)" }
+          $installed=Get-ChildItem $dest -File -Filter '*.exe' | Where-Object { $_.Name -notmatch '^unins' } | Select-Object -First 1
+          if (-not $installed) { throw 'Arquivo nao instalado' }
+          $test=Start-Process -FilePath $installed.FullName -ArgumentList '--sos-smoke-test' -PassThru
+          if (-not $test.WaitForExit(90000)) { taskkill.exe /T /F /PID $test.Id | Out-Null; throw 'Instalado sem resposta' }
+          if ($test.ExitCode -ne 0) { throw "App instalado nao abriu: $($test.ExitCode)" }
+          Write-Host 'NSIS instalou e aplicativo abriu os cinco perfis: APROVADO'
+      - name: Empacotar versao sem instalacao para contingencia
+        shell: pwsh
+        run: |
+          Compress-Archive -Path 'dist-windows-auditoria/win-unpacked/*' -DestinationPath 'dist-windows-auditoria/SOS-VALENCIO-WINDOWS-PASTA-PORTATIL-X64.zip' -CompressionLevel Optimal -Force
+          if (-not (Test-Path 'dist-windows-auditoria/SOS-VALENCIO-WINDOWS-PASTA-PORTATIL-X64.zip')) { throw 'ZIP ausente' }
+      - name: Publicar apenas apos todos os testes de execucao
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $sha=git rev-parse HEAD
+          $tag="windows-auditado-$env:GITHUB_RUN_NUMBER"
+          gh release create $tag 'dist-windows-auditoria/SOS-VALENCIO-TESTE-WINDOWS-INSTALADOR-1.0.26-12-x64.exe' 'dist-windows-auditoria/SOS-VALENCIO-WINDOWS-PASTA-PORTATIL-X64.zip' --repo $env:GITHUB_REPOSITORY --target $sha --prerelease --title 'S.O.S. VALENCIO Windows auditado (homologacao)' --notes 'NSIS realmente instalado e executado; abertura dos cinco perfis validada no runner Windows. Dados locais isolados. Firebase continua apontando para projeto original: nao editar dados reais. Compatibilidade com o PC do usuario ainda depende de teste nesse hardware.'
+          if ($LASTEXITCODE -ne 0) { throw 'Release nao publicada' }
