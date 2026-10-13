@@ -3,9 +3,9 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
-function executar(pergunta,os,perfil='admin',resumo=null){
-  const J={tid:'TESTE_SEM_FIREBASE',role:perfil,equipe:[{id:'m1',nome:'Murilo',comissao:10},{id:'m2',nome:'Joao',comissao:10}],
-    os,clientes:[],veiculos:[],financeiro:[],notasFiscaisEntrada:[],fornecedores:[],estoque:[]};
+function executar(pergunta,os,perfil='admin',resumo=null,clientes=[],equipeExtra=[]){
+  const J={tid:'TESTE_SEM_FIREBASE',role:perfil,equipe:[{id:'m1',nome:'Murilo',comissao:10},{id:'m2',nome:'Joao',comissao:10},...equipeExtra],
+    os,clientes,veiculos:[],financeiro:[],notasFiscaisEntrada:[],fornecedores:[],estoque:[]};
   const W={J,location:{pathname:'/jarvis.html'}};
   if(resumo) W.thiaComissoesResumoV26=()=>resumo;
   const env={window:W,document:{addEventListener:()=>{},getElementById:()=>null},location:W.location,console,
@@ -27,9 +27,9 @@ const resposta=executar(pergunta,[antiga,nova,antigaEditada]);
 assert.match(resposta,/AAA1111/,'OS antiga finalizada na semana');
 assert.match(resposta,/BBB2222/,'servico lancado na semana');
 assert.doesNotMatch(resposta,/CCC3333/,'edicao generica nao conta');
-assert.match(resposta,/Entrada da O\.S\.:<\/strong> 24\/09\/2026/);
-assert.match(resposta,/Total de O\.S\.:<\/strong> 2/);
-assert.match(resposta,/finalizada no per[ií]odo/);
+assert.doesNotMatch(resposta,/Valor cobrado do cliente/,'relatorio de atendimento sem poluicao');
+assert.match(resposta,/\(2 O\.S\.\)/,'duas OS no resumo compacto');
+assert.match(resposta,/recebe \(50%\)/,'cliente comum recebe metade da parte atribuida');
 assert.doesNotMatch(executar(pergunta,[{...antiga,finalizadoEm:'2026-09-26T17:00:00'}]),/AAA1111/);
 assert.doesNotMatch(executar(pergunta,[{...antiga,status:'Cancelado'}]),/AAA1111/);
 assert.doesNotMatch(executar(pergunta,[{...antiga,mecId:'m2',servicos:[{...antiga.servicos[0],mecId:'m2'}]}]),/AAA1111/);
@@ -40,14 +40,39 @@ assert.doesNotMatch(executar(pergunta,[antiga],'mecanico'),/Valor cobrado do cli
 for(const f of ['js/cilia.js','js/cilia-api.js','js/tabela-tempa.js','js/exportar-pmsp.js'])
   assert.ok(fs.statSync(path.join(__dirname,f)).size>100, 'arquivo critico presente: '+f);
 const relatorio=executar(pergunta,[antiga,nova],'admin',{linhas:[
-  {osId:'old',previsto:15,pago:5,falta:10,aguardandoExecucao:false,semPercentual:false},
-  {osId:'new',previsto:12,pago:0,falta:12,aguardandoExecucao:true,semPercentual:false},
-  {osId:'outra-os',previsto:1000,pago:1000,falta:0,aguardandoExecucao:false,semPercentual:false}
+  {osId:'old',servicoKey:'servico-0',base:150,previsto:75,pago:5,falta:70,aguardandoExecucao:false,semPercentual:false},
+  {osId:'new',servicoKey:'servico-0',base:120,previsto:60,pago:0,falta:60,aguardandoExecucao:true,semPercentual:false},
+  {osId:'outra-os',servicoKey:'servico-0',base:1000,previsto:500,pago:500,falta:0,aguardandoExecucao:false,semPercentual:false}
 ]});
-assert.match(relatorio,/Comissões previstas:[^<]*27,00/,'somente as OS do periodo');
-assert.match(relatorio,/efetivamente pagas:[^<]*5,00/,'pago != previsto');
-assert.match(relatorio,/pendente total:[^<]*22,00/,'saldo parcial');
-assert.match(relatorio,/NÃO está tudo quitado/,'não assumir quitação');
-assert.doesNotMatch(relatorio,/1.000,00/,'não somar outra OS');
-assert.doesNotMatch(executar(pergunta,[antiga],'mecanico',{linhas:[]}),/Pagamentos registrados/,'ocultar financeiro do mecanico');
-console.log('OK: 18 testes de IA/comissao + 4 modulos intactos, sem chamadas Firebase');
+assert.match(relatorio,/Total a receber:[\s\S]*135,00/,'50% do rateio das OS do periodo');
+assert.match(relatorio,/Pago:[\s\S]*5,00/,'pagamentos efetivamente registrados');
+assert.match(relatorio,/Falta:[\s\S]*130,00/,'saldo parcial');
+assert.doesNotMatch(relatorio,/1\.000,00/,'nao somar outra OS');
+assert.doesNotMatch(relatorio,/Valor cobrado do cliente/,'compacto nao detalha orcamento');
+assert.doesNotMatch(executar(pergunta,[antiga],'mecanico',{linhas:[]}),/Pago:|Falta:/,'ocultar pagamentos do mecanico');
+
+const viatura={
+  id:'of1', numero:'JFUQ4R', clienteId:'pms', placa:'EPX9844',
+  veiculo:'GOL', kmEntrada:95757, status:'Orcamento',
+  createdAt:'2026-06-29', mecId:'m2',
+  comissaoOficialOS:{ativa:true,rateios:[{mecId:'th',mecNome:'THALIS',valor:700,atribuidoEm:'2026-10-01'}]},
+  servicos:[{desc:'PINTAR CAPUZ',valor:518.89,mecId:'m2',lancadoEm:'2026-10-01',tipoExecucao:'interna'}]
+};
+const oficialCliente=[{id:'pms',nome:'52 BPM POLICIA MILITAR',tipoCliente:'governo'}];
+const quadro=[{id:'th',nome:'THALIS',comissao:50}];
+const perguntaThalis='atendimento mecanico THALIS 28/09 ate 10/10/2026';
+const respostaThalis=executar(perguntaThalis,[viatura],'admin',null,oficialCliente,quadro);
+assert.match(respostaThalis,/EPX9844/,'placa e OS da viatura');
+assert.match(respostaThalis,/700,00/,'valor fixo integral, sem percentual');
+assert.match(respostaThalis,/VIATURA OFICIAL/,'classificacao explicita');
+assert.doesNotMatch(respostaThalis,/PINTAR CAPUZ|518,89/,'nao mostrar orcamento na consulta do mecanico');
+assert.doesNotMatch(executar('atendimento mecanico JOAO 28/09 ate 10/10/2026',[viatura],'admin',null,oficialCliente),/EPX9844/,'mecanico relacionado apenas como teste nao recebe viatura');
+const semCombinado={...viatura,id:'sem',placa:'ABC9999',comissaoOficialOS:{ativa:false,rateios:[]}};
+assert.doesNotMatch(executar(perguntaThalis,[semCombinado],'admin',null,oficialCliente,quadro),/ABC9999/,'sem acordo nao presume comissao');
+const terceirizada={
+  id:'t1',numero:'999',placa:'TER1234',status:'Entregue',
+  createdAt:'2026-10-01',finalizadoEm:'2026-10-04',mecId:'m1',
+  servicos:[{desc:'RETIFICA CABECOTE',valor:2000,mecId:'m1',lancadoEm:'2026-10-02',tipoExecucao:'terceirizada'}]
+};
+assert.doesNotMatch(executar('atendimento mecanico Murilo 01/10 ate 10/10/2026',[terceirizada]),/TER1234/,'terceirizado nao vira atendimento financeiro');
+console.log('OK: periodos, regra 50%, valor combinado integral, terceirizacao, sigilo e modulos criticos');
