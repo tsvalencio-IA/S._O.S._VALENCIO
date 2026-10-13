@@ -1,7 +1,7 @@
 // S.O.S. VALENCIO — inicialização Windows auditável e isolada da produção.
 // Não altera o Firebase, a estrutura das O.S. nem a lógica dos perfis.
 'use strict';
-const { app, BrowserWindow, shell, dialog } = require('electron');
+const { app, BrowserWindow, shell, dialog, ipcMain } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -56,6 +56,19 @@ function external(url) {
 }
 
 let mainWindow;
+// Leitura IPC restrita a UM arquivo do pacote, sem acesso ao disco arbitrário.
+const modeloPMSP = 'assets/templates/I-30003_PLANILHA_DE_CUSTOS.xlsx';
+ipcMain.handle('sos:template-pmsp', async (event, assetPath) => {
+  if (event.sender !== mainWindow?.webContents || !insideApp(event.sender.getURL()) ||
+      String(assetPath || '') !== modeloPMSP) {
+    throw new Error('Arquivo nao autorizado');
+  }
+  const full = path.join(appRoot, 'assets', 'templates', 'I-30003_PLANILHA_DE_CUSTOS.xlsx');
+  const content = await fs.promises.readFile(full);
+  if (content.length < 1000 || content.length > 1024 * 1024) throw new Error('Modelo PMSP invalido');
+  return Array.from(content);
+});
+
 function createWindow() {
   let ready = false;
   const win = new BrowserWindow({
@@ -136,7 +149,15 @@ function createWindow() {
           !String(login.page).endsWith('/index.html')) {
         throw new Error('Login ou Firebase nao carregou corretamente');
       }
-      diagnostic('SMOKE_LOGIN_APROVADO','login e bibliotecas Firebase carregados');
+      // Exercitar a leitura do template real do XLSX dentro do Electron instalado.
+      const xlsx = await win.webContents.executeJavaScript(`(async () => {
+        if (typeof window.thiaDesktopAsset?.readTemplate !== 'function') return {ok:false,size:0};
+        const data = await window.thiaDesktopAsset.readTemplate('assets/templates/I-30003_PLANILHA_DE_CUSTOS.xlsx');
+        return {ok:Array.isArray(data) && data[0] === 80 && data[1] === 75, size:data.length};
+      })()`);
+      if (!xlsx.ok || xlsx.size < 1000) throw new Error('Modelo PMSP inacessivel no aplicativo Windows');
+      diagnostic('SMOKE_MODELO_XLSX_APROVADO','modelo local carregado');
+      diagnostic('SMOKE_LOGIN_APROVADO','login, Firebase e template PMSP carregados');
     }
     diagnostic('SMOKE_APROVADO',loginSmoke ? 'cinco perfis e login validados' : 'cinco perfis renderizados');
     app.exit(0);
