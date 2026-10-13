@@ -4,6 +4,8 @@ on:
     branches: [homologacao]
     paths:
       - 'capacitor-android/capacitor.config.js'
+      - 'js/theme.js'
+      - 'css/android-app.css'
       - 'capacitor-android/android-overrides/**'
       - 'scripts/prepare-capacitor-www.sh'
       - 'scripts/build-android-homologacao.sh'
@@ -61,11 +63,14 @@ jobs:
           node - <<'NODE'
           const c = require('./capacitor-android/capacitor.config.js');
           if (c.appId !== 'br.com.thiaguinho.saas') throw Error('Identidade Android inesperada');
-          if (c.server?.url !== 'https://tsvalencio-ia.github.io/S._O.S._VALENCIO/selecionar-perfil.html') throw Error('Origem web inesperada');
+          if (c.server?.url !== 'https://tsvalencio-ia.github.io/S._O.S._VALENCIO/selecionar-perfil.html?sos_app=android') throw Error('Origem web inesperada');
           if (!c.plugins?.Camera || !c.plugins?.StatusBar) throw Error('Plugins preexistentes ausentes');
           console.log('Configuração Android segura e identidade preservada.');
           NODE
           node --check js/ia.js
+          node --check js/theme.js
+          grep -q 'html.sos-android-app' css/android-app.css
+          grep -q "sos_valencio_android_shell" js/theme.js
           grep -Fq 'js/ia.js?v=26.25.4' jarvis.html
           grep -Fq 'const exatos=clientes.filter' js/ia.js
 
