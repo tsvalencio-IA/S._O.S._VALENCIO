@@ -67,27 +67,41 @@
   }
 
 
-  // Visual exclusivo do aplicativo Android; a versao navegador nao sofre mudanca.
+  // Identidade visual S.O.S. Valêncio: aplica o mesmo CSS ao APK e
+  // às três telas web aprovadas; não altera lógica, eventos nem permissões.
   try {
     const p = new URLSearchParams(window.location.search);
+    const path = String(window.location.pathname || '').split('/').pop().toLowerCase();
+    const paginasWebAprovadas = ['selecionar-perfil.html', 'index.html', 'jarvis.html'];
     const bridge = !!(window.Capacitor &&
       typeof window.Capacitor.isNativePlatform === 'function' &&
       window.Capacitor.isNativePlatform());
     const appMode = bridge || p.get('sos_app') === 'android' ||
       localStorage.getItem('sos_valencio_android_shell') === '1';
-    if (appMode) {
-      localStorage.setItem('sos_valencio_android_shell', '1');
-      document.documentElement.classList.add('sos-android-app');
+    // Não gravar a marca de APK no navegador web convencional.
+    if (appMode) localStorage.setItem('sos_valencio_android_shell', '1');
+    if (appMode || paginasWebAprovadas.includes(path)) {
+      document.documentElement.classList.add('sos-premium-ui');
       if (!document.querySelector('link[data-sos-android-style]')) {
         const css = document.createElement('link');
         css.rel = 'stylesheet';
-        css.href = 'css/android-app.css?v=26.25.5';
+        css.href = 'css/android-app.css?v=26.25.6';
         css.setAttribute('data-sos-android-style', '1');
         document.head.appendChild(css);
       }
     }
+    // Ícone da aba do navegador; mantém favicon/manifest PWA preexistentes
+    // apenas quando a página não possui um ícone declarado.
+    if (!document.querySelector('link[rel~="icon"]')) {
+      const favicon = document.createElement('link');
+      favicon.rel = 'icon';
+      favicon.type = 'image/svg+xml';
+      favicon.href = 'assets/sos-valencio-android-icon.svg';
+      favicon.setAttribute('data-sos-favicon', '1');
+      document.head.appendChild(favicon);
+    }
   } catch (e) {
-    console.warn('[SOS Android] Estilo visual indisponivel:', e?.message || e);
+    console.warn('[S.O.S. Valêncio] Identidade visual indisponível:', e?.message || e);
   }
   window.thiTheme = { get, set, toggle };
 })();
