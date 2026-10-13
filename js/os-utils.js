@@ -503,6 +503,7 @@
       return {
         key: 'servico-' + index,
         tipo: 'servico',
+        tipoExecucao: s.tipoExecucao || s.execucaoTipo || (s.terceirizado===true?'terceirizada':'interna'),
         labelTipo: 'Servico',
         index,
         codigoInterno: s.codigoInterno || s.codInterno || s.codigoServicoInterno || '',

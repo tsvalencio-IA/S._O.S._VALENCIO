@@ -98,7 +98,7 @@
 
   function comissaoOficialConfigurada(os,cli){
     const tipo=norm(cli?.tipoCliente||cli?.tipo||os?.tipoCliente||'');
-    const oficial=tipo==='governo'||tipo==='oficial'||cli?.clienteOficial===true;
+    const oficial=!!window.JOS?.isOfficialClient?.(os,cli) || tipo==='governo'||tipo==='oficial'||cli?.clienteOficial===true;
     const cfg=os?.comissaoOficialOS||{};
     if(!oficial||cfg?.ativa!==true||!Array.isArray(cfg?.rateios))return null;
     const rateios=cfg.rateios.map(r=>({mecId:String(r?.mecId||r?.id||''),mecNome:r?.mecNome||r?.nome||'',valor:Math.max(0,n(r?.valor??r?.valorPrevisto??0))})).filter(r=>r.mecId&&r.valor>0);
@@ -107,11 +107,12 @@
 
   function rowsFor(mec){
     if(!mec)return[];
-    const pct=n(mec.comissaoServico??mec.comissao??0),pagos=paidMapFor(mec.id),rows=[];
+    const pct=50,pagos=paidMapFor(mec.id),rows=[];
     (window.J?.os||[]).filter(o=>!/^cancel/i.test(String(o?.status||''))).forEach(os=>{
       const cli=clientFor(os),vei=vehicleFor(os);
       const cfgOficial=comissaoOficialConfigurada(os,cli);
-      if(cfgOficial){
+      if(!!window.JOS?.isOfficialClient?.(os,cli) || ['governo','oficial'].includes(norm(cli?.tipoCliente||cli?.tipo||os?.tipoCliente||'')) || cli?.clienteOficial===true){
+        if(!cfgOficial)return;
         const rateio=cfgOficial.rateios.find(r=>String(r.mecId)===String(mec.id));
         if(rateio){
           const previsto=+n(rateio.valor).toFixed(2),pago=totalPagoOSMecanico(mec.id,os.id),falta=Math.max(0,+(previsto-pago).toFixed(2));
@@ -124,6 +125,9 @@
       const temExecServico=Object.entries(exec).some(([key,val])=>String(key).startsWith('servico-')&&String(val?.status||'').trim());
       const statusExecutado=st=>/^(executado|executado_obs|concluido|finalizado|feito|realizado|trocada)$/i.test(String(st||'').trim());
       itens.filter(it=>it.tipo==='servico').forEach(it=>{
+        const origem=(os?.servicos||[])[it.index]||{};
+        const tipoExec=norm(origem.tipoExecucao||origem.execucaoTipo||it.tipoExecucao||'');
+        if(['terceirizada','terceirizado','externa','externo'].includes(tipoExec)||origem.terceirizado===true||origem.servicoTerceirizado===true||origem.terceirizadoNome||origem.prestadorNome)return;
         if(aprovacaoAtiva&&!aprovados.has(it.key))return;
         const reg=exec[it.key]||{};
         const elegivelPagamento=temExecServico?statusExecutado(reg.status):finalStatus(os);

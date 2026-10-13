@@ -4151,7 +4151,8 @@ function comissaoOficialFixaCalculadaOS(payload) {
 
 function calcularComissoesPorMecanicoOS(payload, totalPecasFallback) {
   const especiais = comissaoOficialFixaCalculadaOS(payload);
-  if (especiais.length) return especiais;
+  const cliOficial=(window.J?.clientes||[]).find(c=>String(c?.id||'')===String(payload?.clienteId||''))||{};
+  if (OSU().isOfficialClient?.(payload,cliOficial) || especiais.length) return especiais;
   const U = OSU();
   const cliente = (window.J?.clientes || []).find(c => c.id === payload?.clienteId);
   const itens = U.buildBudgetItems?.(payload, cliente) || [];
@@ -4172,6 +4173,9 @@ function calcularComissoesPorMecanicoOS(payload, totalPecasFallback) {
   };
 
   itens.filter(item => item.tipo === 'servico').forEach(item => {
+    const origemTerceiro=(payload?.servicos||[])[item.index]||{};
+    const tipoTerceiro=String(origemTerceiro.tipoExecucao||origemTerceiro.execucaoTipo||item.tipoExecucao||'').toLowerCase();
+    if(['terceirizada','terceirizado','externa','externo'].includes(tipoTerceiro)||origemTerceiro.terceirizado===true||origemTerceiro.servicoTerceirizado===true||origemTerceiro.terceirizadoNome)return;
     if (temAprovacao && !aprovados.has(item.key)) return;
     const registro = execucao[item.key] || {};
     if (temExecucaoServico && !statusExecucaoComissaoOS(registro.status)) return;
@@ -4195,7 +4199,7 @@ function calcularComissoesPorMecanicoOS(payload, totalPecasFallback) {
       const baseRateada = +Math.min(Math.max(0, numBR(item.valorFinal || 0)), Math.max(0, numBR(rateio.valorBase || 0))).toFixed(2);
       if (baseRateada <= 0) return;
       grupo.baseServico += baseRateada;
-      const percentual = numBR(grupo.mec.comissaoServico ?? grupo.mec.comissao ?? 0);
+      const percentual = 50;
       grupo.servicos.push({
         key: item.key,
         desc: item.desc || '',
@@ -4218,7 +4222,7 @@ function calcularComissoesPorMecanicoOS(payload, totalPecasFallback) {
   }
 
   return Array.from(mapa.values()).map(grupo => {
-    const percServico = numBR(grupo.mec.comissaoServico ?? grupo.mec.comissao ?? 0);
+    const percServico = 50;
     const percPeca = numBR(grupo.mec.comissaoPeca || 0);
     const baseServico = +grupo.baseServico.toFixed(2);
     const basePecas = +grupo.basePecas.toFixed(2);
