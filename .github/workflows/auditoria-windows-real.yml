@@ -53,6 +53,18 @@ jobs:
           if ($code -ne 0) { throw "EXE falhou: $code" }
           if (-not (Test-Path $log)) { throw 'Log de inicializacao ausente' }
           if ((Get-Content $log -Raw) -notmatch 'SMOKE_APROVADO') { throw 'Janela e cinco perfis nao validados' }
+      - name: Testar LOGIN REAL e SDK Firebase no aplicativo empacotado
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $exe = (Get-ChildItem 'dist-windows-auditoria/win-unpacked' -Filter '*.exe' -File | Select-Object -First 1).FullName
+          $p = Start-Process -FilePath $exe -ArgumentList '--sos-smoke-login' -PassThru
+          if (-not $p.WaitForExit(95000)) { taskkill.exe /T /F /PID $p.Id | Out-Null; throw 'LOGIN sem resposta apos 95 s' }
+          $code=$p.ExitCode
+          $log=Join-Path $env:APPDATA 'SOS-VALENCIO-HOMOLOGACAO-PC/diagnostico-inicializacao.log'
+          if (Test-Path $log) { Get-Content $log | Select-Object -Last 20 }
+          if ($code -ne 0) { throw "LOGIN REAL FALHOU: $code" }
+          if ((Get-Content $log -Raw) -notmatch 'SMOKE_LOGIN_APROVADO') { throw 'Login e SDK Firebase nao foram aprovados' }
       - name: Testar abertura normal e memoria
         shell: pwsh
         run: |
@@ -87,6 +99,14 @@ jobs:
           if (-not $test.WaitForExit(90000)) { taskkill.exe /T /F /PID $test.Id | Out-Null; throw 'Instalado sem resposta' }
           if ($test.ExitCode -ne 0) { throw "App instalado nao abriu: $($test.ExitCode)" }
           Write-Host 'NSIS instalou e aplicativo abriu os cinco perfis: APROVADO'
+          # Confirmar login tambem no binario INSTALADO, nao somente no pacote gerado.
+          $login=Start-Process -FilePath $installed.FullName -ArgumentList '--sos-smoke-login' -PassThru
+          if (-not $login.WaitForExit(95000)) { taskkill.exe /T /F /PID $login.Id | Out-Null; throw 'Login instalado nao respondeu' }
+          if ($login.ExitCode -ne 0) { throw "Login do app instalado falhou: $($login.ExitCode)" }
+          $log=Join-Path $env:APPDATA 'SOS-VALENCIO-HOMOLOGACAO-PC/diagnostico-inicializacao.log'
+          if ((Get-Content $log -Raw) -notmatch 'SMOKE_LOGIN_APROVADO') { throw 'Login do NSIS nao aprovado' }
+          Write-Host 'NSIS instalado: login e SDK Firebase carregados (SEM credenciais reais)'
+
       - name: Empacotar versao sem instalacao para contingencia
         shell: pwsh
         run: |
