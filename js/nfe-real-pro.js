@@ -1773,6 +1773,7 @@
     return out;
   }
   W.thiaNFOSClienteOficial = osClienteOficialNF;
+  W.thiaNFPecaOcultaNaOS = pecaOrcamentoOcultaOSNF;
   W.thiaNFPecaOrcamentoFromReal = pecaOrcamentoFromNF;
   W.thiaNFMergePecasReais = mergePecasReaisNF;
   W.thiaNFMergePecasOrcamento = mergePecasOrcamentoNF;
@@ -1840,10 +1841,10 @@
         ultimaEntradaNFVinculada: nfPayload.numero || nfRef.id
       };
       osUpdate.pecasReais = mergePecasReaisNF(entry.os.pecasReais, pecas);
-      // NF vinculada documenta compra; não é lançamento comercial automático.
-      // Apenas O.S. com autorização persistida de espelhamento podem usar o
-      // fluxo legado, sem interferir nas peças do Cília/TEMPÁRIA.
-      if (entry.os.permitirNFNoOrcamento === true && !osClienteOficialNF(entry.os)) {
+      // Cliente comum: NF vinculada inclui peça no orçamento da O.S.,
+      // sem duplicar e respeitando exclusões anteriores.
+      // Cliente oficial: registrar somente a peça real interna.
+      if (!osClienteOficialNF(entry.os)) {
         const pecasOrcamento = pecas.map(pecaOrcamentoFromNF).filter(Boolean).filter(p => !pecaOrcamentoOcultaOSNF(entry.os, p));
         if (pecasOrcamento.length) osUpdate.pecas = mergePecasOrcamentoNF(entry.os.pecas, pecasOrcamento);
       }
@@ -1867,7 +1868,7 @@
         });
         W.atualizarResumoPecasReais177?.();
       }
-      if (entry.os.permitirNFNoOrcamento === true && !osClienteOficialNF(entry.os)) refletirPecasNFNaOSTelaAtual(osId, pecas);
+      if (!osClienteOficialNF(entry.os)) refletirPecasNFNaOSTelaAtual(osId, pecas);
     }
     return { os: porOS.size, pecas: totalPecas, registrosAuxiliares };
   }
