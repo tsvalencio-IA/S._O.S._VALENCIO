@@ -36,8 +36,17 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Aceitar licencas do Android SDK do runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v sdkmanager
+          set +o pipefail
+          yes | sdkmanager --licenses
+          rc=${PIPESTATUS[1]}
+          set -o pipefail
+          test "$rc" -eq 0
+          sdkmanager --list_installed >/dev/null
 
       - name: Verificar app e origem segura
         shell: bash
