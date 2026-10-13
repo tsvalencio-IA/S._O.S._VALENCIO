@@ -18,6 +18,21 @@
     return String(tpl.planilhaPMSP || TEMPLATE_URL_PADRAO).trim() || TEMPLATE_URL_PADRAO;
   }
 
+  // Browser/Android continuam com fetch; Electron lê APENAS o template PMSP
+  // empacotado por IPC restrito, evitando fetch(file://) bloqueado por CORS.
+  async function carregarModeloPMSPExportar(url) {
+    const template = String(url || '').trim().replace(/^\.\//, '');
+    if (template === TEMPLATE_URL_PADRAO &&
+        typeof window.thiaDesktopAsset?.readTemplate === 'function') {
+      const bytes = await window.thiaDesktopAsset.readTemplate(TEMPLATE_URL_PADRAO);
+      if (!Array.isArray(bytes) || bytes.length < 1000) throw new Error('Modelo PMSP local inválido');
+      return Uint8Array.from(bytes).buffer;
+    }
+    const resp = await fetch(url, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('Modelo PMSP nao encontrado: ' + url);
+    return await resp.arrayBuffer();
+  }
+
   function textoCelulaExportar(value) {
     if (value == null) return '';
     if (typeof value === 'object') {
@@ -1952,9 +1967,7 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
     if (typeof ExcelJS === 'undefined') return false;
 
     const templateUrl = templatePMSPUrl();
-    const resp = await fetch(templateUrl, { cache: 'no-store' });
-    if (!resp.ok) throw new Error('Modelo PMSP nao encontrado: ' + templateUrl);
-    const buffer = await resp.arrayBuffer();
+    const buffer = await carregarModeloPMSPExportar(templateUrl);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buffer);
     congelarFormulasCompartilhadasPMSP(wb);
@@ -2066,9 +2079,7 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
     if (typeof ExcelJS === 'undefined') return false;
 
     const templateUrl = templatePMSPUrl();
-    const resp = await fetch(templateUrl, { cache: 'no-store' });
-    if (!resp.ok) throw new Error('Modelo PMSP nao encontrado: ' + templateUrl);
-    const buffer = await resp.arrayBuffer();
+    const buffer = await carregarModeloPMSPExportar(templateUrl);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buffer);
     congelarFormulasCompartilhadasPMSP(wb);
