@@ -2178,214 +2178,85 @@
     return 'resumo';
   }
 
-  function responderAtendimentosFuncionarioPeriodo(texto, q, ctx, opts) {
-    const periodoInformado = extrairPeriodoNaturalIA(texto);
-    const periodo = periodoInformado || { inicio: '1900-01-01', fim: '2999-12-31', origem: 'historico_carregado' };
-    const citaCargo = /\b(mecanico|funcionario|colaborador|responsavel)\b/.test(q);
-    const funcDireto = funcionarioPorPergunta(ctx, q);
-    const perguntaAtendimentoComNome = /\batendimentos?\b/.test(q) && (!!funcDireto || /\b(fez|atendeu|realizou|executou|trabalhou)\b/.test(q));
-    const perguntaAtividadeComNome = !!funcDireto && /\b(fez|atendeu|realizou|executou|trabalhou|atividades?|servicos?|tarefas?)\b/.test(q);
-    if (!citaCargo && !perguntaAtendimentoComNome && !perguntaAtividadeComNome) return null;
-    if (!/(atendeu|atendimento|realizou|executou|trabalhou|fez|servico|servicos|veiculo|veiculos|o\.?s\.?|ordem|ordens|comiss|relatorio|valor|valores|total)/.test(q)) return null;
-    const func = funcionarioDaPerguntaOperacional(ctx, texto, q);
-    if (!func) return 'Informe o nome do mec&acirc;nico para consultar os atendimentos por per&iacute;odo.';
-    const lista = ctx.os
-      .map(os => ({ os, statusOperacional: statusOperacionalAtendimento(os) }))
-      .filter(item => item.statusOperacional.permitido)
-      .filter(item => evidenciaAtendimentoFuncionario(item.os, func, periodo))
-      .map(item => ({
-        os: item.os,
-        statusOperacional: item.statusOperacional,
-        servicos: servicosFuncionarioNaOS(item.os, func, periodo, ctx, !!periodoInformado)
-      }))
-      // Não exige serviço, valor ou comissão: estar relacionado à O.S. já é atendimento operacional.
-      .sort((a, b) => dataISO(dataPrincipalOS(a.os)).localeCompare(dataISO(dataPrincipalOS(b.os))));
-    const nome = func.nome || func.usuario || func.id || 'mec&acirc;nico';
-    if (!lista.length) {
-      const faixa = periodoInformado ? ` entre ${esc(dataBR(periodo.inicio))} e ${esc(dataBR(periodo.fim))}` : '';
-      return `N&atilde;o encontrei atendimento de <strong>${esc(nome)}</strong>${faixa} nos dados carregados.`;
-    }
-    const veiculosUnicos = new Set(lista.map(({ os }) => os.veiculoId || placaOS(ctx, os) || os.id));
-    const podeVerValores = podeFinanceiro(opts);
-    const percentualRaw = func?.comissaoServico ?? func?.comissao;
-    const percentualCadastrado = percentualRaw != null && String(percentualRaw).trim() !== '';
-    const percentualComissao = percentualCadastrado ? num(percentualRaw) : null;
-    const modoRelatorio = modoRelatorioFuncionario(q);
-    function formatarServicosAtendimento(servicos) {
-      const confirmados = servicos.confirmados.map(s => ({
-        ...s,
-        baseLiberada: num(s.baseComissao),
-        baseAguardando: 0,
-        situacao: 'EXECUCAO CONFIRMADA'
-      }));
-      const registrados = servicos.registrados.map(s => ({
-        ...s,
-        baseLiberada: servicos.legadoFinalizado ? num(s.baseComissao) : 0,
-        baseAguardando: servicos.legadoFinalizado ? 0 : num(s.baseComissao),
-        situacao: servicos.legadoFinalizado
-          ? 'LIBERADO PELA FINALIZACAO DA O.S. (REGRA LEGADA)'
-          : 'AGUARDANDO EXECUCAO CONFIRMADA OU FINALIZACAO'
-      }));
-      const chavesFinanceiras = new Set([...confirmados, ...registrados].map(s => String(s?.key || '')));
-      const operacionais = (servicos.operacionais || [])
-        .filter(s => !chavesFinanceiras.has(String(s?.key || '')))
-        .map(s => ({
-          ...s,
-          baseComissao: 0,
-          baseLiberada: 0,
-          baseAguardando: 0,
-          somenteOperacional: true,
-          situacao: 'SERVICO ATRIBUIDO/INCLUIDO NO PERIODO — SEM ALTERAR A REGRA FINANCEIRA'
-        }));
-      return [...confirmados, ...registrados, ...operacionais];
-    }
-
-    function formatarOSAtendimento(item, compacto) {
-      const { os, servicos, statusOperacional } = item;
-      const veiculo = veiculoDeOS(ctx, os);
-      const placa = placaOS(ctx, os) || '-';
-      const modelo = veiculo.modelo || os.veiculoSnapshot?.modelo || os.veiculoModelo || os.veiculo || os.tipoVeiculo || '-';
-      const osNumero = String(os.numero || os.id || '').slice(-6).toUpperCase();
-      const entradaOS = dataBR(dataPrincipalOS(os));
-      const datasAtendimentoRaw = [
-        ...(periodoInformado && periodoContem(periodo, dataFinalizacaoConfiavelIA(os)) ? [dataFinalizacaoConfiavelIA(os)] : []),
-        ...servicos.confirmados.map(s => s?.data),
-        ...servicos.registrados.map(s => s?.data),
-        ...(servicos.operacionais || []).map(s => s?.data)
-      ].filter(Boolean);
-      const oficialAtendimento = responsabilidadeOficialFuncionarioIA(os, func);
-      if (oficialAtendimento?.data && (!periodoInformado || (oficialAtendimento.dataConfiavel && periodoContem(periodo, oficialAtendimento.data)))) datasAtendimentoRaw.push(oficialAtendimento.data);
-      if (!periodoInformado) eventosRelacaoFuncionarioIA(os, func).forEach(ev => {
-        const dt = ev?.dt || ev?.data || ev?.createdAt || ev?.ts || '';
-        if (periodoContem(periodo, dt)) datasAtendimentoRaw.push(dt);
+  function responderAtendimentosFuncionarioPeriodo(texto,q,ctx,opts) {
+    const periodoInformado=extrairPeriodoNaturalIA(texto);
+    const periodo=periodoInformado||{inicio:'1900-01-01',fim:'2999-12-31',origem:'historico_carregado'};
+    const comCargo=/\b(mecanico|funcionario|colaborador|responsavel)\b/.test(q),funcDireto=funcionarioPorPergunta(ctx,q);
+    if(!comCargo&&!(funcDireto&&/\b(atendimentos?|fez|realizou|executou|servicos?)\b/.test(q)))return null;
+    if(!/(atendeu|atendimento|realizou|executou|trabalhou|fez|servico|servicos|veiculo|veiculos|o\.?s\.?|ordem|ordens|comiss|relatorio|valor|valores|total)/.test(q))return null;
+    const func=funcionarioDaPerguntaOperacional(ctx,texto,q);
+    if(!func)return 'Informe o nome do mecânico para localizar atendimentos.';
+    const nome=func.nome||func.usuario||func.id||'Mecânico',mostrarValores=podeFinanceiro(opts);
+    const controle=mostrarValores&&typeof W.thiaComissoesResumoV26==='function'?W.thiaComissoesResumoV26(func.id||func.uid):null;
+    const rows=Array.isArray(controle?.linhas)?controle.linhas:[];
+    const N=v=>+num(v||0).toFixed(2);
+    const ehTerceirizado=s=>['terceirizada','terceirizado','externa','externo'].includes(norm(s?.tipoExecucao||s?.execucaoTipo||'').trim())||s?.terceirizado===true||s?.servicoTerceirizado===true||!!(s?.terceirizadoNome||s?.prestadorNome||s?.fornecedorServicoNome);
+    const ehOficial=(os,c)=>(W.JOS||W.JarvisOSUtils)?.isOfficialClient?.(os,c)===true||['governo','oficial'].includes(norm(c?.tipoCliente||c?.tipo||os?.tipoCliente||'').trim())||c?.clienteOficial===true||os?.clienteOficial===true;
+    const registros=[];
+    (ctx.os||[]).filter(os=>statusOperacionalAtendimento(os).permitido).forEach(os=>{
+      const c=clienteDeOS(ctx,os),oficial=ehOficial(os,c),cfg=os?.comissaoOficialOS||{};
+      const rateio=oficial&&cfg.ativa===true&&(Array.isArray(cfg.rateios)?cfg.rateios:[]).find(r=>{
+        const id=String(r?.mecId||r?.id||'').trim();
+        return id?idCombinaFuncionario(id,func):nomeCombinaFuncionario(r?.mecNome||r?.nome||'',func);
       });
-      const datasAtendimento = Array.from(new Set(datasAtendimentoRaw.map(dataISO).filter(Boolean))).sort();
-      const data = datasAtendimento.length ? datasAtendimento.map(dataBR).filter(Boolean).join(' / ') : entradaOS;
-      const itens = formatarServicosAtendimento(servicos);
-      const linhasServico = itens.map(s => {
-        const valores = (podeVerValores && !s.somenteOperacional) ? [
-          `<br>&nbsp;&nbsp;&nbsp;&nbsp;Valor cobrado do cliente: <strong>${moeda(s.valor)}</strong>`,
-          `<br>&nbsp;&nbsp;&nbsp;&nbsp;Parte interna atribu&iacute;da ao mec&acirc;nico consultado: <strong>${moeda(s.baseComissao)}</strong>`,
-          `<br>&nbsp;&nbsp;&nbsp;&nbsp;Base liberada para comiss&atilde;o: <strong>${moeda(s.baseLiberada)}</strong>`,
-          `<br>&nbsp;&nbsp;&nbsp;&nbsp;Valor aguardando execu&ccedil;&atilde;o/finaliza&ccedil;&atilde;o: <strong>${moeda(s.baseAguardando)}</strong>`
-        ].join('') : '';
-        return [
-          `<br>&nbsp;&nbsp;<strong>Servi&ccedil;o:</strong> ${esc(s.desc)}`,
-          valores,
-          compacto ? '' : `<br>&nbsp;&nbsp;&nbsp;&nbsp;Situa&ccedil;&atilde;o da base: <strong>${esc(s.situacao)}</strong>${s.fonteData === 'finalizacao_os_servico_anterior' ? ' (serviço anterior; O.S. finalizada no período)' : ''}`
-        ].join('');
-      }).join('');
-      const linhaOficial = oficialAtendimento
-        ? `<br>&nbsp;&nbsp;<strong>Responsabilidade Cliente Oficial:</strong> ${esc(nome)}${oficialAtendimento.valor > 0 ? ` | valor combinado ${moeda(oficialAtendimento.valor)}` : ''}`
-        : '';
-      return [
-        `- ${esc(data)} | O.S. #${esc(osNumero)} | ${esc(placa)} | ${esc(modelo)}`,
-        `<br>&nbsp;&nbsp;<strong>Data(s) do atendimento/atribui&ccedil;&atilde;o:</strong> ${esc(data)}`,
-        servicos.registrados.some(x => x.fonteData === 'finalizacao_os_servico_anterior')
-          ? '<br>&nbsp;&nbsp;<small>O.S. finalizada no período; serviços anteriores não foram relançados.</small>' : '',
-        entradaOS && entradaOS !== data ? `<br>&nbsp;&nbsp;<strong>Entrada da O.S.:</strong> ${esc(entradaOS)}` : '',
-        `<br>&nbsp;&nbsp;<strong>Status atual:</strong> ${esc(statusOperacional.rotulo)}`,
-        linhasServico || linhaOficial || '<br>&nbsp;&nbsp;Nenhum servi&ccedil;o atribu&iacute;do foi identificado.'
-      ].join('');
-    }
-
-    const linhas = lista.map(item => formatarOSAtendimento(item, false));
-    const totalConfirmado = +lista.reduce((soma, item) => soma + num(item.servicos.totalConfirmado), 0).toFixed(2);
-    const baseConfirmadaComissao = +lista.reduce((soma, item) => soma + num(item.servicos.baseComissaoConfirmada), 0).toFixed(2);
-    const totalLegadoFinalizado = +lista
-      .filter(item => item.servicos.legadoFinalizado)
-      .reduce((soma, item) => soma + num(item.servicos.totalRegistrado), 0)
-      .toFixed(2);
-    const baseLegadaComissao = +lista
-      .filter(item => item.servicos.legadoFinalizado)
-      .reduce((soma, item) => soma + num(item.servicos.baseComissaoRegistrada), 0)
-      .toFixed(2);
-    const totalSomenteOrcado = +lista
-      .filter(item => !item.servicos.legadoFinalizado)
-      .reduce((soma, item) => soma + num(item.servicos.totalRegistrado), 0)
-      .toFixed(2);
-    const baseAguardandoExecucao = +lista
-      .filter(item => !item.servicos.legadoFinalizado)
-      .reduce((soma, item) => soma + num(item.servicos.baseComissaoRegistrada), 0)
-      .toFixed(2);
-    const baseComissao = +(baseConfirmadaComissao + baseLegadaComissao).toFixed(2);
-    const valorComissao = percentualComissao == null
-      ? null
-      : +(baseComissao * (percentualComissao / 100)).toFixed(2);
-    // Pagamentos reais vêm do módulo transacional. Comissão calculada não comprova quitação.
-    const controleComissao = podeVerValores && typeof W.thiaComissoesResumoV26 === 'function'
-      ? W.thiaComissoesResumoV26(func.id || func.uid) : null;
-    const idsAtendimento = new Set(lista.map(item => String(item.os?.id || '')));
-    const comissoesPeriodo = (controleComissao?.linhas || [])
-      .filter(l => idsAtendimento.has(String(l.osId || '')));
-    const somaComissao = campo => +(comissoesPeriodo.reduce((s,l) => s + num(l[campo] ?? 0), 0)).toFixed(2);
-    const pagoComissaoPeriodo = somaComissao('pago');
-    const previstoComissaoPeriodo = somaComissao('previsto');
-    const faltaComissaoPeriodo = somaComissao('falta');
-    const pendenteLiberado = +comissoesPeriodo.filter(l => !l.aguardandoExecucao && !l.semPercentual)
-      .reduce((s,l) => s + num(l.falta), 0).toFixed(2);
-    const relatorioPagamentos = controleComissao
-      ? `<br><strong>Pagamentos registrados para as O.S. acima (módulo de comissões):</strong>`+
-        `<br>- Comissões previstas: ${moeda(previstoComissaoPeriodo)}`+
-        `<br>- Comissões efetivamente pagas: ${moeda(pagoComissaoPeriodo)}`+
-        `<br>- Saldo pendente total: ${moeda(faltaComissaoPeriodo)}`+
-        `<br>- Saldo liberado para pagamento: ${moeda(pendenteLiberado)}`+
-        (comissoesPeriodo.some(l => l.pago > .009 && l.falta > .009)
-          ? '<br>- Existem pagamentos parciais; NÃO está tudo quitado.' : '')
-      : '<br><small>Histórico de pagamento não disponível neste contexto; comissão calculada não comprova pagamento.</small>';
-    const resumoComissao = podeVerValores ? [
-      '<br><strong>Resumo para comiss&atilde;o:</strong>',
-      `<br>- M&atilde;o de obra com execu&ccedil;&atilde;o confirmada: <strong>${moeda(totalConfirmado)}</strong>`,
-      baseConfirmadaComissao !== totalConfirmado ? `<br>- Parte interna atribu&iacute;da ao colaborador nesses servi&ccedil;os: <strong>${moeda(baseConfirmadaComissao)}</strong>` : '',
-      `<br>- M&atilde;o de obra de O.S. finalizada legada: <strong>${moeda(totalLegadoFinalizado)}</strong>`,
-      baseLegadaComissao !== totalLegadoFinalizado ? `<br>- Parte interna legada atribu&iacute;da ao colaborador: <strong>${moeda(baseLegadaComissao)}</strong>` : '',
-      `<br>- Base total considerada para comiss&atilde;o: <strong>${moeda(baseComissao)}</strong>`,
-      totalSomenteOrcado > 0
-        ? `<br>- Valor cobrado em servi&ccedil;os ainda aguardando execu&ccedil;&atilde;o/finaliza&ccedil;&atilde;o: <strong>${moeda(totalSomenteOrcado)}</strong>`
-        : '',
-      baseAguardandoExecucao > 0
-        ? `<br>- Parte interna ainda aguardando execu&ccedil;&atilde;o/finaliza&ccedil;&atilde;o: <strong>${moeda(baseAguardandoExecucao)}</strong>`
-        : '',
-      percentualComissao == null
-        ? '<br>- Percentual de comiss&atilde;o: <strong>n&atilde;o localizado no cadastro do colaborador</strong>'
-        : `<br>- Percentual de comiss&atilde;o sobre m&atilde;o de obra: <strong>${esc(percentualComissao.toLocaleString('pt-BR'))}%</strong>`,
-      valorComissao == null
-        ? '<br>- Comiss&atilde;o a pagar: <strong>n&atilde;o calculada; cadastre o percentual do colaborador</strong>'
-        : `<br>- Comiss&atilde;o calculada: <strong>${moeda(valorComissao)}</strong>`
-    ].join('') : '';
-    if (modoRelatorio === 'resumo') {
-      const linhasResumo = lista.map(item => formatarOSAtendimento(item, true));
-      const resumoValores = podeVerValores ? [
-        `<br><strong>Total de O.S.:</strong> ${esc(lista.length)} | <strong>Ve&iacute;culos:</strong> ${esc(veiculosUnicos.size)}`,
-        `<br><strong>M&atilde;o de obra confirmada:</strong> ${moeda(totalConfirmado)}`,
-        `<br><strong>M&atilde;o de obra finalizada legada:</strong> ${moeda(totalLegadoFinalizado)}`,
-        `<br><strong>Base liberada para comiss&atilde;o:</strong> ${moeda(baseComissao)}`,
-        `<br><strong>Base ainda aguardando execu&ccedil;&atilde;o/finaliza&ccedil;&atilde;o:</strong> ${moeda(baseAguardandoExecucao)}`,
-        valorComissao == null ? '' : `<br><strong>Comiss&atilde;o calculada sobre a base liberada:</strong> ${moeda(valorComissao)}`
-      ].join('') : `<br><strong>Total de O.S.:</strong> ${esc(lista.length)} | <strong>Ve&iacute;culos:</strong> ${esc(veiculosUnicos.size)}`;
-      const periodoTitulo = !periodoInformado
-        ? 'no hist&oacute;rico carregado'
-        : (periodo.inicio === periodo.fim
-          ? `em ${esc(dataBR(periodo.inicio))}`
-          : `de ${esc(dataBR(periodo.inicio))} at&eacute; ${esc(dataBR(periodo.fim))}`);
-      return [
-        `<strong>Resumo de ${esc(nome)} ${periodoTitulo}:</strong>`,
-        linhasResumo.join('<br><br>'),
-        resumoValores,
-        podeVerValores ? relatorioPagamentos : '',
-        podeVerValores ? acaoPagamentoComissaoIA(func, lista.map(item => item.os?.id).filter(Boolean)) : ''
-      ].join('<br>');
-    }
-    return [
-      `<strong>Atendimentos de ${esc(nome)}${periodoInformado ? ` de ${esc(dataBR(periodo.inicio))} at&eacute; ${esc(dataBR(periodo.fim))}` : ' no hist&oacute;rico carregado'}:</strong>`,
-      `${lista.length} O.S. em ${veiculosUnicos.size} ve&iacute;culo(s).`,
-      linhas.join('<br><br>'),
-      resumoComissao,
-      podeVerValores ? relatorioPagamentos : '',
-      '<br><small>Crit&eacute;rio operacional: quando existe per&iacute;odo informado, s&oacute; entram O.S. com evid&ecirc;ncia datada do mec&acirc;nico naquele intervalo (servi&ccedil;o inclu&iacute;do/atribu&iacute;do, execu&ccedil;&atilde;o registrada ou responsabilidade de Cliente Oficial). Edi&ccedil;&atilde;o gen&eacute;rica, mudan&ccedil;a de status ou simples autoria de evento n&atilde;o contam como atendimento. Sem per&iacute;odo, o hist&oacute;rico legado continua dispon&iacute;vel. A libera&ccedil;&atilde;o de comiss&atilde;o permanece separada.</small>'
-    ].join('<br>');
+      if(oficial&&(!rateio||N(rateio.valor??rateio.valorPrevisto)<=0))return;
+      if(periodoInformado&&!evidenciaAtendimentoFuncionario(os,func,periodo)&&
+        !(oficial&&periodoContem(periodo,rateio?.atribuidoEm||rateio?.createdAt)))return;
+      let base=0,previsto=0,pago=0,aguardando=false,usadas=[];
+      if(oficial){
+        previsto=N(rateio.valor??rateio.valorPrevisto);
+        pago=N(rows.filter(r=>r.comissaoOficial===true&&String(r.osId)===String(os.id)).reduce((s,r)=>s+num(r.pago||0),0));
+      }else{
+        usadas=rows.filter(r=>{
+          if(String(r.osId)!==String(os.id)||!/^servico-\d+$/.test(String(r.servicoKey||'')))return false;
+          const item=(os.servicos||[])[Number(r.servicoKey.split('-')[1])];
+          return !!item&&!ehTerceirizado(item);
+        });
+        if(!usadas.length)return;
+        base=N(usadas.reduce((s,r)=>s+num(r.base||0),0));
+        if(base<=0)return;
+        previsto=N(base*.5);
+        pago=N(usadas.reduce((s,r)=>s+num(r.pago||0),0));
+        aguardando=usadas.every(r=>r.aguardandoExecucao===true);
+      }
+      const datas=[];
+      const add=v=>{const d=dataISO(v);if(d&&periodoContem(periodo,d)&&!datas.includes(d))datas.push(d);};
+      if(oficial){
+        add(rateio?.atribuidoEm||rateio?.createdAt);
+        eventosRelacaoFuncionarioIA(os,func).forEach(ev=>add(ev?.dt||ev?.data||ev?.createdAt||ev?.ts));
+        (Array.isArray(os?.servicos)?os.servicos:[]).filter(s=>!ehTerceirizado(s)&&itemPertenceFuncionarioExplicitoIA(s,func,os)).forEach(s=>add(dataAtribuicaoServicoFuncionarioIA(os,s,func,{estrito:!!periodoInformado}).data));
+      }else{
+        usadas.forEach(r=>{
+          const s=(os.servicos||[])[Number(r.servicoKey.split('-')[1])];
+          add(dataAtribuicaoServicoFuncionarioIA(os,s,func,{estrito:!!periodoInformado}).data);
+        });
+        add(dataFinalizacaoConfiavelIA(os));
+      }
+      if(!periodoInformado)add(dataPrincipalOS(os));
+      datas.sort();
+      const v=veiculoDeOS(ctx,os)||{};
+      registros.push({oficial,os,base,previsto,pago,aguardando,
+        falta:Math.max(0,N(previsto-pago)),placa:placaOS(ctx,os)||os.placa||'-',
+        modelo:v.modelo||os.veiculoSnapshot?.modelo||os.veiculo||'-',
+        km:os.kmEntrada??os.km??os.kmInicial??'',
+        data:datas.length?datas.slice(0,3).map(dataBR).join(' / '):'data individual não comprovada'});
+    });
+    if(!registros.length)return `Não encontrei atendimento com valor atribuível a <strong>${esc(nome)}</strong>${periodoInformado?periodoRotuloIA(periodo):' no histórico carregado'}.`;
+    registros.sort((a,b)=>String(a.data).localeCompare(String(b.data))||a.placa.localeCompare(b.placa));
+    const linhas=registros.map(r=>{
+      const cab=`- <strong>${esc(r.placa)} · ${esc(r.modelo)}</strong> | O.S. ${esc(String(r.os.numero||r.os.id||'-').slice(-8))} | ${esc(r.data)}`;
+      if(!mostrarValores)return cab+` | ${r.oficial?'VIATURA OFICIAL':'CLIENTE COMUM'}`;
+      if(r.oficial)return cab+` | <strong>VIATURA OFICIAL</strong>${r.km!==''?` | KM ${esc(r.km)}`:''} | Valor combinado integral: <strong>${moeda(r.previsto)}</strong>${controle?` | Pago ${moeda(r.pago)} | A receber <strong>${moeda(r.falta)}</strong>`:' | Pagamento a confirmar'}`;
+      return cab+` | Parte atribuída ${moeda(r.base)} | 50% para ${esc(nome)}: <strong>${moeda(r.previsto)}</strong>${controle?` | Pago ${moeda(r.pago)} | A receber <strong>${moeda(r.falta)}</strong>`:' | Pagamento a confirmar'}${r.aguardando?' (ainda não liberado)':''}`;
+    });
+    const titulo=`<strong>Atendimentos de ${esc(nome)}${periodoInformado?periodoRotuloIA(periodo):' no histórico carregado'}:</strong> ${registros.length} O.S. / ${new Set(registros.map(r=>r.placa)).size} veículo(s).`;
+    if(!mostrarValores)return [titulo,...linhas,'<small>Valores financeiros ocultos neste perfil.</small>'].join('<br>');
+    const total=k=>N(registros.reduce((s,r)=>s+num(r[k]),0));
+    const resumo=controle
+      ?`<strong>Resumo:</strong> Valor previsto ${moeda(total('previsto'))} | Pago ${moeda(total('pago'))} | A receber ${moeda(total('falta'))}`
+      :'<small>Pagamentos não confirmados: o módulo financeiro não está disponível.</small>';
+    return [titulo,...linhas,resumo].join('<br>');
   }
-
 
   function responderAtendimentosTodosMecanicosPeriodoIA(texto, q, ctx, opts) {
     if (!/(?:todos|toda equipe|equipe).*(?:mecanicos|funcionarios|colaboradores)|(?:mecanicos|funcionarios|colaboradores).*(?:todos|toda equipe)/.test(q)) return null;
