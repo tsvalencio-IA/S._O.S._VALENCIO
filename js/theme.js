@@ -66,6 +66,29 @@
     injetarBotao();
   }
 
+
+  // Visual exclusivo do aplicativo Android; a versao navegador nao sofre mudanca.
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const bridge = !!(window.Capacitor &&
+      typeof window.Capacitor.isNativePlatform === 'function' &&
+      window.Capacitor.isNativePlatform());
+    const appMode = bridge || p.get('sos_app') === 'android' ||
+      localStorage.getItem('sos_valencio_android_shell') === '1';
+    if (appMode) {
+      localStorage.setItem('sos_valencio_android_shell', '1');
+      document.documentElement.classList.add('sos-android-app');
+      if (!document.querySelector('link[data-sos-android-style]')) {
+        const css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = 'css/android-app.css?v=26.25.5';
+        css.setAttribute('data-sos-android-style', '1');
+        document.head.appendChild(css);
+      }
+    }
+  } catch (e) {
+    console.warn('[SOS Android] Estilo visual indisponivel:', e?.message || e);
+  }
   window.thiTheme = { get, set, toggle };
 })();
 /* Powered by thIAguinho Soluções Digitais */
