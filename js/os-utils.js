@@ -510,6 +510,7 @@
         codigo: s.codigoInterno || s.codInterno || s.codigoServicoInterno || s.codigoTabela || s.codigo || '',
         sistema: s.secaoHoraLabel || s.sistemaTabela || s.sistema || '',
         desc: s.desc || '',
+        tipoExecucao: s.tipoExecucao || s.execucaoTipo || (s.terceirizado===true||s.servicoTerceirizado===true||s.terceirizadoNome||s.prestadorNome?'terceirizada':'interna'),
         mecId: s.mecId || s.mecanicoId || s.responsavelId || '',
         mecNome: s.mecNome || s.mecanicoNome || s.responsavelNome || '',
         responsavelId: s.responsavelId || s.mecId || s.mecanicoId || '',
