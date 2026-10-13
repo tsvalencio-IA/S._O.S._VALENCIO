@@ -23,6 +23,12 @@ function diagnostic(eventName, details) {
   try {
     const file = path.join(app.getPath('userData'), 'diagnostico-inicializacao.log');
     fs.mkdirSync(path.dirname(file), {recursive:true});
+    // No smoke, gravar antes de app.exit(): escrita assíncrona perdia a confirmação.
+    if (smoke) {
+      fs.appendFileSync(file, new Date().toISOString() + '  ' + String(eventName) +
+        (details ? ': ' + String(details).slice(0,180) : '') + os.EOL);
+      return;
+    }
     fs.stat(file, (error, st) => {
       if (!error && st.size > 196608) fs.rename(file, file+'.antigo', ()=>{});
       fs.appendFile(file, new Date().toISOString() + '  ' + String(eventName) +
