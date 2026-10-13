@@ -7,6 +7,8 @@ on:
       - 'capacitor-android/android-overrides/**'
       - 'scripts/prepare-capacitor-www.sh'
       - 'scripts/build-android-homologacao.sh'
+      - 'scripts/render-android-icon.py'
+      - 'assets/sos-valencio-android-icon.svg'
       - '.github/workflows/build-android-homologacao.yml'
   workflow_dispatch:
 
@@ -82,6 +84,14 @@ jobs:
 
       - name: Aplicar integrações Android existentes
         run: bash scripts/build-android-homologacao.sh
+
+      - name: Criar icones Android nativos sem alterar o site
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/sos-icon-venv"
+          "$RUNNER_TEMP/sos-icon-venv/bin/pip" install --quiet --disable-pip-version-check cairosvg Pillow
+          "$RUNNER_TEMP/sos-icon-venv/bin/python" scripts/render-android-icon.py
 
       - name: Compilar APK Android instalavel de teste
         working-directory: capacitor-android/android
