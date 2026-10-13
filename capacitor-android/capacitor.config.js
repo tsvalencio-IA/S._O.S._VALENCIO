@@ -19,6 +19,14 @@ const config = {
   appName: 'thIAguinho SaaS',
   webDir: 'www',
   bundledWebRuntime: false,
+  // A interface e os scripts são carregados da própria publicação web de homologação.
+  // Alterações web seguem o GitHub Pages; mudanças nativas exigem novo APK.
+  server: {
+    url: 'https://tsvalencio-ia.github.io/S._O.S._VALENCIO/selecionar-perfil.html',
+    androidScheme: 'https',
+    cleartext: false,
+    allowNavigation: ['tsvalencio-ia.github.io']
+  },
   android: {
     allowMixedContent: false,
     captureInput: true,
