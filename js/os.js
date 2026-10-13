@@ -4150,10 +4150,10 @@ function comissaoOficialFixaCalculadaOS(payload) {
 }
 
 function calcularComissoesPorMecanicoOS(payload, totalPecasFallback) {
-  const especiais = comissaoOficialFixaCalculadaOS(payload);
-  if (especiais.length) return especiais;
   const U = OSU();
   const cliente = (window.J?.clientes || []).find(c => c.id === payload?.clienteId);
+  const tipo=String(cliente?.tipoCliente||cliente?.tipo||payload?.tipoCliente||'').toLowerCase();
+  if(U.isOfficialClient?.(payload,cliente)===true||tipo==='governo'||tipo==='oficial'||cliente?.clienteOficial===true)return comissaoOficialFixaCalculadaOS(payload);
   const itens = U.buildBudgetItems?.(payload, cliente) || [];
   const temAprovacao = U.hasApproval?.(payload);
   const aprovados = U.getApprovedKeys?.(payload) || new Set();
@@ -4172,6 +4172,9 @@ function calcularComissoesPorMecanicoOS(payload, totalPecasFallback) {
   };
 
   itens.filter(item => item.tipo === 'servico').forEach(item => {
+    const origemTipoExecucao=(payload?.servicos||[])[Number(item.index)]||{};
+    const tipoExec=String(origemTipoExecucao.tipoExecucao||origemTipoExecucao.execucaoTipo||'').toLowerCase();
+    if(['terceirizada','terceirizado','externa','externo'].includes(tipoExec)||origemTipoExecucao.terceirizado===true||origemTipoExecucao.servicoTerceirizado===true||origemTipoExecucao.terceirizadoNome||origemTipoExecucao.prestadorNome||origemTipoExecucao.fornecedorServicoNome)return;
     if (temAprovacao && !aprovados.has(item.key)) return;
     const registro = execucao[item.key] || {};
     if (temExecucaoServico && !statusExecucaoComissaoOS(registro.status)) return;
@@ -4195,7 +4198,7 @@ function calcularComissoesPorMecanicoOS(payload, totalPecasFallback) {
       const baseRateada = +Math.min(Math.max(0, numBR(item.valorFinal || 0)), Math.max(0, numBR(rateio.valorBase || 0))).toFixed(2);
       if (baseRateada <= 0) return;
       grupo.baseServico += baseRateada;
-      const percentual = numBR(grupo.mec.comissaoServico ?? grupo.mec.comissao ?? 0);
+      const percentual = 50;
       grupo.servicos.push({
         key: item.key,
         desc: item.desc || '',
