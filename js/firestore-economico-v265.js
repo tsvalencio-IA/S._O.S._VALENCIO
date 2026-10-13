@@ -387,7 +387,7 @@
     if (/finance|dre|caixa|receita|despesa|conta|vencid|comiss|salario|pagamento/.test(q)) return ['financeiro','equipe','os'];
     if (/nota fiscal|\bnf\b/.test(q)) return ['fornecedores','fiscal'];
     if (/estoque|reposi|saldo|quantidade|fornecedor/.test(q)) return ['estoque','fornecedores'];
-    if (/atendimento|mecanic|historico|placa|veiculo|cliente|ordem de servico|\bos\b|servico realizado|peca instalada/.test(q)) return ['os','clientes','veiculos','equipe'];
+    if (/atendimento|mecanic|historico|placa|veiculo|cliente|ordem de servico|\bos\b|servico realizado|peca instalada/.test(q)) return ['os','clientes','veiculos','equipe',...(/atendimento/.test(q)&&/mecanic|funcionari|colaborador/.test(q)?['financeiro']:[])];
     return ['os'];
   }
 
@@ -396,7 +396,8 @@
     if (typeof original !== 'function' || original.__thiaEconomyV265) return;
     const wrapped = async function (question, opts) {
       const keys = questionKeys(question);
-      if (keys.length) await Promise.all(keys.map(k => ensureKey(k)));
+      const estaConsultandoAtendimento=/atendimento/.test(norm(question))&&/mecanic|funcionari|colaborador/.test(norm(question));
+      if (keys.length) await Promise.all(keys.map(k=>ensureKey(k,{force:estaConsultandoAtendimento&&(k==='financeiro'||k==='os')})));
       return original.apply(this, arguments);
     };
     wrapped.__thiaEconomyV265 = true;
