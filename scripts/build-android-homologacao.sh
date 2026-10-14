@@ -11,6 +11,7 @@ JAVA_TARGET="$MAIN/java/br/com/thiaguinho/saas"
 test -f "$ANDROID_ROOT/android/gradlew" || { echo "Android Capacitor não foi gerado."; exit 1; }
 test -f "$OVERRIDES/MainActivity.java"
 test -f "$OVERRIDES/ELMBluetoothClassicPlugin.java"
+test -f "$OVERRIDES/SosSpeechInputPlugin.java"
 test -f "$OVERRIDES/AndroidManifest.xml"
 test -f "$OVERRIDES/res/xml/file_paths.xml"
 
@@ -20,6 +21,8 @@ sed 's/^package br\.com\.thiaguinho\.cliente;/package br.com.thiaguinho.saas;/' 
   "$OVERRIDES/MainActivity.java" > "$JAVA_TARGET/MainActivity.java"
 sed 's/^package br\.com\.thiaguinho\.cliente;/package br.com.thiaguinho.saas;/' \
   "$OVERRIDES/ELMBluetoothClassicPlugin.java" > "$JAVA_TARGET/ELMBluetoothClassicPlugin.java"
+sed 's/^package br\.com\.thiaguinho\.cliente;/package br.com.thiaguinho.saas;/' \
+  "$OVERRIDES/SosSpeechInputPlugin.java" > "$JAVA_TARGET/SosSpeechInputPlugin.java"
 
 # Preserva as permissões e integrações nativas da configuração Android já existente.
 cp "$OVERRIDES/AndroidManifest.xml" "$MAIN/AndroidManifest.xml"
@@ -31,6 +34,7 @@ if [ -f "$OVERRIDES/strings.xml" ]; then
 fi
 
 grep -q 'registerPlugin(ELMBluetoothClassicPlugin.class)' "$JAVA_TARGET/MainActivity.java"
+grep -q 'registerPlugin(SosSpeechInputPlugin.class)' "$JAVA_TARGET/MainActivity.java"
 grep -q 'android.permission.BLUETOOTH_CONNECT' "$MAIN/AndroidManifest.xml"
 grep -q 'android.permission.CAMERA' "$MAIN/AndroidManifest.xml"
 grep -q 'android.permission.RECORD_AUDIO' "$MAIN/AndroidManifest.xml"

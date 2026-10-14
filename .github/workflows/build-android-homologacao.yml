@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: apk-android-homologacao
@@ -73,6 +73,8 @@ jobs:
           grep -q "sos_valencio_android_shell" js/theme.js
           grep -Fq 'js/ia.js?v=26.25.4' jarvis.html
           grep -Fq 'const exatos=clientes.filter' js/ia.js
+          node --check js/sos-native-speech.js
+          grep -Fq 'registerPlugin(SosSpeechInputPlugin.class)' capacitor-android/android-overrides/MainActivity.java
 
       - name: Preparar arquivos web atuais
         run: bash scripts/prepare-capacitor-www.sh
@@ -97,6 +99,7 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/sos-icon-venv"
           "$RUNNER_TEMP/sos-icon-venv/bin/pip" install --quiet --disable-pip-version-check cairosvg Pillow
           "$RUNNER_TEMP/sos-icon-venv/bin/python" scripts/render-android-icon.py
+          "$RUNNER_TEMP/sos-icon-venv/bin/python" scripts/render-web-icons.py
 
       - name: Compilar APK Android instalavel de teste
         working-directory: capacitor-android/android
@@ -121,3 +124,18 @@ jobs:
           path: SOS-Valencio-homologacao-*.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Atualizar ícones PWA no branch homologacao apos APK valido
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "sos-valencio-ci"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/icon-192.png assets/icon-512.png
+          if ! git diff --cached --quiet; then
+            git commit -m "fix(pwa): usar icone oficial SOS Valencio no Chrome"
+            git push origin HEAD:homologacao
+          else
+            echo "Icones PWA ja correspondem ao SVG oficial."
+          fi

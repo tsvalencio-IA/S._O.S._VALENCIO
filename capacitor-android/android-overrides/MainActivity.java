@@ -15,6 +15,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(android.os.Bundle savedInstanceState) {
         // Registra plugin customizado ANTES do super.onCreate
         registerPlugin(ELMBluetoothClassicPlugin.class);
+        registerPlugin(SosSpeechInputPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

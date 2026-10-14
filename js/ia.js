@@ -3992,6 +3992,24 @@
     btn.style.cssText='position:absolute;right:4px;top:50%;transform:translateY(-50%);width:38px;height:38px;border:1px solid rgba(125,211,252,.35);border-radius:7px;background:rgba(15,23,42,.82);color:var(--cyan,#7dd3fc);font-size:18px;display:flex;align-items:center;justify-content:center;z-index:2;cursor:pointer;';
     wrapper.appendChild(btn);
 
+    if (W.sosNativeSpeech?.available()) {
+      btn.addEventListener('click', async () => {
+        if (btn.disabled) return;
+        btn.disabled = true;
+        btn.textContent = '⏳';
+        try {
+          const spoken = await W.sosNativeSpeech.listen();
+          if (spoken) W.sosNativeSpeech.insert(input, spoken);
+        } catch (e) {
+          if (String(e?.code || '') !== 'CANCELLED')
+            console.warn('[S.O.S.] Ditado Android:', e?.message || e);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = '🎙';
+        }
+      });
+      return;
+    }
     if(!SR){
       btn.disabled=true; btn.style.opacity='.45'; btn.title='Reconhecimento de voz não disponível neste navegador';
       return;

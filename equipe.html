@@ -416,7 +416,7 @@ body.equipe-page .overlay.open{display:flex!important;}
       </div>
       <div class="equipe-kanban-toolbar" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap;">
         <div style="position:relative;flex:1;max-width:240px;">
-          <input class="j-input" id="searchOS" placeholder="Buscar placa..." oninput="renderKanban()" style="padding-left:10px;">
+          <input class="j-input" id="searchOS" inputmode="search" enterkeyhint="search" autocapitalize="characters" placeholder="Buscar placa..." oninput="renderKanban()" style="padding-left:10px;">
         </div>
         <button class="btn-primary" onclick="prepOS('add');abrirModal('modalOS')">+ NOVA O.S.</button>
       </div>
@@ -446,7 +446,7 @@ body.equipe-page .overlay.open{display:flex!important;}
             <button type="button" class="btn-chat-icon" id="btnSTTChat" onclick="iniciarVoz('chatInput',this)" title="Voz para texto" aria-label="Voz para texto">🎙️</button>
             <input type="file" id="fileInputEquipe" accept="image/*,audio/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx" style="display:none" onchange="enviarArquivoChat(this)">
             <button type="button" class="btn-chat-icon" onclick="document.getElementById('fileInputEquipe').click()" title="Anexar foto ou arquivo" aria-label="Anexar arquivo">📎</button>
-            <input class="j-input" id="chatInput" placeholder="Escreva ou use 🎙️..." style="flex:1;" autocomplete="off">
+            <input class="j-input" id="chatInput" type="text" placeholder="Escreva ou use 🎙️..." style="flex:1;" autocomplete="on" autocapitalize="sentences" spellcheck="true" enterkeyhint="send">
             <button class="btn-primary" onclick="enviarMsg()">ENVIAR</button>
           </div>
         </div>
@@ -616,7 +616,7 @@ body.equipe-page .overlay.open{display:flex!important;}
     </div>
     <div class="form-group"><label class="j-label">Defeito / Problema Relatado</label>
       <div class="field-voice-wrap has-textarea">
-        <textarea class="j-textarea" id="osDesc" rows="3" placeholder="Descreva o problema..."></textarea>
+        <textarea class="j-textarea" id="osDesc" autocapitalize="sentences" spellcheck="true" rows="3" placeholder="Descreva o problema..."></textarea>
         <button type="button" class="btn-voice" onclick="iniciarVoz('osDesc',this)" title="Falar para preencher">🎙️</button>
       </div>
     </div>
@@ -626,7 +626,7 @@ body.equipe-page .overlay.open{display:flex!important;}
         <button type="button" onclick="iaSugerirDiagnostico()" style="padding:3px 10px;background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.3);border-radius:12px;color:#A78BFA;font-family:var(--fm);font-size:0.58rem;letter-spacing:1px;cursor:pointer;">🤖 IA SUGERIR</button>
       </div>
       <div class="field-voice-wrap has-textarea">
-        <textarea class="j-textarea" id="osDiag" rows="2" placeholder="Diagnóstico do mecânico..."></textarea>
+        <textarea class="j-textarea" id="osDiag" autocapitalize="sentences" spellcheck="true" rows="2" placeholder="Diagnóstico do mecânico..."></textarea>
         <button type="button" class="btn-voice" onclick="iniciarVoz('osDiag',this)" title="Falar para preencher">🎙️</button>
       </div>
     </div>
@@ -634,7 +634,7 @@ body.equipe-page .overlay.open{display:flex!important;}
     <div class="form-group" style="background:rgba(255,184,0,.035);border:1px solid rgba(255,184,0,.18);border-radius:4px;padding:12px;">
       <label class="j-label" style="color:var(--warn);">Observação da equipe / auditoria</label>
       <div class="field-voice-wrap has-textarea">
-        <textarea class="j-textarea" id="osObsEquipeNova" rows="2" placeholder="Ex.: ruído confirmado no teste, peça não localizada, cliente informou novo sintoma..."></textarea>
+        <textarea class="j-textarea" id="osObsEquipeNova" autocapitalize="sentences" spellcheck="true" rows="2" placeholder="Ex.: ruído confirmado no teste, peça não localizada, cliente informou novo sintoma..."></textarea>
         <button type="button" class="btn-voice" onclick="iniciarVoz('osObsEquipeNova',this)" title="Falar para preencher">🎙️</button>
       </div>
       <div style="font-family:var(--fm);font-size:.58rem;color:var(--muted);margin-top:5px;line-height:1.45;">Ao salvar, a observação recebe data, hora e usuário e fica registrada na auditoria/timeline da O.S.</div>
@@ -751,7 +751,7 @@ body.equipe-page .overlay.open{display:flex!important;}
       <div class="form-group">
         <label class="j-label">Avarias Prévias / Obs</label>
         <div class="field-voice-wrap has-textarea">
-          <textarea class="j-textarea" id="chkObs" rows="2" placeholder="Arranhões, amassados... (ou use o microfone)"></textarea>
+          <textarea class="j-textarea" id="chkObs" autocapitalize="sentences" spellcheck="true" rows="2" placeholder="Arranhões, amassados... (ou use o microfone)"></textarea>
           <button type="button" class="btn-voice" onclick="iniciarVoz('chkObs',this)" title="Falar avarias">🎙️</button>
         </div>
       </div>
@@ -976,7 +976,23 @@ function moeda(v){
 const STT_SUPPORT = ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
 let _sttActive = null;
 
-function iniciarVoz(fieldId, btnEl) {
+async function iniciarVoz(fieldId, btnEl) {
+  // APK: ditado nativo do Android; Web mantém SpeechRecognition existente.
+  if (window.sosNativeSpeech?.available()) {
+    const field = $(fieldId);
+    if (!field) { toast('Campo de texto não encontrado.', 'warn'); return; }
+    if (btnEl?.dataset.sosListening === '1') return;
+    if (btnEl) { btnEl.dataset.sosListening = '1'; btnEl.classList.add('listening'); btnEl.textContent = '⏹'; }
+    try {
+      const spoken = await window.sosNativeSpeech.listen();
+      if (spoken) window.sosNativeSpeech.insert(field, spoken);
+    } catch (e) {
+      if (String(e?.code || '') !== 'CANCELLED') toast('Ditado Android: ' + (e.message || e), 'warn');
+    } finally {
+      if (btnEl) { delete btnEl.dataset.sosListening; btnEl.classList.remove('listening'); btnEl.textContent = '🎙️'; }
+    }
+    return;
+  }
   if (!STT_SUPPORT) { toast('⚠ Seu navegador não suporta reconhecimento de voz. Use Chrome/Edge.', 'warn'); return; }
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -1639,7 +1655,7 @@ function renderKanbanFalhaEquipe(msg){
 }
 document.addEventListener('DOMContentLoaded',()=>{
   // Avisar sobre STT se não suportado
-  if (!STT_SUPPORT) {
+  if (!STT_SUPPORT && !window.sosNativeSpeech?.available()) {
     document.querySelectorAll('.btn-voice,.btn-ia-voice').forEach(b => {
       b.title = 'Voz não suportada — use Chrome ou Edge';
       b.style.opacity = '0.35';
@@ -2976,6 +2992,7 @@ function aplicarSugestaoIA() {
 </script>
 <script src="js/final-1010-regras-os.js"></script>
 <script src="js/theme.js"></script>
+<script src="js/sos-native-speech.js?v=26.25.7"></script>
 <script src="js/hardening-comercial.js?v=26.13.0"></script>
 <script src="js/ia.js?v=26.24.2"></script>
 <script src="js/catalogos-ia.js?v=19.0.0"></script>
