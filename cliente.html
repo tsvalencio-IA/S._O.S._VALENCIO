@@ -198,7 +198,9 @@ body { overflow-y: auto; background: #060A14; color: #E8F4FF; font-family: 'Exo 
       <input class="input" id="pLogin" name="username" type="text" inputmode="email" placeholder="Ex: ABC-1234" autocomplete="username email" autocorrect="off" autocapitalize="none" spellcheck="false">
       <label class="label">PIN de Segurança</label>
       <input class="input" id="pPin" name="current-password" type="password" placeholder="••••••" autocomplete="current-password" style="margin-bottom: 24px;">
-      <button class="btn btn-brand" onclick="portalLogin()" id="btnLoginBtn">ACESSAR MEU PAINEL</button>
+      <label style="display:flex;align-items:center;gap:8px;color:var(--text-muted);font-size:.82rem;margin:-5px 0 12px;"><input id="cliRemember" type="checkbox" style="width:18px;height:18px;accent-color:var(--brand)"> Lembrar meu acesso neste dispositivo</label>
+<button type="button" onclick="window._portalFillPass?.()" style="background:transparent;border:0;color:var(--brand);font-size:.75rem;margin:0 0 15px;cursor:pointer;">Usar senha salva pelo navegador</button>
+<button class="btn btn-brand" onclick="portalLogin()" id="btnLoginBtn">ACESSAR MEU PAINEL</button>
       <div style="text-align:center;margin-top:24px;font-size:0.75rem;color:var(--text-muted);font-family:var(--ff-mono);">Credenciais fornecidas pelo atendimento via WhatsApp.</div>
     </div>
   </div>
@@ -359,9 +361,12 @@ body { overflow-y: auto; background: #060A14; color: #E8F4FF; font-family: 'Exo 
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore-compat.js"></script>
 <script src="js/config.js?v=26.13.0"></script>
-<script src="js/links-publicos.js?v=26.24.0"></script>
+<script src="js/links-publicos.js?v=26.25.10"></script>
+<script src="js/portal-access.js?v=26.25.10"></script>
+<script src="js/portal-gallery.js?v=26.25.10"></script>
 <script src="js/tenant-modules.js"></script>
 <script src="js/os-utils.js"></script>
+<script src="js/os-evidencias-export.js?v=26.25.0"></script>
 <script>
 // ============================================================
 // CORE LÓGICA E FIREBASE
@@ -428,28 +433,9 @@ document.getElementById('pLogin').addEventListener('keydown', e => { if (e.key =
 
 
 
-// Lembrança local das credenciais do portal do cliente (não interfere no login original)
-(function carregarCredenciaisPortalCliente(){
-  try{
-    const salvo = JSON.parse(localStorage.getItem('thiaguinho_portal_cliente_login') || 'null');
-    if(!salvo) return;
-    const loginEl = document.getElementById('pLogin');
-    const pinEl = document.getElementById('pPin');
-    if(loginEl && salvo.login) loginEl.value = salvo.login;
-    if(pinEl && salvo.pin) pinEl.value = salvo.pin;
-  }catch(e){ console.warn('[Portal Cliente] não foi possível carregar credenciais locais', e); }
-  try{
-    const loginLink = params.get('login') || params.get('placa') || '';
-    const loginEl = document.getElementById('pLogin');
-    if(loginEl && loginLink) loginEl.value = loginLink;
-  }catch(e){}
-})();
-function salvarCredenciaisPortalCliente(login, pin){
-  try{
-    if(!login || !pin) return;
-    localStorage.setItem('thiaguinho_portal_cliente_login', JSON.stringify({ login, pin, salvoEm: new Date().toISOString() }));
-  }catch(e){ console.warn('[Portal Cliente] não foi possível salvar credenciais locais', e); }
-}
+// Acesso lembrado: somente identificação no portal; PIN fica no gerenciador do navegador.
+const _accessCliente=window.sosPortalAccess.setup({kind:'cliente',tenant:_tenantSlug,loginId:'pLogin',pinId:'pPin',checkboxId:'cliRemember'});
+window._portalFillPass=()=>_accessCliente?.fillFromManager();
 
 async function portalLogin() {
   await _tenantReady;
@@ -506,7 +492,7 @@ async function portalLogin() {
     if (!P.oficina && P.tenantId) { await _carregarBrandTenant(P.tenantId); }
 
     document.getElementById('portalClienteNome').textContent = P.cliente?.nome || 'Olá, Cliente';
-    salvarCredenciaisPortalCliente(rawLogin, pin);
+    await _accessCliente?.success();
     document.getElementById('loginView').style.display  = 'none'; document.getElementById('portalView').style.display = 'block';
     _iniciarPortalListeners();
   } catch(e) {
@@ -736,7 +722,7 @@ function _renderPortalOS(osList) {
         <div style="margin-bottom:20px;"><span class="ficha-lbl" style="font-size:0.7rem; color:var(--text-muted); display:block; margin-bottom:5px;">Diagnóstico Técnico</span><div style="font-size:0.85rem; background:rgba(0,0,0,0.2); padding:10px; border-radius:var(--r-md); border-left:3px solid var(--brand);">${os.diagnostico || 'Avaliação técnica em andamento...'}</div></div>
         ${resumoValoresHTML}
         ${financeiroDetalhe}
-        ${(os.media && os.media.length > 0) || (os.fotos && os.fotos.length > 0) ? `<div style="font-size:0.7rem; color:var(--text-muted); margin-bottom:5px; text-transform:uppercase;">Evidências (Fotos/Vídeos)</div><div class="media-grid">${(os.media || os.fotos || []).map(m => `<div class="media-item"><img src="${m.url || m}" onclick="window.open('${m.url || m}')"></div>`).join('')}</div>` : ''}
+        ${window.sosPortalGallery.render(os)}
         ${timelineHtml}
     </div>`;
 
@@ -1097,7 +1083,7 @@ function _formatarMidiaChat(texto) {
     return `<audio src="${u}" controls preload="metadata" style="height:40px; max-width:100%; outline:none; border-radius:20px;"></audio>`;
   }
   if (tipo === 'IMAGEM') {
-    return `<img src="${u}" loading="lazy" alt="imagem" style="max-width:100%; max-height: 250px; border-radius:var(--r-md); cursor:zoom-in; border:1px solid var(--border);" onclick="window.open('${u}','_blank','noopener')">`;
+    return `<img src="${u}" loading="lazy" alt="imagem" style="max-width:100%; max-height: 250px; border-radius:var(--r-md); cursor:zoom-in; border:1px solid var(--border);" onclick="window.sosPortalGallery.openSingle(this.src)">`;
   }
   if (tipo === 'ARQUIVO') {
     return `<a href="${u}" target="_blank" rel="noopener" style="color:var(--brand);text-decoration:underline;font-weight:700;">📎 Abrir Anexo de Documento</a>`;

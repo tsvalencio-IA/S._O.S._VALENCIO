@@ -208,7 +208,9 @@ body{background:var(--bg0);color:var(--text);font-family:var(--ff);min-height:10
     <input type="email" id="loginInput" name="username" inputmode="email" placeholder="Ex: pmsp.30bpm" autocomplete="username email" autocapitalize="none" autocorrect="off" spellcheck="false">
     <label>PIN de Acesso</label>
     <input type="password" id="pinInput" name="current-password" placeholder="••••••" autocomplete="current-password">
-    <button class="btn-login" id="btnLogin" onclick="doLogin()">ACESSAR PORTAL</button>
+    <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:.8rem"><input id="govRemember" type="checkbox" style="width:18px;height:18px;accent-color:var(--gov)"> Lembrar meu acesso neste dispositivo</label>
+<button type="button" onclick="window._portalFillPass?.()" style="background:transparent;border:0;color:var(--gov);font-size:.75rem;margin-top:10px;cursor:pointer">Usar senha salva pelo navegador</button>
+<button class="btn-login" id="btnLogin" onclick="doLogin()">ACESSAR PORTAL</button>
   </div>
 </div>
 
@@ -356,7 +358,9 @@ body{background:var(--bg0);color:var(--text);font-family:var(--ff);min-height:10
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore-compat.js"></script>
 <script src="js/config.js?v=26.13.0"></script>
 <script src="js/os-evidencias-export.js?v=26.25.0"></script>
-<script src="js/links-publicos.js?v=26.24.0"></script>
+<script src="js/links-publicos.js?v=26.25.10"></script>
+<script src="js/portal-access.js?v=26.25.10"></script>
+<script src="js/portal-gallery.js?v=26.25.10"></script>
 <script src="js/tenant-modules.js"></script>
 <script src="js/os-utils.js?v=22.4.1"></script>
 <script src="js/tabela-tempa.js"></script>
@@ -626,11 +630,8 @@ document.getElementById('pinInput').addEventListener('keydown',e=>{ if(e.key==='
 document.getElementById('loginInput').addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('pinInput').focus(); });
 
 
-(function carregarCredenciaisClienteOficial(){
-  try{const s=JSON.parse(localStorage.getItem('thiaguinho_cliente_oficial_login')||'null');if(s){const l=document.getElementById('loginInput');const p=document.getElementById('pinInput');if(l&&s.login)l.value=s.login;if(p&&s.pin)p.value=s.pin;}}catch(e){}
-  try{const loginLink=portalParams.get('login')||portalParams.get('placa')||'';const l=document.getElementById('loginInput');if(l&&loginLink)l.value=loginLink;}catch(e){}
-})();
-function salvarCredenciaisClienteOficial(login,pin){try{localStorage.setItem('thiaguinho_cliente_oficial_login',JSON.stringify({login,pin,salvoEm:new Date().toISOString()}));}catch(e){}}
+const _accessOficial=window.sosPortalAccess.setup({kind:'oficial',tenant:_tenantSlug,loginId:'loginInput',pinId:'pinInput',checkboxId:'govRemember'});
+window._portalFillPass=()=>_accessOficial?.fillFromManager();
 
 async function _resolverOficinaPortalOficial(tenantRef){
   const centralDb=window.initCentralFirebase?window.initCentralFirebase():db;
@@ -670,9 +671,10 @@ async function doLogin(){
     }
     CLI={id:matched.id,...data};
     TID=data.tenantId;
-    sessionStorage.setItem('govCli',JSON.stringify(CLI));
+    const sessCli={...CLI}; delete sessCli.pin; delete sessCli.senha; delete sessCli.password;
+    sessionStorage.setItem('govCli',JSON.stringify(sessCli));
     sessionStorage.setItem('govTid',TID);
-    salvarCredenciaisClienteOficial(login, pin);
+    await _accessOficial?.success();
     _carregarOficina().then(inicializar);
   }catch(e){
     err.textContent='⚠ '+e.message; err.style.display='block';
@@ -887,16 +889,7 @@ function _buildOSCard(os){
     return `<div class="detalhe-row"><span>${esc(p.desc||'—')}${badgeAprovacao('peca-'+idx)}<br><small style="color:var(--muted)">${q}× ${moeda(vl)}</small></span><span class="detalhe-val" style="text-align:right">${riscado}${moeda(vf)}</span></div>`;
   }).join('');
 
-  const fotos = typeof window.thiaEvidenciasOS?.fotos === 'function'
-    ? window.thiaEvidenciasOS.fotos(os)
-    : [...(Array.isArray(os.fotos)?os.fotos:[]), ...(Array.isArray(os.media)?os.media:[])]
-        .map(m=>typeof m==='string'?{url:m,type:'image'}:m)
-        .filter(m=>m && (m.url||m.secure_url) && !/^video/i.test(String(m.type||'image')));
-  const fotosHtml=fotos.length?`
-    <div style="margin-top:18px">
-      <div style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Evidências / Fotos</div>
-      <div class="media-grid">${fotos.map((m,i)=>`<div class="media-item" style="position:relative" data-href="${esc(m.url||m.secure_url||'')}"><img src="${esc(m.url||m.secure_url||'')}" loading="lazy" alt="Foto ${i+1} da O.S." onclick="window.open(this.parentNode.dataset.href,'_blank','noopener')">${m.descricao||m.legenda||m.obs?`<div style="position:absolute;bottom:0;left:0;right:0;padding:4px;background:rgba(5,14,26,.88);color:#fff;font-size:.56rem;line-height:1.35;text-align:center;pointer-events:none">${esc(m.descricao||m.legenda||m.obs)}</div>`:''}</div>`).join('')}</div>
-    </div>`:'';
+  const fotosHtml=window.sosPortalGallery.render(os);
 
   // Linha do tempo: apenas mudanças de status (filtra logs de auditoria técnica)
   const tlFiltrado=(os.timeline||[]).filter(t=>{
@@ -1072,7 +1065,7 @@ function _formatMidia(txt){
   if(!/^https?:\/\/\S+/i.test(url)) return _escChat(s).replace(/\n/g,'<br>');
   const u=_escAttr(url);
   if(tipo==='AUDIO') return `<audio src="${u}" controls preload="metadata" style="height:40px;max-width:100%;border-radius:20px"></audio>`;
-  if(tipo==='IMAGEM') return `<img src="${u}" loading="lazy" style="max-width:100%;max-height:240px;border-radius:var(--r);cursor:zoom-in;border:1px solid var(--border)" onclick="window.open('${u}','_blank')">`;
+  if(tipo==='IMAGEM') return `<img src="${u}" loading="lazy" style="max-width:100%;max-height:240px;border-radius:var(--r);cursor:zoom-in;border:1px solid var(--border)" onclick="window.sosPortalGallery.openSingle(this.src)">`;
   if(tipo==='ARQUIVO') return `<a href="${u}" target="_blank" rel="noopener" style="color:var(--gov);text-decoration:underline;font-weight:700">📎 Abrir Anexo</a>`;
   return _escChat(s);
 }

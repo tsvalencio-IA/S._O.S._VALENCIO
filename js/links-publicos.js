@@ -1,13 +1,14 @@
 /*
  * Configuracao central dos links publicos do SaaS.
  * Base publica oficial no GitHub Pages:
- * https://tsvalencio-ia.github.io/SAAS-2/
+ * https://tsvalencio-ia.github.io/S._O.S._VALENCIO/
  */
 (function () {
   'use strict';
 
-  const PUBLIC_BASE_URL = 'https://tsvalencio-ia.github.io/SAAS-2/';
+  const PUBLIC_BASE_URL = 'https://tsvalencio-ia.github.io/S._O.S._VALENCIO/';
   const LEGACY_PUBLIC_BASES = [
+    'https://tsvalencio-ia.github.io/SAAS-2',
     'https://tsvalencio-ia.github.io/OFICIN-IA-COM_IA',
     'https://tsvalencio-ia.github.io/OFICIN-IA'
   ];
@@ -27,20 +28,20 @@
 
   window.THIA_PUBLIC_LINKS = Object.assign({
     baseUrl: PUBLIC_BASE_URL,
-    cliente: 'https://tsvalencio-ia.github.io/SAAS-2/cliente.html',
-    clienteOficial: 'https://tsvalencio-ia.github.io/SAAS-2/clienteOficial.html',
-    cotacaoFornecedor: 'https://tsvalencio-ia.github.io/SAAS-2/cotacao.html',
-    cotacaoFornecedorCurta: 'https://tsvalencio-ia.github.io/SAAS-2/c.html',
-    jarvis: 'https://tsvalencio-ia.github.io/SAAS-2/jarvis.html',
-    equipe: 'https://tsvalencio-ia.github.io/SAAS-2/equipe.html',
-    superadmin: 'https://tsvalencio-ia.github.io/SAAS-2/superadmin.html',
-    login: 'https://tsvalencio-ia.github.io/SAAS-2/index.html',
-    selecionarPerfil: 'https://tsvalencio-ia.github.io/SAAS-2/selecionar-perfil.html',
+    cliente: 'https://tsvalencio-ia.github.io/S._O.S._VALENCIO/cliente.html',
+    clienteOficial: 'https://tsvalencio-ia.github.io/S._O.S._VALENCIO/clienteOficial.html',
+    cotacaoFornecedor: 'https://tsvalencio-ia.github.io/S._O.S._VALENCIO/cotacao.html',
+    cotacaoFornecedorCurta: 'https://tsvalencio-ia.github.io/S._O.S._VALENCIO/c.html',
+    jarvis: 'https://tsvalencio-ia.github.io/S._O.S._VALENCIO/jarvis.html',
+    equipe: 'https://tsvalencio-ia.github.io/S._O.S._VALENCIO/equipe.html',
+    superadmin: 'https://tsvalencio-ia.github.io/S._O.S._VALENCIO/superadmin.html',
+    login: 'https://tsvalencio-ia.github.io/S._O.S._VALENCIO/index.html',
+    selecionarPerfil: 'https://tsvalencio-ia.github.io/S._O.S._VALENCIO/selecionar-perfil.html',
     usarLinkCurtoCotacao: true,
     incluirFirebaseConfigNoLink: false,
-    qrCliente: 'https://tsvalencio-ia.github.io/SAAS-2/cliente.html',
-    apkShareBase: 'https://tsvalencio-ia.github.io/SAAS-2/',
-    apkUrl: 'https://github.com/tsvalencio-IA/SAAS-2/releases/latest'
+    qrCliente: 'https://tsvalencio-ia.github.io/S._O.S._VALENCIO/cliente.html',
+    apkShareBase: 'https://tsvalencio-ia.github.io/S._O.S._VALENCIO/',
+    apkUrl: ''
   }, window.THIA_PUBLIC_LINKS || {});
 
   ['baseUrl','cliente','clienteOficial','cotacaoFornecedor','cotacaoFornecedorCurta','jarvis','equipe','superadmin','login','selecionarPerfil','qrCliente','apkShareBase'].forEach(key => {
@@ -116,7 +117,10 @@
     const base = officeBase() || cleanBase(cfg.baseUrl) || runtimeBase();
     let url = '';
 
-    if (kind === 'cotacaoFornecedor') {
+    if (kind === 'cliente' || kind === 'clienteOficial' || kind === 'qrCliente') {
+      // O link do perfil sempre aponta para a publicação atual da homologação.
+      url = joinUrl(PUBLIC_BASE_URL, PAGE_BY_KIND[kind]);
+    } else if (kind === 'cotacaoFornecedor') {
       const page = cfg.usarLinkCurtoCotacao === false ? 'cotacao.html' : 'c.html';
       url = cfg.usarLinkCurtoCotacao === false
         ? (cfg.cotacaoFornecedor || joinUrl(base, page))

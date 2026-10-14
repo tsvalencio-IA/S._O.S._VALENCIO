@@ -264,7 +264,7 @@ window.gerarPDFOS = async function() {
     // ─── QR CODE (link para portal do cliente) ───────────────
     const portalUrl = typeof window.thiaGetPublicUrl === 'function'
       ? window.thiaGetPublicUrl('qrCliente', { id: osId || 'demo' })
-      : `${window.location.origin}/cliente.html?id=${osId || 'demo'}`;
+      : `${window.location.origin}/S._O.S._VALENCIO/cliente.html?id=${osId || 'demo'}`;
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(portalUrl)}`;
 
     try {
