@@ -5,6 +5,9 @@ on:
     paths:
       - 'capacitor-android/capacitor.config.js'
       - 'js/theme.js'
+      - 'js/sos-all-fields-voice.js'
+      - 'jarvis.html'
+      - 'equipe.html'
       - 'css/android-app.css'
       - 'capacitor-android/android-overrides/**'
       - 'scripts/prepare-capacitor-www.sh'
