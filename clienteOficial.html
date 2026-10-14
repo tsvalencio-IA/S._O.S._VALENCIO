@@ -1257,11 +1257,24 @@ function sair(){
 (function(){
   _tenantReady.then(()=>{
     const cached=sessionStorage.getItem('govCli');
-    if(cached){
-      try{
-        CLI=JSON.parse(cached); TID=sessionStorage.getItem('govTid')||TID;
-        _carregarOficina().then(inicializar);
-      }catch(e){}
+    if(!cached || !TID) return;
+    try{
+      const cli=JSON.parse(cached);
+      const savedTid=sessionStorage.getItem('govTid')||'';
+      const linkLogin=(portalParams.get('login')||'').trim().toLowerCase();
+      const sessionLogin=String(cli.login||'').trim().toLowerCase();
+      // Nunca reutilizar a sessão de outro perfil ou de outra oficina.
+      if(savedTid!==TID || cli.tenantId!==TID || cli.tipoCliente!=='governo' ||
+         (linkLogin && linkLogin!==sessionLogin)){
+        sessionStorage.removeItem('govCli');
+        sessionStorage.removeItem('govTid');
+        return;
+      }
+      CLI=cli;
+      _carregarOficina().then(inicializar);
+    }catch(e){
+      sessionStorage.removeItem('govCli');
+      sessionStorage.removeItem('govTid');
     }
   });
 })();
