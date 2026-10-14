@@ -442,6 +442,7 @@ async function autenticar() {
       const dF   = loginFuncionario.dF;
 
       if (dF.senha !== pwd) throw new Error('Senha incorreta.');
+      if (dF.ativo === false) throw new Error('Acesso desativado pelo gestor. Contate a oficina.');
 
       const mae = loginFuncionario.mae;
       if (!mae.exists || mae.data().status === 'Bloqueado') throw new Error('Oficina bloqueada.');
