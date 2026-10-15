@@ -1877,7 +1877,7 @@ function renderKanban(){
       const prismaBadge = prismaAtual && s !== 'Entregue' ? `<div style="display:inline-flex;align-items:center;gap:4px;margin:4px 0 2px;font-family:var(--fm);font-size:.56rem;color:#111;background:var(--warn);border-radius:999px;padding:2px 7px;font-weight:900;letter-spacing:.8px;">PRISMA ${prismaAtual}</div>` : '';
       const marca=String(v?.marca||os.marca||'').trim();
       const modelo=String(v?.modelo||os.modelo||os.modeloVeiculo||'').trim();
-      const modeloCompleto=[marca, modelo && !modelo.toLowerCase().startsWith(marca.toLowerCase())?modelo:(!marca?modelo:'')].filter(Boolean).join(' ');
+      const modeloCompleto=modelo&&marca&&modelo.toLowerCase().startsWith(marca.toLowerCase())?modelo:[marca,modelo].filter(Boolean).join(' ');
       const ano=String(v?.anoModelo||v?.ano||os.anoModelo||os.ano||'').trim();
       const motor=String(v?.motor||v?.motorizacao||os.motor||'').trim();
       const corVeiculo=String(v?.cor||os.cor||'').trim();
