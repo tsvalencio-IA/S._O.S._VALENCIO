@@ -757,6 +757,9 @@ function _renderFinanceiro(finList) {
   //   • Despesas internas da oficina
   // ═══════════════════════════════════════════════════════════════════
   const docsCli = finList.filter(f => {
+    const status = String(f.status || '').toLowerCase();
+    if (f.canceladoPorReemissaoOS === true || f.cancelado === true ||
+        ['cancelado','cancelada','estornado','estornada'].includes(status)) return false;
     if (f.tipo !== 'Entrada') return false;
     // Se o recebimento é da operadora de cartão, oculta (não é dívida do cliente)
     if (f.aReceberDe === 'Operadora de Cartão') return false;
@@ -777,6 +780,9 @@ function _renderFinanceiro(finList) {
 
   // 1ª passagem: detecta OS quitadas no cartão (não aparecem na lista normal)
   finList.forEach(f => {
+    const status = String(f.status || '').toLowerCase();
+    if (f.canceladoPorReemissaoOS === true || f.cancelado === true ||
+        ['cancelado','cancelada','estornado','estornada'].includes(status)) return;
     if (f.aReceberDe === 'Operadora de Cartão' && f.osId && f.quitadoPeloCliente) {
       osQuitadasNoCartao.add(f.osId);
     }

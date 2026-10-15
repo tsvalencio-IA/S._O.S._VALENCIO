@@ -618,7 +618,7 @@ function pagamentoCombinadoRowHtmlOS(dados = {}) {
   const data = dados.data || dados.venc || document.getElementById('osPgtoData')?.value || dataLocalISOOS();
   const opts = ['Dinheiro','PIX','Débito','Crédito à Vista','Crédito Parcelado','Boleto','Crediário']
     .map(f => `<option value="${escOS(f)}"${normalizarPagamentoOS(f) === normalizarPagamentoOS(forma) ? ' selected' : ''}>${escOS(f)}</option>`).join('');
-  const parcOpts = [1,2,3,4,5,6,7,8,9,10,11,12].map(n => `<option value="${n}"${n === parcelas ? ' selected' : ''}>${n}x</option>`).join('');
+  const parcOpts = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16].map(n => `<option value="${n}"${n === parcelas ? ' selected' : ''}>${n}x</option>`).join('');
   return `<div class="os-combo-row" style="display:grid;grid-template-columns:1.2fr 120px 110px 110px 34px;gap:8px;align-items:end;">
     <div><label class="j-label">Forma</label><select class="j-select os-combo-forma" onchange="window.atualizarParcelaPagamentoCombinadoOS(this)">${opts}</select></div>
     <div><label class="j-label">Valor</label><input class="j-input os-combo-valor" inputmode="decimal" value="${escOS(valor)}" placeholder="0,00"></div>
@@ -5352,6 +5352,8 @@ window.salvarOS = async function() {
   const recebimentosAtivosMesmoPlanoOS = osId ? (window.J?.financeiro || []).filter(f =>
     f?.osId === osId &&
     !financeiroOSCanceladoOS(f) &&
+    !f.isComissao && !f.isComissaoPagamento &&
+    !String(f.tipo || '').toLowerCase().startsWith('sa') &&
     /^recebimento_os_/i.test(String(f.origem || ''))
   ) : [];
   const somaRecebimentosAtivosMesmoPlanoOS = +recebimentosAtivosMesmoPlanoOS.reduce((acc, f) => acc + numBR(f.valor || 0), 0).toFixed(2);
@@ -5432,11 +5434,15 @@ window.salvarOS = async function() {
               .get();
             for (const docSnap of snap.docs) {
               const finAntes = { id: docSnap.id, ...docSnap.data() };
+              // Alterar forma de pagamento nunca cancela/abate comissão paga.
+              if (financeiroOSCanceladoOS(finAntes)) continue;
+              if (finAntes.isComissao || finAntes.isComissaoPagamento ||
+                  String(finAntes.tipo || '').toLowerCase().startsWith('sa') ||
+                  !/^recebimento_os_/i.test(String(finAntes.origem || ''))) continue;
               if (financeiroOSLiquidadoOS(finAntes)) {
                 valorJaLiquidadoOS += numBR(finAntes.valor || 0);
                 continue;
               }
-              if (financeiroOSCanceladoOS(finAntes)) continue;
               queueFinanceiroUpdateOS(db.collection('financeiro').doc(docSnap.id), {
                 status: 'Cancelado',
                 canceladoPorReemissaoOS: true,

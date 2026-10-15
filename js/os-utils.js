@@ -591,7 +591,12 @@
     const placa = U.normalizeText(os.placa || '');
     const cli = U.normalizeText(os.cliente || '');
     return financeiro.filter(f => {
-      if (!f || f.isComissao) return false;
+      if (!f || f.isComissao || f.isComissaoPagamento) return false;
+      // Cancelamento por reemissão fica preservado no histórico, não no faturamento.
+      const status = U.normalizeText(f.status || '');
+      if (f.canceladoPorReemissaoOS === true || f.cancelado === true ||
+          /^(cancelado|cancelada|estornado|estornada)$/.test(status)) return false;
+      // Despesas e comissões não são recebimentos do cliente.
       if (String(f.tipo || '').toLowerCase().startsWith('sa')) return false;
       if (f.vinculo && (String(f.vinculo).startsWith('F_') || String(f.vinculo).startsWith('E_'))) return false;
       if (f.osId && f.osId === os.id) return true;
