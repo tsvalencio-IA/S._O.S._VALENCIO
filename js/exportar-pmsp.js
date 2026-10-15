@@ -1833,7 +1833,7 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
       catch (_) { mediaAtual = []; }
     }
     const evidencias = typeof window.thiaEvidenciasOS?.coletar === 'function'
-      ? window.thiaEvidenciasOS.coletar(os, {mediaAtual})
+      ? window.thiaEvidenciasOS.coletar(os, {mediaAtual, somenteAnexosOS:true})
       : [...(Array.isArray(os?.fotos) ? os.fotos : []), ...(Array.isArray(os?.media) ? os.media : []), ...mediaAtual]
           .map(m => typeof m === 'string' ? {url:m,type:'image'} : m)
           .filter(m => /^https?:\/\//i.test(String(m?.url || m?.secure_url || '')));
@@ -1861,7 +1861,7 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
     ws.getRow(linhaDescricao).height=23;
     ws.mergeCells('B'+linhaDescricao+':H'+linhaDescricao);
     const subtitulo=ws.getCell('B'+linhaDescricao);
-    subtitulo.value='Evidências da O.S. — imagens na própria planilha, com legenda e acesso ao arquivo original';
+    subtitulo.value='Evidências da O.S. — fotos incorporadas nesta planilha, com legendas';
     subtitulo.font={name:'Arial',size:8.5,color:{argb:'FF556B80'}};
     subtitulo.alignment={horizontal:'center',vertical:'middle',wrapText:true};
 
@@ -1896,12 +1896,12 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
       origem.font={name:'Arial',size:8,italic:true,color:{argb:'FF63778A'}};
       origem.alignment={vertical:'middle',wrapText:true,indent:1};
       ws.mergeCells('E'+(pos+6)+':H'+(pos+7));
-      const link=ws.getCell('E'+(pos+6));
-      link.value={text:'ABRIR FOTO ORIGINAL',hyperlink:url};
-      link.font={name:'Arial',size:9,underline:true,color:{argb:'FF1366A3'}};
-      link.alignment={vertical:'middle',indent:1};
+      const textoFoto=ws.getCell('E'+(pos+6));
+      textoFoto.value='Foto incorporada à planilha';
+      textoFoto.font={name:'Arial',size:9,color:{argb:'FF63778A'}};
+      textoFoto.alignment={vertical:'middle',indent:1};
 
-      // Miniatura reduzida sem crop nem deformação; link conserva a original.
+      // Imagem incorporada sem cortes ou deformação, sem hiperlink de foto.
       let urlFoto=url;
       if (url.includes('cloudinary.com') && url.includes('/upload/')) {
         urlFoto=url.replace('/upload/','/upload/w_560,h_420,c_fit,q_auto,f_jpg/');
@@ -1925,12 +1925,12 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
           });
         } catch(erro) {
           indisponiveis.push(i+1);
-          ws.getCell('B'+pos).value='Imagem não embutida — use o link ao lado';
+          ws.getCell('B'+pos).value='Imagem não incorporada ao arquivo';
           console.warn('[PMSP XLSX] Evidência não incorporada',i+1,erro);
         }
       } else {
         indisponiveis.push(i+1);
-        ws.getCell('B'+pos).value='Imagem não embutida — use o link ao lado';
+        ws.getCell('B'+pos).value='Imagem não incorporada ao arquivo';
       }
       ultimaLinha=fim;
     }

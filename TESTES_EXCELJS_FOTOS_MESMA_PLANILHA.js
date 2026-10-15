@@ -19,7 +19,7 @@ const ExcelJS = require(process.env.EXCELJS_MODULE || 'exceljs');
     set src(v) { this.naturalWidth=480;this.naturalHeight=320; if(this.onload) this.onload(); }
   }
   const context={
-    window:{thiaEvidenciasOS:{coletar:()=>evidencias}},
+    window:{thiaEvidenciasOS:{coletar:(os,opcoes)=>{assert.equal(opcoes.somenteAnexosOS,true,'XLSX deve excluir checklist');return evidencias;}}},
     document:{getElementById:()=>null},
     Image:TestImage,
     console,
@@ -45,7 +45,7 @@ const ExcelJS = require(process.env.EXCELJS_MODULE || 'exceljs');
   const first=baseRow+2+3;
   assert.match(String(sheet.getCell('E'+first).value),/FOTO 1 \/ 13/);
   assert.match(String(sheet.getCell('E'+first).value),/Motor foto 1/);
-  assert.equal(sheet.getCell('E'+(first+6)).value.hyperlink,'https://exemplo.com/foto0.jpg');
+  assert.equal(sheet.getCell('E'+(first+6)).value,'Foto incorporada à planilha','sem hyperlinks de fotos');
   assert.match(String(sheet.getCell('E'+(first+9)).value),/FOTO 2 \/ 13/,'segundo cartão inicia após o primeiro');
   sheet.pageSetup.printArea='A1:H'+result.ultimaLinha;
   const output=await workbook.xlsx.writeBuffer();
@@ -55,5 +55,5 @@ const ExcelJS = require(process.env.EXCELJS_MODULE || 'exceljs');
   assert.equal(reload.worksheets.length,countBefore,'XLSX lido preserva número de abas');
   assert.equal(reload.worksheets[0].getImages().length,imagensOriginais+13,'XLSX salvo preserva logotipo e 13 fotos');
   assert.equal(reload.worksheets[0].pageSetup.printArea,'A1:H'+result.ultimaLinha);
-  console.log('OK: template PMSP real, 13 fotos e 1 video, mesma aba, links, células e XLSX reimportado.');
+  console.log('OK: template PMSP real, 13 fotos e 1 vídeo, sem links de fotos, células e XLSX reimportado.');
 })().catch(e=>{console.error(e);process.exit(1);});

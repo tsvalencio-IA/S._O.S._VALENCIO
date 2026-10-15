@@ -291,14 +291,14 @@ window.gerarPDFOS = async function() {
     doc.text('Assinatura do Técnico', pw / 2 + 36, sigY + 4, { align: 'center' });
 
     // ─── GALERIA INTEGRAL DA O.S. / LEGENDA DISCRETA ────────────
-    // Reúne mídia legada + atual + fotos dos checklists anexados, sem duplicar URL.
+    // PDF: mídia da O.S. legada + atual; não incorpora fotografias do checklist.
     let mediaAtualOS = [];
     if (String(document.getElementById('osId')?.value || '') === String(osId || '')) {
       try { mediaAtualOS = JSON.parse(document.getElementById('osMediaArray')?.value || '[]'); }
       catch (_) { mediaAtualOS = []; }
     }
     const midiasOS = typeof window.thiaEvidenciasOS?.coletar === 'function'
-      ? window.thiaEvidenciasOS.coletar(os, { mediaAtual: mediaAtualOS })
+      ? window.thiaEvidenciasOS.coletar(os, { mediaAtual: mediaAtualOS, somenteAnexosOS:true })
       : [...(Array.isArray(os.fotos) ? os.fotos : []), ...(Array.isArray(os.media) ? os.media : []), ...mediaAtualOS]
           .map(m => typeof m === 'string' ? { url: m, type: 'image' } : m)
           .filter(m => /^https?:\/\//i.test(String(m?.url || m?.secure_url || '')));

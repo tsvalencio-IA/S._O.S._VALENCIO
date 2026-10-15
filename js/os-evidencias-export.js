@@ -19,11 +19,17 @@
   };
   function coletar(os, opcoes = {}) {
     const fonte = os || {};
+    // Exclusão específica para laudos e planilhas; a galeria normal permanece igual.
+    const somenteAnexosOS = opcoes.somenteAnexosOS === true;
     const encontrados = new Map();
     const ordem = [];
     const push = (m, origem, observacaoPadrao) => {
       const url = String(urlOf(m) || '').trim();
       if (!validUrl(url)) return;
+      if (somenteAnexosOS && (
+        /(?:^|\/)checklists?(?:\/|$)/i.test(url.split('?')[0]) ||
+        /checklist/i.test(String(m?.origem || m?.source || ''))
+      )) return;
       const item = typeof m === 'string' ? { url, type: 'image' } : { ...m, url };
       const descricao = descriptionOf(item) || String(observacaoPadrao || '').trim().slice(0, 420);
       const nova = {
@@ -58,7 +64,7 @@
       fonte.checklistEntregaUltimo, fonte.entregaRegistro,
       ...asArray(fonte.checklistsTecnicos), ...asArray(fonte.checklistsEntrega)
     ].filter(c => c && typeof c === 'object');
-    checklists.forEach(c => {
+    if (!somenteAnexosOS) checklists.forEach(c => {
       const rotulo = String(c.tipo || '').toLowerCase().includes('entrega') ? 'Checklist de entrega' : 'Checklist técnico';
       asArray(c.fotoUrls || c.fotosGeraisUrls).forEach(m => push(m, rotulo));
       Object.entries(c.itemPhotos || c.itemFotos || {}).forEach(([id, fotos]) => {

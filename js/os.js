@@ -6908,11 +6908,11 @@ window.gerarPDFOS = async function(opcoes = {}) {
     y = doc.lastAutoTable.finalY + 5;
   }
 
-  // Evidências da O.S. e checklists anexados, incluindo legados e fotos em edição.
+  // PDF: exclusivamente anexos da O.S., inclusive fotos legadas e ainda em edição.
   let mediaAtual = [];
   try { mediaAtual = JSON.parse(document.getElementById('osMediaArray')?.value || '[]'); } catch (_) { mediaAtual = []; }
   const media = typeof window.thiaEvidenciasOS?.coletar === 'function'
-    ? window.thiaEvidenciasOS.coletar(osAtual, {mediaAtual})
+    ? window.thiaEvidenciasOS.coletar(osAtual, {mediaAtual, somenteAnexosOS:true})
     : [...(Array.isArray(osAtual.fotos) ? osAtual.fotos : []),
        ...(Array.isArray(osAtual.media) ? osAtual.media : []), ...mediaAtual]
         .map(m => typeof m === 'string' ? {url:m,type:'image'} : m)
