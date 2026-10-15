@@ -1770,6 +1770,10 @@ window.renderKanban = function() {
       const placaFmt = esc(ident.placa || 'S/PLACA');
       const prefixoFmt = esc(ident.prefixo || '');
       const modeloFmt = esc(modeloVeiculoOS(os, v));
+      // Detalhes existentes do cadastro do veículo, somente para exibição nos cards do Pátio.
+      const anoFmt = esc(v?.ano || v?.anoModelo || os.veiculoSnapshot?.ano || os.veiculoAno || 'Não informado');
+      const motorFmt = esc(v?.motor || v?.motorizacao || v?.motorDescricao || os.veiculoSnapshot?.motor || os.veiculoSnapshot?.motorizacao || os.motorVeiculo || 'Não cadastrado');
+      const corFmt = esc(v?.cor || os.veiculoSnapshot?.cor || os.veiculoCor || 'Não informada');
       const prismaAtual = String(os.prisma || os.numeroPrisma || '').trim();
       const prismaFmt = prismaAtual && s !== 'Entregue'
         ? `<div style="display:inline-flex;align-items:center;gap:4px;margin-top:4px;font-family:var(--fm);font-size:.58rem;color:#111;background:var(--warn);border-radius:999px;padding:2px 7px;font-weight:900;letter-spacing:.8px;">PRISMA ${esc(prismaAtual)}</div>`
@@ -1816,7 +1820,10 @@ window.renderKanban = function() {
             <div>
               ${prefixoFmt ? `<div style="font-family:var(--fm);font-size:.58rem;color:var(--warn);letter-spacing:.8px;font-weight:800;margin-bottom:2px;">PREFIXO ${prefixoFmt}</div>` : ''}
               <div class="k-placa" style="color:${cor};margin:0;font-size:1rem;">${placaFmt}</div>
-              ${modeloFmt ? `<div class="k-modelo" title="${modeloFmt}" style="font-family:var(--fm);font-size:.62rem;color:var(--muted2);letter-spacing:.45px;font-weight:700;margin-top:2px;max-width:126px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${modeloFmt}</div>` : ''}
+              <div class="k-modelo" title="${modeloFmt}" style="font-family:var(--fm);font-size:.62rem;color:var(--muted2);letter-spacing:.2px;font-weight:700;margin-top:3px;max-width:100%;white-space:normal;overflow-wrap:anywhere;">MODELO: ${modeloFmt || 'Não informado'}</div>
+              <div class="k-veiculo-detalhes" style="font-family:var(--fm);font-size:.57rem;color:var(--muted2);line-height:1.4;margin-top:3px;max-width:100%;white-space:normal;overflow-wrap:anywhere;">
+                <span>ANO: ${anoFmt}</span> · <span>MOTOR: ${motorFmt}</span> · <span>COR: ${corFmt}</span>
+              </div>
               ${prismaFmt}${recebidaBadge}
             </div>
             <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
