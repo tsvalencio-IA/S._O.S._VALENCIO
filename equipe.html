@@ -299,6 +299,33 @@ body.equipe-operacional .mec-financeiro-only{display:none!important;}
   .fab-nova-os{bottom:20px;right:16px;}
   .pneu-slider{height:8px;}
 }
+
+/* Equipe — informações técnicas no card, fotos da O.S. sem tarja sobreposta */
+.k-veiculo-modelo{font-size:.8rem;font-weight:700;line-height:1.4;color:var(--text);overflow-wrap:anywhere;margin:4px 0;}
+.k-veiculo-detalhes{font-size:.69rem;line-height:1.5;color:var(--muted2);overflow-wrap:anywhere;margin:4px 0 8px;}
+.k-veiculo-tag{font-family:var(--fm);color:var(--cyan);font-size:.56rem;letter-spacing:.5px;margin-right:5px;}
+#mediaGrid.media-grid{grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px;min-width:0}
+#mediaGrid .media-item{aspect-ratio:auto;display:flex;flex-direction:column;min-width:0;overflow:hidden;border-radius:7px}
+#mediaGrid .eq-media-open{border:0;background:none;display:block;width:100%;aspect-ratio:4/3;overflow:hidden;padding:0;cursor:zoom-in}
+#mediaGrid .eq-media-open img{width:100%;height:100%;display:block;object-fit:cover}
+#mediaGrid .media-item video{display:block;width:100%;height:auto;aspect-ratio:4/3;object-fit:contain;background:#030814}
+#mediaGrid .eq-media-caption{font-size:.61rem;line-height:1.4;color:var(--muted2);padding:6px 8px;background:var(--surf2);overflow-wrap:anywhere}
+#mediaGrid .media-del{width:28px;height:28px;top:5px;right:5px;font-size:14px}
+#equipeGaleriaFotosOverlay>div{max-width:100%;max-height:100%;min-width:0}
+#equipeGaleriaFotosOverlay>div>div:first-child{flex-wrap:wrap;gap:7px;min-width:0}
+#equipeGaleriaFotosOverlay>div>div:first-child>div{display:flex;flex-wrap:wrap;gap:5px!important}
+#equipeGaleriaFotosOverlay .eq-photo-zoom{min-width:36px;min-height:40px;padding:6px 9px;background:#1b3045;border:1px solid #5e7b94;border-radius:5px;color:#fff;font-size:.8rem}
+#equipeGaleriaFotosOverlay [data-eq-area]{touch-action:none!important;overscroll-behavior:contain}
+#equipeGaleriaFotosOverlay [data-eq-galeria-img]{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;touch-action:none;will-change:transform;transform-origin:center center}
+#equipeGaleriaFotosOverlay [data-eq-meta]{font-size:.67rem;line-height:1.5;color:#b5cce1;padding:7px 10px;border-top:1px solid rgba(255,255,255,.12)}
+@media(max-width:600px){
+ #mediaGrid.media-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ #equipeGaleriaFotosOverlay{padding:3px!important}
+ #equipeGaleriaFotosOverlay>div{width:100%!important;height:calc(100dvh - 6px)!important;max-height:none!important}
+ #equipeGaleriaFotosOverlay>div>div:first-child{padding:7px!important}
+ #equipeGaleriaFotosOverlay .eq-photo-zoom{min-height:38px;padding:6px}
+}
+
 /* MODAL IA — z-index 9999, sempre por cima */
 .overlay-ia{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;display:none;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);}
 .overlay-ia.open{display:flex;animation:ia-tv-on 0.22s ease;}
@@ -1848,18 +1875,21 @@ function renderKanban(){
       const qmBtn = '';
       const prismaAtual = String(os.prisma || os.numeroPrisma || '').trim();
       const prismaBadge = prismaAtual && s !== 'Entregue' ? `<div style="display:inline-flex;align-items:center;gap:4px;margin:4px 0 2px;font-family:var(--fm);font-size:.56rem;color:#111;background:var(--warn);border-radius:999px;padding:2px 7px;font-weight:900;letter-spacing:.8px;">PRISMA ${prismaAtual}</div>` : '';
-      const valores = `<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin:8px 0;">
-        <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);padding:5px;border-radius:3px;"><small style="display:block;font-family:var(--fm);font-size:.47rem;color:var(--muted);">ORÇ.</small><b style="font-family:var(--fm);font-size:.58rem;color:var(--warn);">SEM VALOR</b></div>
-        <div style="background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.12);padding:5px;border-radius:3px;"><small style="display:block;font-family:var(--fm);font-size:.47rem;color:var(--muted);">APROV.</small><b style="font-family:var(--fm);font-size:.58rem;color:var(--cyan);">STATUS</b></div>
-        <div style="background:rgba(0,255,136,.05);border:1px solid rgba(0,255,136,.12);padding:5px;border-radius:3px;"><small style="display:block;font-family:var(--fm);font-size:.47rem;color:var(--muted);">FIN.</small><b style="font-family:var(--fm);font-size:.58rem;color:var(--success);">OCULTO</b></div>
-      </div>`;
+      const marca=String(v?.marca||os.marca||'').trim();
+      const modelo=String(v?.modelo||os.modelo||os.modeloVeiculo||'').trim();
+      const modeloCompleto=[marca, modelo && !modelo.toLowerCase().startsWith(marca.toLowerCase())?modelo:(!marca?modelo:'')].filter(Boolean).join(' ');
+      const ano=String(v?.anoModelo||v?.ano||os.anoModelo||os.ano||'').trim();
+      const motor=String(v?.motor||v?.motorizacao||os.motor||'').trim();
+      const corVeiculo=String(v?.cor||os.cor||'').trim();
+      const dadosVeiculo=[ano&&'Ano: '+ano,motor&&'Motor: '+motor,corVeiculo&&'Cor: '+corVeiculo].filter(Boolean).join(' · ');
       return `
       <div class="k-card" style="border-left-color:${cor}" onclick="prepOS('edit','${os.id}');abrirModal('modalOS')">
         <div class="k-placa" style="color:${cor}">${v?.placa||os.placa||'S/PLACA'}</div>
         ${prismaBadge}
-        <div class="k-cli">${c?.nome||os.cliente||'—'}</div>
-        <div class="k-desc">${os.desc||os.relato||'Sem descrição'}</div>
-        ${valores}
+        <div class="k-cli"><strong>${escMediaEquipe(c?.nome||os.cliente||'Cliente não informado')}</strong></div>
+        <div class="k-veiculo-modelo"><span class="k-veiculo-tag">MODELO</span>${escMediaEquipe(modeloCompleto||'Não cadastrado')}</div>
+        ${dadosVeiculo?`<div class="k-veiculo-detalhes">${escMediaEquipe(dadosVeiculo)}</div>`:''}
+        <div class="k-desc">${escMediaEquipe(os.desc||os.relato||'Sem descrição')}</div>
         <div class="k-footer">
           <span class="k-tipo ${v?.tipo||'carro'}">${{carro:'🚗 CARRO',moto:'🏍️ MOTO',bicicleta:'🚲 BICICLETA'}[v?.tipo||'carro']||'VEÍCULO'}</span>
         </div>
@@ -2636,7 +2666,9 @@ let _equipeGaleriaIndex = 0;
 let _equipeGaleriaKeydown = null;
 
 function fecharGaleriaFotosEquipe(){
-  document.getElementById('equipeGaleriaFotosOverlay')?.remove();
+  const ov=document.getElementById('equipeGaleriaFotosOverlay');
+  ov?._resizeController?.abort();
+  ov?.remove();
   if(_equipeGaleriaKeydown) document.removeEventListener('keydown',_equipeGaleriaKeydown);
   _equipeGaleriaKeydown=null;
 }
@@ -2645,9 +2677,11 @@ function renderGaleriaFotosEquipe(){
   if(!ov||!_equipeGaleriaFotos.length) return;
   _equipeGaleriaIndex=Math.max(0,Math.min(_equipeGaleriaIndex,_equipeGaleriaFotos.length-1));
   const foto=_equipeGaleriaFotos[_equipeGaleriaIndex];
+  ov._resetZoom?.();
   const img=ov.querySelector('[data-eq-galeria-img]');
   if(img){img.src=foto.url;img.alt=`Foto ${_equipeGaleriaIndex+1} da O.S.`;}
-  const c=ov.querySelector('[data-eq-galeria-count]'); if(c)c.textContent=`Foto ${_equipeGaleriaIndex+1} de ${_equipeGaleriaFotos.length} | Enviada: ${dataHoraEvidenciaEquipe(foto.uploadedAt)} | Na O.S.: ${dataHoraEvidenciaEquipe(foto.importedAt)}`;
+  const c=ov.querySelector('[data-eq-galeria-count]'); if(c)c.textContent=`Foto ${_equipeGaleriaIndex+1} de ${_equipeGaleriaFotos.length}`;
+  const info=ov.querySelector('[data-eq-meta]');if(info)info.textContent=[foto.uploadedAt&&'Enviada: '+dataHoraEvidenciaEquipe(foto.uploadedAt),foto.importedAt&&'Na O.S.: '+dataHoraEvidenciaEquipe(foto.importedAt)].filter(Boolean).join(' · ');
   ov.querySelectorAll('[data-eq-nav]').forEach(b=>b.style.visibility=_equipeGaleriaFotos.length>1?'visible':'hidden');
 }
 function navegarGaleriaFotosEquipe(delta){
@@ -2680,9 +2714,57 @@ function abrirGaleriaFotosEquipe(indiceMedia){
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border-bottom:1px solid rgba(255,255,255,.1);"><strong data-eq-galeria-count style="font-family:var(--fm);color:var(--cyan);font-size:.72rem;">Foto</strong><div style="display:flex;gap:8px;"><button type="button" class="btn-ghost" onclick="baixarFotoGaleriaEquipe()">BAIXAR FOTO</button><button type="button" class="btn-ghost" onclick="fecharGaleriaFotosEquipe()">✕</button></div></div>
     <div data-eq-area style="position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:pan-y;"><button data-eq-nav type="button" onclick="navegarGaleriaFotosEquipe(-1)" style="position:absolute;left:8px;z-index:2;width:46px;height:62px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);color:#fff;font-size:30px;border-radius:6px;">‹</button><img data-eq-galeria-img style="max-width:100%;max-height:100%;object-fit:contain;user-select:none;-webkit-user-drag:none;"><button data-eq-nav type="button" onclick="navegarGaleriaFotosEquipe(1)" style="position:absolute;right:8px;z-index:2;width:46px;height:62px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);color:#fff;font-size:30px;border-radius:6px;">›</button></div></div>`;
   ov.addEventListener('click',e=>{if(e.target===ov)fecharGaleriaFotosEquipe();});
-  let touchX=null;const area=ov.querySelector('[data-eq-area]');
-  area?.addEventListener('touchstart',e=>{touchX=e.changedTouches?.[0]?.clientX??null;},{passive:true});
-  area?.addEventListener('touchend',e=>{if(touchX==null)return;const fim=e.changedTouches?.[0]?.clientX??touchX;const dx=fim-touchX;touchX=null;if(Math.abs(dx)>=45)navegarGaleriaFotosEquipe(dx<0?1:-1);},{passive:true});
+  const area=ov.querySelector('[data-eq-area]'),img=ov.querySelector('[data-eq-galeria-img]');
+  const actions=ov.querySelector('button[onclick="baixarFotoGaleriaEquipe()"]');
+  let scale=1,panX=0,panY=0,pinchDistance=0,dragStart=null;
+  const pointers=new Map();
+  const applyZoom=()=>{
+    if(scale<=1){scale=1;panX=0;panY=0;}
+    else{
+      const maxX=Math.max(0,(img.offsetWidth*scale-area.clientWidth)/2),maxY=Math.max(0,(img.offsetHeight*scale-area.clientHeight)/2);
+      panX=Math.max(-maxX,Math.min(maxX,panX));panY=Math.max(-maxY,Math.min(maxY,panY));
+    }
+    img.style.transform='translate3d('+panX+'px,'+panY+'px,0) scale('+scale+')';
+  };
+  const zoomTo=n=>{scale=Math.max(1,Math.min(5,n));applyZoom();};
+  ov._resetZoom=()=>{scale=1;panX=0;panY=0;pinchDistance=0;dragStart=null;pointers.clear();applyZoom();};
+  for(const [label,handler] of [['−',()=>zoomTo(scale-.75)],['Ajustar',()=>zoomTo(1)],['＋',()=>zoomTo(scale+.75)]]){
+    const btn=document.createElement('button');btn.type='button';btn.className='eq-photo-zoom';btn.textContent=label;
+    btn.setAttribute('aria-label',label==='＋'?'Ampliar imagem':label==='−'?'Diminuir imagem':'Ajustar à tela');
+    btn.addEventListener('click',handler);actions?.parentNode?.insertBefore(btn,actions);
+  }
+  const info=document.createElement('div');info.dataset.eqMeta='';ov.querySelector('div[style*="width:min(1050px"]')?.appendChild(info);info.setAttribute('data-eq-meta','');
+  img.addEventListener('dblclick',e=>{e.preventDefault();zoomTo(scale>1?1:2.5);});
+  area.addEventListener('pointerdown',e=>{
+    if(e.target.closest('button')||e.button>0)return;
+    pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pointers.size===1)dragStart={x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,multi:false};
+    if(pointers.size===2){const [p,q]=[...pointers.values()];pinchDistance=Math.hypot(p.x-q.x,p.y-q.y);if(dragStart)dragStart.multi=true;}
+    if(e.pointerType!=='mouse')try{area.setPointerCapture(e.pointerId);}catch(_){}
+  });
+  area.addEventListener('pointermove',e=>{
+    if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pointers.size>=2){
+      const [p,q]=[...pointers.values()],d=Math.hypot(p.x-q.x,p.y-q.y);
+      if(pinchDistance>0&&d>0)zoomTo(scale*d/pinchDistance);pinchDistance=d;if(dragStart)dragStart.multi=true;
+    }else if(dragStart){
+      if(scale>1){panX+=e.clientX-dragStart.lastX;panY+=e.clientY-dragStart.lastY;applyZoom();}
+      dragStart.lastX=e.clientX;dragStart.lastY=e.clientY;
+    }
+  });
+  const release=e=>{
+    if(!pointers.has(e.pointerId))return;pointers.delete(e.pointerId);
+    if(!pointers.size){
+      if(dragStart&&!dragStart.multi&&scale===1&&e.type==='pointerup'){
+        const dx=e.clientX-dragStart.x,dy=e.clientY-dragStart.y;
+        if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)*1.2)navegarGaleriaFotosEquipe(dx<0?1:-1);
+      }
+      dragStart=null;pinchDistance=0;
+    }else if(pointers.size===1){const p=[...pointers.values()][0];dragStart={x:p.x,y:p.y,lastX:p.x,lastY:p.y,multi:true};}
+  };
+  area.addEventListener('pointerup',release);area.addEventListener('pointercancel',release);
+  ov._resizeController=new AbortController();
+  window.addEventListener('resize',applyZoom,{signal:ov._resizeController.signal});
   document.body.appendChild(ov);
   _equipeGaleriaKeydown=e=>{if(!document.getElementById('equipeGaleriaFotosOverlay'))return;if(e.key==='Escape')fecharGaleriaFotosEquipe();if(e.key==='ArrowLeft')navegarGaleriaFotosEquipe(-1);if(e.key==='ArrowRight')navegarGaleriaFotosEquipe(1);};
   document.addEventListener('keydown',_equipeGaleriaKeydown);renderGaleriaFotosEquipe();
@@ -2732,8 +2814,8 @@ function renderMediaGrid(){
     const url=String(m?.url||'').replace(/"/g,'&quot;');
     const isVideo=/^video$/i.test(String(m?.type||''))||/^video\//i.test(String(m?.type||''));
     return `<div class="media-item">
-      ${isVideo?`<video src="${url}" controls preload="metadata"></video>`:`<img src="${url}" loading="lazy" referrerpolicy="no-referrer" onclick="abrirGaleriaFotosEquipe(${i})" style="cursor:zoom-in" alt="Foto ${i+1} da O.S.">`}
-      <span style="position:absolute;bottom:0;left:0;right:0;z-index:1;pointer-events:none;background:rgba(8,16,30,.93);padding:3px;color:#e2e8f0;font-size:.53rem;line-height:1.3;overflow-wrap:anywhere;">Envio: ${escMediaEquipe(dataHoraEvidenciaEquipe(m?.uploadedAt))}<span style="display:block">Na O.S.: ${escMediaEquipe(dataHoraEvidenciaEquipe(m?.importedAt))}</span></span>
+      ${isVideo?`<video src="${url}" controls playsinline preload="metadata"></video>`:`<button type="button" class="eq-media-open" onclick="abrirGaleriaFotosEquipe(${i})" aria-label="Ampliar foto ${i+1} da O.S."><img src="${url}" loading="lazy" referrerpolicy="no-referrer" alt="Foto ${i+1} da O.S."></button>`}
+      <div class="eq-media-caption">${m?.uploadedAt?`Envio: ${escMediaEquipe(dataHoraEvidenciaEquipe(m.uploadedAt))}`:'Foto da O.S.'}${m?.importedAt?` · Na O.S.: ${escMediaEquipe(dataHoraEvidenciaEquipe(m.importedAt))}`:''}</div>
       <button type="button" class="media-del" onclick="event.stopPropagation();rmMedia(${i})">✕</button>
     </div>`;
   }).join('');
