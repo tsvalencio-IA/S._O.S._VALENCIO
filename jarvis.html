@@ -1782,6 +1782,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <div class="form-group"><label class="j-label">Cor</label><input class="j-input" id="veicCor" placeholder="Preto Metálico"></div>
       <div class="form-group"><label class="j-label">KM Atual</label><input type="number" class="j-input" id="veicKm" placeholder="45000"></div>
     </div>
+    <div class="form-group"><label class="j-label">Motor / Motorização</label><input class="j-input" id="veicMotor" placeholder="Ex.: 1.8 16V Flex"></div>
 
     <!-- ═══ DADOS PARA VIATURA / FROTA OFICIAL (opcional) ═══ -->
     <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:8px;background:rgba(167,139,250,0.04);padding:12px;border-radius:4px;">
@@ -3497,14 +3498,14 @@ window.buscarCEP = async function(cep) {
 }
 
 window.prepVeiculo = function(mode, id=null) {
-  ['veicId','veicPlaca','veicModelo','veicAno','veicCor','veicKm','veicObs','veicChassis','veicPatrimonio','veicPrefixo','veicMarca'].forEach(f=>{if($(f)) $(f).value='';});
+  ['veicId','veicPlaca','veicModelo','veicAno','veicCor','veicKm','veicMotor','veicObs','veicChassis','veicPatrimonio','veicPrefixo','veicMarca'].forEach(f=>{if($(f)) $(f).value='';});
   $('veicTipo').value='carro'; if($('veicDono')) window.popularSelects();
   if(mode==='edit'&&id){
     const v=J.veiculos.find(x=>x.id===id); if(!v) return;
     $('veicId').value=v.id; $('veicTipo').value=v.tipo||'carro';
     $('veicDono').value=v.clienteId||''; $('veicPlaca').value=v.placa||'';
     $('veicModelo').value=v.modelo||''; $('veicAno').value=v.ano||'';
-    $('veicCor').value=v.cor||''; $('veicKm').value=v.km||''; $('veicObs').value=v.obs||'';
+    $('veicCor').value=v.cor||''; $('veicKm').value=v.km||''; $('veicMotor').value=v.motor||v.motorizacao||v.motorDescricao||''; $('veicObs').value=v.obs||'';
     if($('veicChassis')) $('veicChassis').value = v.chassis || v.chassi || '';
     if($('veicPatrimonio')) $('veicPatrimonio').value = v.patrimonio || v.patrimonioNumero || v.patrimonioId || '';
     if($('veicPrefixo')) $('veicPrefixo').value = v.prefixo || '';
@@ -3516,7 +3517,7 @@ window.salvarVeiculo = async function() {
   const p = {
     tenantId: J.tid, tipo: $v('veicTipo'), clienteId: $v('veicDono'),
     placa: $v('veicPlaca').toUpperCase(), modelo: $v('veicModelo'),
-    ano: $v('veicAno'), cor: $v('veicCor'), km: $v('veicKm'), obs: $v('veicObs'),
+    ano: $v('veicAno'), cor: $v('veicCor'), km: $v('veicKm'), motor: $v('veicMotor'), obs: $v('veicObs'),
     chassis: ($v('veicChassis') || '').toUpperCase(),
     chassi: ($v('veicChassis') || '').toUpperCase(),
     patrimonio: $v('veicPatrimonio') || '',
