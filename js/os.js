@@ -5367,10 +5367,36 @@ window.salvarOS = async function() {
     normalizarPagamentoOS(oldOSParaAprovacao.pgtoForma || '') === normalizarPagamentoOS(payload.pgtoForma || '') &&
     assinaturaPagamentoCombinadoOS(oldOSParaAprovacao.pgtoCombinado || []) === assinaturaPagamentoCombinadoOS(payload.pgtoCombinado || []) &&
     Math.abs(somaRecebimentosAtivosMesmoPlanoOS - totalPlanoFinanceiroOS) < 0.01;
-  const financeiroAtivoMesmoPlanoOS = financeiroCombinadoAtivoMesmoPlanoOS || (!pagamentoCombinadoAtualOS && recebimentosAtivosMesmoPlanoOS.length > 0 &&
-    normalizarPagamentoOS(oldOSParaAprovacao.pgtoForma || '') === normalizarPagamentoOS(payload.pgtoForma || '') &&
-    String(oldOSParaAprovacao.pgtoData || '') === String(payload.pgtoData || '') &&
-    parcelasPagamentoOS(oldOSParaAprovacao.pgtoForma || '', oldOSParaAprovacao.pgtoParcelas || 1) === payload.pgtoParcelas &&
+  // Segurança anti-duplicidade: salvar novamente uma OS sem alterar o plano
+  // e sem alterar seu valor não deve cancelar/recriar parcelas existentes,
+  // inclusive se um lançamento antigo do financeiro estiver inconsistente.
+  // A divergência existente será conciliada separadamente com auditoria.
+  const totalPlanoAnteriorOS = numBR(
+    oldOSParaAprovacao.totalFaturado ??
+    oldOSParaAprovacao.totalAprovado ??
+    oldOSParaAprovacao.total ?? 0
+  );
+  const mesmaFormaPlanoOS =
+    normalizarPagamentoOS(oldOSParaAprovacao.pgtoForma || '') === normalizarPagamentoOS(payload.pgtoForma || '');
+  const mesmaDataPlanoOS =
+    String(oldOSParaAprovacao.pgtoData || '') === String(payload.pgtoData || '');
+  const mesmasParcelasPlanoOS =
+    parcelasPagamentoOS(oldOSParaAprovacao.pgtoForma || '', oldOSParaAprovacao.pgtoParcelas || 1) === payload.pgtoParcelas;
+  const mesmasPartesPlanoOS =
+    assinaturaPagamentoCombinadoOS(oldOSParaAprovacao.pgtoCombinado || []) === assinaturaPagamentoCombinadoOS(payload.pgtoCombinado || []);
+  const planoIntactoOS = !!osId &&
+    recebimentosAtivosMesmoPlanoOS.length > 0 &&
+    mesmaFormaPlanoOS && mesmaDataPlanoOS &&
+    mesmasParcelasPlanoOS && mesmasPartesPlanoOS &&
+    Math.abs(totalPlanoAnteriorOS - totalPlanoFinanceiroOS) < 0.01;
+  if (planoIntactoOS && Math.abs(somaRecebimentosAtivosMesmoPlanoOS - totalPlanoFinanceiroOS) >= 0.01) {
+    console.warn('[SOS] Lançamentos financeiros divergentes na O.S. ' + osId +
+      ': preservando o plano existente porque forma, data, parcelas e valor da O.S. não mudaram. Realize conciliação antes de reemitir.');
+  }
+  const financeiroAtivoMesmoPlanoOS = planoIntactoOS ||
+    financeiroCombinadoAtivoMesmoPlanoOS ||
+    (!pagamentoCombinadoAtualOS && recebimentosAtivosMesmoPlanoOS.length > 0 &&
+    mesmaFormaPlanoOS && mesmaDataPlanoOS && mesmasParcelasPlanoOS &&
     Math.abs(somaRecebimentosAtivosMesmoPlanoOS - totalPlanoFinanceiroOS) < 0.01);
 
   if (payload.pgtoForma && (payload.pgtoData || pagamentoCombinadoAtualOS) && !financeiroAtivoMesmoPlanoOS) {
