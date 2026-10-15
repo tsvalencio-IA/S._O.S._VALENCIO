@@ -5427,7 +5427,7 @@ window.salvarOS = async function() {
     assinaturaPagamentoCombinadoOS(oldOSParaAprovacao.pgtoCombinado || []) === assinaturaPagamentoCombinadoOS(payload.pgtoCombinado || []);
   const dadosCartaoIguaisOS=JSON.stringify(oldOSParaAprovacao.pgtoCartao||null)===JSON.stringify(payload.pgtoCartao||null);
   const planoIntactoOS = !!osId &&
-    recebimentosAtivosMesmoPlanoOS.length > 0 &&
+    !!oldOSParaAprovacao.pgtoForma &&
     mesmaFormaPlanoOS && mesmaDataPlanoOS &&
     mesmasParcelasPlanoOS && mesmasPartesPlanoOS && dadosCartaoIguaisOS &&
     Math.abs(totalPlanoAnteriorOS - totalPlanoFinanceiroOS) < 0.01;
@@ -5500,7 +5500,19 @@ window.salvarOS = async function() {
             const snap = await db.collection('financeiro')
               .where('tenantId', '==', J.tid)
               .where('osId', '==', osId)
-              .get();
+              .get({source:'server'});
+            const ativosAntigosOS=snap.docs.filter(d=>{
+              const f=d.data();return !financeiroOSCanceladoOS(f)&&!f.isComissao&&!f.isComissaoPagamento&&
+                !String(f.tipo||'').toLowerCase().startsWith('sa')&&/^recebimento_os_/i.test(String(f.origem||''));
+            });
+            if(payload.pgtoCartao?.tipo==='repasse_unico'&&!dadosCartaoIguaisOS&&ativosAntigosOS.length){
+              const textoConfirmacao='CONCILIAÇÃO DA O.S. '+osId.slice(-6).toUpperCase()+'\n\n'+
+                'Lançamentos ativos anteriores: '+ativosAntigosOS.length+'\n'+
+                'Estes lançamentos pendentes serão CANCELADOS com histórico e substituídos por UM repasse de '+
+                moeda(valorFinanceiro)+' em '+payload.pgtoCartao.prazoRepasseDias+' dias.\n'+
+                'Comissões pagas e recebimentos liquidados serão preservados.\n\nConfirmar esta reemissão?';
+              if(!window.confirm(textoConfirmacao)){window.toast('Conciliação cancelada: nada foi salvo.','warn');return;}
+            }
             for (const docSnap of snap.docs) {
               const finAntes = { id: docSnap.id, ...docSnap.data() };
               // Alterar forma de pagamento nunca cancela/abate comissão paga.
