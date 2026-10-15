@@ -1467,6 +1467,18 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
           <select class="j-select" id="osPgtoParcelas"><option value="1">1x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option><option value="6">6x</option><option value="10">10x</option><option value="12">12x</option><option value="13">13x</option><option value="14">14x</option><option value="15">15x</option><option value="16">16x</option></select>
         </div>
       </div>
+      <div id="osCartaoDetalheBox" style="display:none;max-width:100%;min-width:0;box-sizing:border-box;padding:12px;margin:12px 0;border:1px solid rgba(0,212,255,.25);border-radius:5px;">
+        <div class="j-label" style="margin-bottom:9px;">CARTÃO — TOTAL DO CLIENTE E REPASSE ÚNICO À OFICINA</div>
+        <div class="form-row cols-2">
+          <div class="form-group"><label class="j-label" for="osCartaoCobrado">Total cobrado do cliente (com juros)</label><input class="j-input" id="osCartaoCobrado" inputmode="decimal" placeholder="Ex.: 11340,21" oninput="window.resumoCartaoOS?.()"></div>
+          <div class="form-group"><label class="j-label" for="osCartaoLiquido">Total líquido a receber da operadora</label><input class="j-input" id="osCartaoLiquido" inputmode="decimal" placeholder="Ex.: 9457,63" oninput="window.resumoCartaoOS?.()"></div>
+        </div>
+        <div class="form-row cols-2">
+          <div class="form-group"><label class="j-label" for="osCartaoDias">Repasse único em quantos dias após a venda?</label><input class="j-input" id="osCartaoDias" type="number" min="1" max="365" step="1" value="30" oninput="window.resumoCartaoOS?.()"></div>
+          <div class="form-group" style="display:flex;align-items:center"><small>Cliente paga nas parcelas escolhidas acima. A oficina recebe o total líquido uma vez.</small></div>
+        </div>
+        <div id="osCartaoResumo" role="status" aria-live="polite" style="font-size:.75rem;color:var(--muted);line-height:1.5;">Sem preencher os valores, fica mantida a rotina antiga de parcelamento.</div>
+      </div>
       <div id="osPgtoCombinadoBox" style="display:none;border:1px solid rgba(0,212,255,0.18);background:rgba(0,212,255,0.04);border-radius:3px;padding:12px;margin-bottom:12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
           <div style="font-family:var(--fm);font-size:0.68rem;color:var(--cyan);letter-spacing:1px;font-weight:700;">RECEBIMENTO COMBINADO</div>

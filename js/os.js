@@ -668,6 +668,28 @@ function assinaturaPagamentoCombinadoOS(lista) {
   })));
 }
 
+/** Cartão: total do cliente distinto do recebível único da operadora. */
+function cardRepasseUnicoOS(forma){
+  const n=normalizarPagamentoOS(forma);
+  return !formaPagamentoCombinadaOS(forma)&&n.includes('credito')&&!n.includes('boleto')&&!n.includes('crediario');
+}
+function cardNumeroOS(raw){
+  const s=String(raw??'').replace(/R\$/gi,'').replace(/\s/g,'').trim();
+  if(!s)return null;
+  const t=s.includes(',')?s.replace(/\./g,'').replace(',','.'):s;
+  if(!/^\d+(\.\d{1,2})?$/.test(t))return NaN;
+  const n=Number(t);return Number.isFinite(n)?n:NaN;
+}
+window.resumoCartaoOS=function(){
+  const out=document.getElementById('osCartaoResumo');if(!out)return;
+  const bruto=cardNumeroOS(document.getElementById('osCartaoCobrado')?.value);
+  const liquido=cardNumeroOS(document.getElementById('osCartaoLiquido')?.value);
+  const dias=Number(document.getElementById('osCartaoDias')?.value||0);
+  if(bruto===null&&liquido===null){out.textContent='Sem valores adicionais: regra anterior preservada.';return;}
+  if(bruto===null||liquido===null||!Number.isFinite(bruto)||!Number.isFinite(liquido)||bruto<=0||liquido<=0||bruto<liquido||!Number.isInteger(dias)||dias<1||dias>365){out.textContent='Informe dois valores válidos e o prazo entre 1 e 365 dias.';return;}
+  out.textContent='Cliente: '+moeda(bruto)+' | Repasse líquido: '+moeda(liquido)+' | Encargos: '+moeda(+(bruto-liquido).toFixed(2))+' | Repasse único D+'+dias;
+}
+
 function aplicarRegraParcelasPagamentoOS() {
   const forma = document.getElementById('osPgtoForma')?.value || '';
   const div = document.getElementById('divParcelasOS');
@@ -676,6 +698,9 @@ function aplicarRegraParcelasPagamentoOS() {
   const comboBox = document.getElementById('osPgtoCombinadoBox');
   const permite = !combinado && formaPagamentoPermiteParcelasOS(forma);
   if (comboBox) comboBox.style.display = combinado ? 'block' : 'none';
+  const cardBox=document.getElementById('osCartaoDetalheBox');
+  if(cardBox)cardBox.style.display=cardRepasseUnicoOS(forma)?'block':'none';
+  if(cardBox&&cardRepasseUnicoOS(forma))window.resumoCartaoOS?.();
   if (combinado && !document.querySelector('#osPgtoCombinadoRows .os-combo-row')) {
     window.adicionarPagamentoCombinadoOS?.({ forma: 'Dinheiro' });
     window.adicionarPagamentoCombinadoOS?.({ forma: 'Crédito Parcelado' });
@@ -2583,8 +2608,9 @@ window.prepOS = function(mode, id = null) {
   if ($('osTotalValMirror')) $('osTotalValMirror').innerText = '0,00';
   if ($('osSecaoKpisOS')) $('osSecaoKpisOS').innerHTML = '';
   if ($('osTotalHidden')) $('osTotalHidden').value = '0';
-  ['osProxRev','osProxKm','osPgtoForma','osPgtoData','osPgtoParcelas','osModeloOS','osCabecalhoOS','osValorHoraOS','osDescMO','osDescPeca','osEntregueA','osGuinchoKm','osGuinchoAjuste','osGuinchoDesconto','osGuinchoObs','osGuinchoKm','osGuinchoAjuste','osGuinchoObs'].forEach(f => { if ($(f)) $(f).value = ''; });
+  ['osProxRev','osProxKm','osPgtoForma','osPgtoData','osPgtoParcelas','osCartaoCobrado','osCartaoLiquido','osModeloOS','osCabecalhoOS','osValorHoraOS','osDescMO','osDescPeca','osEntregueA','osGuinchoKm','osGuinchoAjuste','osGuinchoDesconto','osGuinchoObs','osGuinchoKm','osGuinchoAjuste','osGuinchoObs'].forEach(f => { if ($(f)) $(f).value = ''; });
   if ($('osPgtoParcelas')) $('osPgtoParcelas').value = '1';
+  if ($('osCartaoDias')) $('osCartaoDias').value = '30';
   renderPagamentosCombinadosOS([]);
   aplicarRegraParcelasPagamentoOS();
   window.setDeslocamentoGuinchoOS?.({ ativo: false, tipo: 'leve', franquiaKm: 0, valorSaida: 253.22, valorKmAdicional: 8.51, ajustePct: 0, descontoPct: 0, kmTotal: 0, cobrarIdaVolta: true, abaterFranquia: false, obs: '' });
@@ -2706,6 +2732,9 @@ window.prepOS = function(mode, id = null) {
     if ($('osPgtoData')) $('osPgtoData').value = _pgtoLegadoSemLastro ? '' : (o.pgtoData || '');
     if ($('osPgtoParcelas')) $('osPgtoParcelas').value = String(parcelasPagamentoOS(_formaPgtoLoad, o.pgtoParcelas || 1));
     renderPagamentosCombinadosOS(o.pgtoCombinado || []);
+    if($('osCartaoCobrado'))$('osCartaoCobrado').value=o.pgtoCartao?.totalCobradoCliente!=null?String(o.pgtoCartao.totalCobradoCliente).replace('.',','):'';
+    if($('osCartaoLiquido'))$('osCartaoLiquido').value=o.pgtoCartao?.totalLiquidoOperadora!=null?String(o.pgtoCartao.totalLiquidoOperadora).replace('.',','):'';
+    if($('osCartaoDias'))$('osCartaoDias').value=String(o.pgtoCartao?.prazoRepasseDias||30);
     aplicarRegraParcelasPagamentoOS();
     
     const _pecasReconciliadasOS = osReconciliarPecasReaisParaClienteComumOS(o, Array.isArray(o.pecas) ? o.pecas : [], Array.isArray(o.pecasReais) ? o.pecasReais : []);
@@ -5325,6 +5354,18 @@ window.salvarOS = async function() {
   payload.pgtoParcelas = parcelasPagamentoOS(payload.pgtoForma, $v('osPgtoParcelas') || 1);
   payload.pgtoCombinado = formaPagamentoCombinadaOS(payload.pgtoForma) ? coletarPagamentosCombinadosOS() : [];
   if (formaPagamentoCombinadaOS(payload.pgtoForma)) payload.pgtoParcelas = 1;
+  const cardEnabledOS=cardRepasseUnicoOS(payload.pgtoForma);
+  const cardBrutoOS=cardNumeroOS($v('osCartaoCobrado'));
+  const cardLiquidoOS=cardNumeroOS($v('osCartaoLiquido'));
+  const cardDiasOS=Number($v('osCartaoDias')||30);
+  if(cardEnabledOS && (cardBrutoOS!==null||cardLiquidoOS!==null)){
+    if(cardBrutoOS===null||cardLiquidoOS===null||!Number.isFinite(cardBrutoOS)||!Number.isFinite(cardLiquidoOS)||cardBrutoOS<=0||cardLiquidoOS<=0||cardBrutoOS<cardLiquidoOS||!Number.isInteger(cardDiasOS)||cardDiasOS<1||cardDiasOS>365){
+      window.toast('Cartão: informe os dois totais e o prazo do repasse único corretamente.','warn');return;
+    }
+    payload.pgtoCartao={tipo:'repasse_unico',parcelasCliente:payload.pgtoParcelas,
+      totalCobradoCliente:+cardBrutoOS.toFixed(2),totalLiquidoOperadora:+cardLiquidoOS.toFixed(2),
+      encargos:+(cardBrutoOS-cardLiquidoOS).toFixed(2),prazoRepasseDias:cardDiasOS,quantidadeRepassesOperadora:1};
+  }else payload.pgtoCartao=null;
 
   // Comissão por serviço e mecânico. mecId continua sendo o responsável
   // principal para compatibilidade e para a comissão de peças.
@@ -5384,10 +5425,11 @@ window.salvarOS = async function() {
     parcelasPagamentoOS(oldOSParaAprovacao.pgtoForma || '', oldOSParaAprovacao.pgtoParcelas || 1) === payload.pgtoParcelas;
   const mesmasPartesPlanoOS =
     assinaturaPagamentoCombinadoOS(oldOSParaAprovacao.pgtoCombinado || []) === assinaturaPagamentoCombinadoOS(payload.pgtoCombinado || []);
+  const dadosCartaoIguaisOS=JSON.stringify(oldOSParaAprovacao.pgtoCartao||null)===JSON.stringify(payload.pgtoCartao||null);
   const planoIntactoOS = !!osId &&
     recebimentosAtivosMesmoPlanoOS.length > 0 &&
     mesmaFormaPlanoOS && mesmaDataPlanoOS &&
-    mesmasParcelasPlanoOS && mesmasPartesPlanoOS &&
+    mesmasParcelasPlanoOS && mesmasPartesPlanoOS && dadosCartaoIguaisOS &&
     Math.abs(totalPlanoAnteriorOS - totalPlanoFinanceiroOS) < 0.01;
   if (planoIntactoOS && Math.abs(somaRecebimentosAtivosMesmoPlanoOS - totalPlanoFinanceiroOS) >= 0.01) {
     console.warn('[SOS] Lançamentos financeiros divergentes na O.S. ' + osId +
@@ -5396,7 +5438,7 @@ window.salvarOS = async function() {
   const financeiroAtivoMesmoPlanoOS = planoIntactoOS ||
     financeiroCombinadoAtivoMesmoPlanoOS ||
     (!pagamentoCombinadoAtualOS && recebimentosAtivosMesmoPlanoOS.length > 0 &&
-    mesmaFormaPlanoOS && mesmaDataPlanoOS && mesmasParcelasPlanoOS &&
+    mesmaFormaPlanoOS && mesmaDataPlanoOS && mesmasParcelasPlanoOS && dadosCartaoIguaisOS &&
     Math.abs(somaRecebimentosAtivosMesmoPlanoOS - totalPlanoFinanceiroOS) < 0.01);
 
   if (payload.pgtoForma && (payload.pgtoData || pagamentoCombinadoAtualOS) && !financeiroAtivoMesmoPlanoOS) {
@@ -5424,6 +5466,7 @@ window.salvarOS = async function() {
           ? numBR((payload.deslocamentoGuincho && payload.deslocamentoGuincho.ativo) ? (payload.totalGuincho || payload.deslocamentoGuincho.total || 0) : 0)
           : 0;
         const valorFinanceiro = +(baseFinanceiro + guinchoFinanceiro).toFixed(2);
+        if(payload.pgtoCartao?.tipo==='repasse_unico'&&Math.abs(payload.pgtoCartao.totalLiquidoOperadora-valorFinanceiro)>0.01){window.toast('O líquido da operadora deve coincidir com o valor financeiro da O.S.','warn');return;}
         payload.totalFaturado = valorFinanceiro;
         payload.totalGuinchoFinanceiro = guinchoFinanceiro;
         if (guinchoFinanceiro > 0 && (possuiTotalAprovadoAtual || possuiTotalAprovadoAnterior)) {
@@ -5488,7 +5531,10 @@ window.salvarOS = async function() {
                 ));
               }
             }
-          } catch(e) { console.warn('Reconciliação financeiro OS:', e); }
+          } catch(e) {
+            console.error('[SOS] Reconciliação financeira indisponível:',e);
+            window.toast('Não foi possível conferir os pagamentos antigos: nada foi salvo para evitar duplicidade.','err');return;
+          }
         }
 
         const valorFinanceiroLancamentoOS = Math.max(+(valorFinanceiro - valorJaLiquidadoOS).toFixed(2), 0);
@@ -5596,6 +5642,18 @@ window.salvarOS = async function() {
             ? `Cartão de Crédito em ${parcelas}x`
             : `Cartão de Crédito à vista`;
 
+          if(payload.pgtoCartao?.tipo==='repasse_unico'){
+            const dias=payload.pgtoCartao.prazoRepasseDias;
+            queueFinanceiroAddOS({
+              tenantId:J.tid,tipo:'Entrada',status:'A Receber',
+              desc:`Recebimento operadora — ${descBaseFinanceiroOS} (repasse único D+${dias}; cliente ${parcelas}x)`,
+              valor:valorFinanceiroLancamentoOS,pgto:pgtoBase,venc:somarDiasISOOS(payload.pgtoData,dias),
+              osId:targetOsId,clienteId:payload.clienteId||null,quitadoPeloCliente:true,
+              aReceberDe:'Operadora de Cartão',origem:'recebimento_os_cartao',
+              valorTotalOS:valorFinanceiro,valorJaLiquidadoOS,complementoFinanceiroOS,
+              pgtoCartao:payload.pgtoCartao,repasseUnicoOperadora:true,createdAt:new Date().toISOString()
+            });
+          }else{
           for (let i = 0; i < parcelas; i++) {
             const vencParcela = somarDiasISOOS(payload.pgtoData, 30 * (i + 1));
             queueFinanceiroAddOS({
@@ -5616,6 +5674,7 @@ window.salvarOS = async function() {
               complementoFinanceiroOS,
               createdAt: new Date().toISOString()
             });
+          }
           }
 
         } else if (ehCreditoOficina || formasCreditoOficina.some(f => pgtoBase.toLowerCase().includes(f.toLowerCase()))) {
