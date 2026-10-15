@@ -5358,6 +5358,11 @@ window.salvarOS = async function() {
   const cardBrutoOS=cardNumeroOS($v('osCartaoCobrado'));
   const cardLiquidoOS=cardNumeroOS($v('osCartaoLiquido'));
   const cardDiasOS=Number($v('osCartaoDias')||30);
+  // Parcelamentos novos acima de 12x exigem declarar o repasse; sem isso o
+  // código legado criaria indevidamente 16 recebíveis da operadora.
+  if(cardEnabledOS && payload.pgtoParcelas>12 && (cardBrutoOS===null||cardLiquidoOS===null)){
+    window.toast('Para 13x a 16x, informe o total cobrado, o líquido da operadora e o prazo do repasse antes de salvar.','warn');return;
+  }
   if(cardEnabledOS && (cardBrutoOS!==null||cardLiquidoOS!==null)){
     if(cardBrutoOS===null||cardLiquidoOS===null||!Number.isFinite(cardBrutoOS)||!Number.isFinite(cardLiquidoOS)||cardBrutoOS<=0||cardLiquidoOS<=0||cardBrutoOS<cardLiquidoOS||!Number.isInteger(cardDiasOS)||cardDiasOS<1||cardDiasOS>365){
       window.toast('Cartão: informe os dois totais e o prazo do repasse único corretamente.','warn');return;
