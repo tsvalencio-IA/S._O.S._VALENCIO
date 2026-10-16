@@ -2047,6 +2047,7 @@ function statusOptionsExecEquipe(tipo, atual) {
     ['pendente', 'Pendente'],
     ['em_execucao', 'Em execução'],
     ['executado', 'Executado'],
+    ['trocada', 'Trocado / Aplicado'],
     ['executado_obs', 'Executado com observação'],
     ['nao_executado', 'Não executado'],
     ['cancelado', 'Cancelado']
@@ -2113,8 +2114,10 @@ function aplicarMarcadoresAprovacaoEquipe(os) {
   const U = window.JOS || window.JarvisOSUtils || {};
   document.getElementById('resumoAprovacaoEquipe')?.remove();
   document.querySelectorAll('#containerServicos .aprovacao-item-badge,#containerPecas .aprovacao-item-badge').forEach(el => el.remove());
-  const prontaSemAprovacao=/^(pronto|pronto_retirada|concluido|faturado)$/i.test(String(os?.status||''))&&!U.hasApproval?.(os);
-  if(!U.hasApproval?.(os)&&!prontaSemAprovacao)return;
+  const chaveAprovadas=U.getApprovedKeys?.(os)||new Set();
+  const aprovadaAtiva=U.hasApproval?.(os)&&os?.aprovacaoAtiva!==false&&chaveAprovadas.size>0;
+  const prontaSemAprovacao=/^(pronto|pronto_retirada|concluido|faturado)$/i.test(String(os?.status||''))&&!aprovadaAtiva;
+  if(!aprovadaAtiva&&!prontaSemAprovacao)return;
   const cli=(dbClientes||[]).find(c=>c.id===os?.clienteId);
   const disponiveis=U.buildBudgetItems?.(os,cli)||[];
   const keys=prontaSemAprovacao?new Set(disponiveis.map(it=>it.key)):(U.getApprovedKeys?.(os)||new Set());

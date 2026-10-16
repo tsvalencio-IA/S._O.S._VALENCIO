@@ -217,8 +217,10 @@
     D.getElementById('resumoAprovacaoEquipe')?.remove();
 
     const U = W.JOS || W.JarvisOSUtils || {};
-    const prontaSemAprovacao=/^(pronto|pronto_retirada|concluido|faturado)$/i.test(String(os?.status||''))&&!U.hasApproval?.(os);
-    if(!U.hasApproval?.(os)&&!prontaSemAprovacao){
+    const chaves=U.getApprovedKeys?.(os)||new Set();
+    const aprovadaAtiva=U.hasApproval?.(os)&&os?.aprovacaoAtiva!==false&&chaves.size>0;
+    const prontaSemAprovacao=/^(pronto|pronto_retirada|concluido|faturado)$/i.test(String(os?.status||''))&&!aprovadaAtiva;
+    if(!aprovadaAtiva&&!prontaSemAprovacao){
       caixasOrcamento().forEach(el => { el.style.display = ''; });
       return;
     }
