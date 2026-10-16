@@ -217,7 +217,8 @@
     D.getElementById('resumoAprovacaoEquipe')?.remove();
 
     const U = W.JOS || W.JarvisOSUtils || {};
-    if (!U.hasApproval?.(os)) {
+    const prontaSemAprovacao=/^(pronto|pronto_retirada|concluido|faturado)$/i.test(String(os?.status||''))&&!U.hasApproval?.(os);
+    if(!U.hasApproval?.(os)&&!prontaSemAprovacao){
       caixasOrcamento().forEach(el => { el.style.display = ''; });
       return;
     }
@@ -236,6 +237,7 @@
       }
       return true;
     });
+    if(prontaSemAprovacao)itens.forEach(it=>keys.add(it.key));
     const aprovados = itens.filter(it => keys.has(it.key));
     const naoAprovados = itens.filter(it => !keys.has(it.key));
     const exec = os?.execucaoItens || {};
