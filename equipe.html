@@ -254,6 +254,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .chat-foot{padding:10px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;}
 
 body.equipe-operacional .mec-financeiro-only{display:none!important;}
+#equipeCamposMonetariosInternos,#equipeCamposMonetariosInternos *{display:none!important;visibility:hidden!important;}
 .status-equipe-dados{display:none;margin:0 0 10px 0;padding:9px 11px;border:1px solid var(--border);border-radius:3px;background:var(--surf2);font-family:var(--fm);font-size:0.68rem;color:var(--muted2);letter-spacing:.4px;}
 .status-equipe-dados.warn{display:block;border-color:rgba(255,184,0,.35);color:var(--warn);background:rgba(255,184,0,.07);}
 .status-equipe-dados.err{display:block;border-color:rgba(255,59,59,.35);color:var(--danger);background:rgba(255,59,59,.07);}
@@ -695,10 +696,11 @@ body.equipe-page .overlay.open{display:flex!important;}
       </div>
       <div id="containerPecas" style="display:flex;flex-direction:column;gap:7px;margin-bottom:10px;"></div>
       
-      <div class="form-row c2" style="display:none;">
-        <div><input type="number" class="j-input" id="osMO" value="0"></div>
-        <div><input type="hidden" id="totalHidden" value="0"></div>
+      <div id="equipeCamposMonetariosInternos" hidden aria-hidden="true" style="display:none!important">
+        <input type="hidden" id="osMO" value="0">
+        <input type="hidden" id="totalHidden" value="0">
       </div>
+      <div id="equipeValoresLiberadosPorSuperadmin" hidden aria-live="polite" style="display:none;margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:4px;font-size:.72rem;color:var(--cyan)"></div>
     </div>
   </div>
 
@@ -918,11 +920,37 @@ function aplicarModoOperacionalEquipe(){
   const cardComissao = document.getElementById('kpiComissao');
   if (cardComissao && operacional) cardComissao.style.display = 'none';
 }
-function aplicarModulosEquipe(ofi){
+
+/* Valores monetários da O.S. ficam ocultos até confirmação do documento da
+ * oficina no Firebase. Esse controle é de apresentação, não substitui
+ * segregação de campos sensíveis nas regras e modelo de dados do servidor. */
+let _equipeValoresOSLiberadosPorServidor=false;
+function textoEquipeSemValores(v){
+  return String(v??'').replace(/R\$\s*[\d.]+(?:,\d{1,2})?/gi,'[VALOR OCULTO]');
+}
+function atualizarValoresLiberadosEquipe(os){
+  const box=document.getElementById('equipeValoresLiberadosPorSuperadmin');
+  if(!box)return;
+  box.textContent='';
+  const autorizada=_equipeValoresOSLiberadosPorServidor===true;
+  box.hidden=!autorizada;box.style.display=autorizada?'block':'none';
+  if(!autorizada||!os||String(os.tenantId||J.tid)!==String(J.tid))return;
+  const U=window.JOS||window.JarvisOSUtils||{};
+  const valor = v => Number(U.parseNumberBR ? U.parseNumberBR(v) : Number(v||0)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+  box.textContent='VALORES DA O.S. — LIBERADOS PELO SUPERADMIN | Mão de obra: '+
+    valor(os.maoObra||0)+' | Total: '+valor(os.total||0);
+}
+function aplicarModulosEquipe(ofi,validadoPeloServidor=false){
   if(!ofi) return;
   J.oficina = { id:J.tid, ...ofi };
   try { sessionStorage.setItem('j_oficina', JSON.stringify(J.oficina)); } catch(e) {}
   const mods = ofi.modulos || {};
+  if(validadoPeloServidor){
+    _equipeValoresOSLiberadosPorServidor=mods.equipeValoresOS===true;
+    atualizarValoresLiberadosEquipe(window._equipeOSAtual);
+    if(document.getElementById('tlData'))renderTimeline();
+    if(window._equipeOSAtual)renderObservacoesEquipeOS(window._equipeOSAtual);
+  }
   document.body.dataset.modIa = mods.ia === false ? 'off' : 'on';
   document.body.dataset.modChat = mods.chat === false ? 'off' : 'on';
   document.body.dataset.modRh = mods.rh === false ? 'off' : 'on';
@@ -1717,7 +1745,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   db.collection('oficinas').doc(J.tid).onSnapshot(doc => {
     if (doc.exists) {
       const ofi = doc.data();
-      aplicarModulosEquipe(ofi);
+      aplicarModulosEquipe(ofi,true);
       const podeVer = ofi.modulos && ofi.modulos.comissoes === true && podeVerFinanceiroEquipe();
       const cardComissao = document.getElementById('kpiComissao');
       
@@ -1783,12 +1811,12 @@ document.addEventListener('DOMContentLoaded',()=>{
       ].map(v => String(v || '').trim()).filter(Boolean)));
       for(const ref of refs){
         const doc=await centralDbEquipe.collection('oficinas').doc(ref).get();
-        if(doc.exists){aplicarModulosEquipe(doc.data());return;}
+        if(doc.exists){aplicarModulosEquipe(doc.data(),true);return;}
       }
       for(const campo of ['slug','publicSlug','oficinaSlug','tenantSlug']){
         for(const ref of refs){
           const snap=await centralDbEquipe.collection('oficinas').where(campo,'==',ref).limit(1).get();
-          if(!snap.empty){aplicarModulosEquipe(snap.docs[0].data());return;}
+          if(!snap.empty){aplicarModulosEquipe(snap.docs[0].data(),true);return;}
         }
       }
     }catch(err){console.warn('[Equipe] módulos centrais indisponíveis',err?.message||err);}
@@ -1933,7 +1961,7 @@ function renderObservacoesEquipeOS(os){
   const lista=Array.isArray(os?.observacoesEquipe)?os.observacoesEquipe.slice(-5).reverse():[];
   if(!lista.length){box.style.display='none';box.innerHTML='';return;}
   box.style.display='block';
-  box.innerHTML='<b style="color:var(--warn);">ÚLTIMAS OBSERVAÇÕES</b><br>'+lista.map(o=>`${_escapeEquipe(new Date(o.dt||o.data||Date.now()).toLocaleString('pt-BR'))} · <b>${_escapeEquipe(o.usuario||o.user||'Equipe')}</b> — ${_escapeEquipe(o.texto||o.obs||'')}`).join('<br>');
+  box.innerHTML='<b style="color:var(--warn);">ÚLTIMAS OBSERVAÇÕES</b><br>'+lista.map(o=>`${_escapeEquipe(new Date(o.dt||o.data||Date.now()).toLocaleString('pt-BR'))} · <b>${_escapeEquipe(o.usuario||o.user||'Equipe')}</b> — ${_escapeEquipe(_equipeValoresOSLiberadosPorServidor ? (o.texto||o.obs||'') : textoEquipeSemValores(o.texto||o.obs||''))}`).join('<br>');
 }
 async function auditarEquipeOperacao(modulo,acao,extra={}){
   try{await db.collection('lixeira_auditoria').add({tenantId:J.tid,modulo,acao,usuario:J.nome||'Equipe',usuarioId:J.fid||'',perfil:J.role||'equipe',ts:new Date().toISOString(),...extra});}catch(e){console.warn('[Equipe] auditoria:',e?.message||e);}
@@ -1992,6 +2020,7 @@ function prepOS(mode,id=null){
   $('osMO').value='0'; $('osTipo').value='carro'; _atualizarStatusVisualEquipe('Aguardando');
   $('osData').value=new Date().toISOString().split('T')[0];
   $('containerPecas').innerHTML=''; $('containerServicos').innerHTML='';
+  atualizarValoresLiberadosEquipe(null);
   document.getElementById('resumoAprovacaoEquipe')?.remove();
   $('mediaGrid').innerHTML=''; $('mediaArray').value='[]';
   $('osTimeline').innerHTML=''; $('tlData').value='[]';
@@ -2010,6 +2039,7 @@ function prepOS(mode,id=null){
     const podeVerTodas=['gerente','gestor','admin','superadmin','dono'].includes(roleAtual);
     if(!podeVerTodas && !osAtribuidaAoUsuarioEquipe(os)) { toast('Esta O.S. não está vinculada ao seu usuário.','warn'); return; }
     window._equipeOSAtual = os;
+    atualizarValoresLiberadosEquipe(os);
     $('osId').value=os.id; $('osIdBadge').innerText='OS#'+os.id.slice(-5).toUpperCase();
     $('osTipo').value=os.tipoVeiculo||'carro';
     _atualizarStatusVisualEquipe(os.status||'Aguardando');
@@ -2811,7 +2841,7 @@ function renderTimeline(){
     <div class="tl-item">
       <div class="tl-dt">${dtHrBr(e.dt)}</div>
       <div class="tl-user">${e.user}</div>
-      <div class="tl-acao">${e.acao}</div>
+      <div class="tl-acao">${_escapeEquipe(_equipeValoresOSLiberadosPorServidor ? (e.acao||"") : textoEquipeSemValores(e.acao||""))}</div>
     </div>`).join('');
 }
 
