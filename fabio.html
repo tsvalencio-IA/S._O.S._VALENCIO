@@ -746,9 +746,10 @@ function montar(id){
  const o=lista.find(x=>x.id===id);
  if(!o){elem('p','consulta-vazio','O.S. não encontrada. Atualize o painel.',folha);return;}
  const {c,v,oficina}=getInfo(o),keys=aprovadoKeys(o);
+ const veic=window.__fabioVeiculoOS?.(o)||{};
  folha.replaceChildren();
  const nomeOS=first(o.numero,o.numeroOS,txt(o.id).slice(-6).toUpperCase());
- byId('fabioConsultaTitulo').textContent='OS '+nomeOS+' • '+first(o.placa,v.placa,'Veículo');
+ byId('fabioConsultaTitulo').textContent='OS '+nomeOS+' • '+(veic.prefixo?'PREFIXO '+veic.prefixo+' • ':'')+first(veic.placa,'Veículo');
  const topo=elem('div','consulta-timbre',null,folha),marca=elem('div','consulta-identidade',null,topo);
  const logo=first(oficina.logoUrl,oficina.logotipoUrl,oficina.logo);
  if(/^https?:\/\//i.test(txt(logo))){const img=elem('img','consulta-logo',null,marca);img.src=logo;img.alt='Logotipo da oficina';}
@@ -761,9 +762,12 @@ function montar(id){
  const detalhes=[
   ['Cliente',first(c.govUnidade,c.razaoSocial,c.nome,o.cliente,'—'),'CPF/CNPJ',first(c.doc,c.cpf,c.cnpj,'—')],
   ['Telefone',first(c.wpp,c.telefone,c.celular,o.celular,'—'),'O.S.',nomeOS],
-  ['Veículo',[first(v.marca,o.marca),first(v.modelo,o.veiculo,o.modelo)].filter(Boolean).join(' ')||'—','Placa',first(o.placa,v.placa,'—')],
-  ['Ano',first(v.ano,o.ano,'—'),'KM',first(o.km,v.km,'—')],
-  ['Status',first(o.status,'Triagem'),'Abertura',data(first(o.createdAt,o.dataAbertura,o.abertaEm,o.data))||'—']
+  ['Veículo',[veic.marca,veic.modelo].filter(Boolean).join(' ')||'—','Placa',first(veic.placa,'—')],
+  ['Prefixo da viatura',first(veic.prefixo,'—'),'Patrimônio',first(veic.patrimonio,'—')],
+  ['Ano',first(veic.ano,'—'),'KM',first(veic.km,'—')],
+  ['Chassi',first(veic.chassi,'—'),'Combustível',first(veic.combustivel,'—')],
+  ['Cor',first(veic.cor,'—'),'Status',first(o.status,'Triagem')],
+  ['O.S. aberta em',data(first(o.createdAt,o.dataAbertura,o.abertaEm,o.data))||'—','Status atual',first(o.status,'Triagem')]
  ];
  const tb=elem('table','consulta-dados',null,box);const body=elem('tbody','',null,tb);
  detalhes.forEach(row=>{const tr=elem('tr','',null,body);row.forEach((x,i)=>elem(i%2?'td':'th','',x,tr));});
@@ -773,6 +777,21 @@ function montar(id){
  if(keys){tag(resumo,'APROVAÇÃO: '+keys.size+' item(ns) aprovado(s)','ok');}
  else{tag(resumo,'APROVAÇÃO: '+(['aprovado','andamento','pronto','entregue'].includes(valorStatus(o))?'verificar itens':'sem itens confirmados'),'warn');}
  tag(resumo,pagamento(o)?'RECEBIMENTO LANÇADO':'RECEBIMENTO NÃO MARCADO',pagamento(o)?'ok':'warn');
+ const mecs=window.__fabioMecanicosOS?.(o)||[];
+ const boxMecs=secao('MECÂNICOS / ATENDIMENTO / COMISSÕES');
+ boxMecs.classList.add('consulta-interno');
+ if(!mecs.length)elem('div','consulta-quadro','Nenhum mecânico vinculado à O.S.',boxMecs);
+ mecs.forEach(mec=>{
+  const linha=elem('div','consulta-mecanico',null,boxMecs);
+  elem('strong','',mec.nome||'Mecânico não identificado',linha);
+  elem('small',mec.ativo?'EM ATENDIMENTO — execução em andamento':'Vinculado à O.S. — execução ativa não confirmada',linha);
+  const situacao=window.__fabioComissaoMecOS?.(o,mec)||{rotulo:'Comissão a verificar',estado:'indisponivel'};
+  const cor=situacao.estado==='quitada'?'status-verde':'status-amarelo';
+  const financeiro='Comissão: '+situacao.rotulo
+   +(typeof situacao.pago==='number'&&situacao.pago>0?' • Pago: '+reais(situacao.pago):'')
+   +(typeof situacao.pendente==='number'&&situacao.pendente>0?' • Pendente: '+reais(situacao.pendente):'');
+  elem('small',cor,financeiro,linha);
+ });
  quadro('DEFEITO RECLAMADO / QUEIXA DO CLIENTE',first(o.relato,o.desc,o.descricao,'—'));
  quadro('DIAGNÓSTICO TÉCNICO',first(o.diagnostico,'—'));
 
@@ -793,11 +812,18 @@ function montar(id){
  if(serv.length){
   tabela(servSec,['Cód.','Sistema','Descrição do serviço','TMO','Valor original','Desconto','Valor cobrado / Execução'],serv.map(it=>{
    const ex=exec[it.key]||{},sts=statusExec(it);
+   const origem=o.servicos?.[it.index]||{};
+   const rateios=Array.isArray(origem.rateiosComissao)&&origem.rateiosComissao.length?origem.rateiosComissao:[{mecId:ex.mecId||it.mecId||origem.mecId,mecNome:ex.mecNome||it.mecNome||origem.mecNome}];
+   const envolvidos=rateios.map(r=>{
+    const m=mecs.find(x=>x.id&&String(x.id)===String(r.mecId||r.id||''));
+    return first(m?.nome,r.mecNome,r.nome);
+   }).filter(Boolean);
+   const atribuido=envolvidos.length?' • Mecânico(s): '+[...new Set(envolvidos)].join(', '):'';
    if(!keys||keys.has(it.key)){totalExecucao++;if(norm(ex.status)==='executado')concluidos++;}
    const aprov=keys?(keys.has(it.key)?'APROVADO':'NÃO APROVADO'):'Sem aprovação individual';
    return [first(it.codigo,'—'),first(it.sistema,'—'),first(it.desc,'—'),
     it.tempo||'—',reais(it.valorBruto),reais(it.descontoValor),
-    {valor:reais(it.valorFinal),classe:'consulta-valor',obs:aprov+' • '+sts.label+(ex.obs?' — '+ex.obs:''),obsTipo:sts.classe}];
+    {valor:reais(it.valorFinal),classe:'consulta-valor',obs:aprov+' • '+sts.label+atribuido+(ex.obs?' — '+ex.obs:''),obsTipo:sts.classe}];
   }));
  }else elem('p','consulta-vazio','Nenhum serviço lançado nesta O.S.',servSec);
  const resumoExec=secao('EXECUÇÃO REAL DOS SERVIÇOS');
