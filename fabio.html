@@ -10,6 +10,7 @@
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-auth-compat.js"></script>
 <script src="js/config.js"></script>
+<script src="js/os-evidencias-export.js"></script>
 <style>
 :root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#f1f6fc;background:#071222;color-scheme:dark}
 *{box-sizing:border-box}body{margin:0;min-height:100dvh}button,input{font:inherit}button{cursor:pointer}
@@ -54,6 +55,89 @@ button:hover{border-color:#68beed}button.active{background:#126c92;border-color:
 .pdf-offscreen{position:fixed;left:-300vw;top:-300vh;width:1200px;height:800px;opacity:0;pointer-events:none;border:0}
 @media(max-width:420px){.pdf-cabecalho{padding:8px 10px}.pdf-acoes{padding:6px;gap:4px}.pdf-acoes button{font-size:.82rem;padding:6px 4px}}
 </style>
+<style id="fabio-consulta-style">
+
+/* Consulta visual da OS - preserva o padrão de cores, tabelas e evidências do laudo Jarvis */
+#fabioConsulta[hidden]{display:none!important}
+#fabioConsulta{position:fixed;inset:0;z-index:9000;background:#06101f;display:flex;flex-direction:column;overflow:hidden}
+#fabioConsulta .consulta-topo{display:flex;flex-wrap:wrap;gap:9px;align-items:center;padding:12px max(12px,calc((100vw - 1150px)/2));border-bottom:1px solid #304861;background:#0c1b2e}
+#fabioConsulta .consulta-topo h2{flex:1 1 150px;margin:0;font-size:clamp(1.1rem,3vw,1.45rem)}
+#fabioConsulta .consulta-topo button{padding:10px 13px}
+#fabioConsulta .consulta-topo .principal{background:#087f62;border-color:#32cba2}
+#fabioConsulta .consulta-rolagem{overflow-y:auto;overflow-x:hidden;flex:1;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:16px}
+#fabioConsulta .consulta-folha{max-width:900px;margin:0 auto 34px;background:#fff;color:#182437;box-shadow:0 14px 42px #0008;padding:clamp(15px,3.5vw,34px);font:14px/1.45 Arial,Helvetica,sans-serif}
+#fabioConsulta .consulta-timbre{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #17243c;padding-bottom:16px;gap:16px}
+#fabioConsulta .consulta-timbre strong{display:block;font-size:19px;letter-spacing:.04em}
+#fabioConsulta .consulta-timbre small{display:block;color:#536072;font-size:11px;overflow-wrap:anywhere}
+#fabioConsulta .consulta-timbre .tipo{font-weight:800;letter-spacing:.07em;font-size:13px;white-space:nowrap}
+#fabioConsulta .consulta-logo{max-width:105px;max-height:60px;object-fit:contain;margin-right:8px}
+#fabioConsulta .consulta-identidade{display:flex;align-items:center;min-width:0}
+#fabioConsulta .consulta-bloco{margin-top:15px}
+#fabioConsulta .consulta-titulo{margin:0 0 5px;background:#1c273a;color:white;font-weight:800;font-size:12px;padding:7px 10px;text-transform:uppercase;letter-spacing:.04em}
+#fabioConsulta .consulta-quadro{border:1px solid #bcc6d2;padding:10px;white-space:pre-wrap;overflow-wrap:anywhere;min-height:34px}
+#fabioConsulta .consulta-tabela-rolagem{width:100%;overflow-x:auto}
+#fabioConsulta table{width:100%;border-collapse:collapse;font-size:12px;line-height:1.35}
+#fabioConsulta th{background:#1c273a;color:#fff;text-align:left;font-size:11px}
+#fabioConsulta td,#fabioConsulta th{padding:7px 8px;border:1px solid #bdc6d0;vertical-align:top;overflow-wrap:anywhere}
+#fabioConsulta .consulta-dados th{background:#ecf0f5;color:#1d2938;width:22%;font-weight:700}
+#fabioConsulta .consulta-dados td{width:28%}
+#fabioConsulta .consulta-vazio{color:#64748b;font-style:italic;padding:10px 3px}
+#fabioConsulta .consulta-alertas{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 4px}
+#fabioConsulta .consulta-tag{padding:7px 10px;border-radius:5px;background:#eef2f7;color:#253247;font-weight:700}
+#fabioConsulta .consulta-tag.ok{background:#e0f5e8;color:#16653c}
+#fabioConsulta .consulta-tag.warn{background:#fff0c8;color:#8c5a00}
+#fabioConsulta .consulta-tag.bad{background:#ffe3e3;color:#8b1d1d}
+#fabioConsulta .consulta-valor{font-weight:700;white-space:nowrap}
+#fabioConsulta .consulta-acerto{font-size:11px;font-weight:750;color:#12683c}
+#fabioConsulta .consulta-pendente{font-size:11px;font-weight:750;color:#875d09}
+#fabioConsulta .consulta-totais{margin:12px 0 0 auto;max-width:340px}
+#fabioConsulta .consulta-total{display:flex;justify-content:space-between;gap:15px;padding:7px 4px;border-bottom:1px solid #d0d9e2;font-size:13px}
+#fabioConsulta .consulta-total.forte{font-size:18px;font-weight:800;border-top:2px solid #1c273a}
+#fabioConsulta .consulta-fotos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+#fabioConsulta .consulta-foto{min-width:0;margin:0;border:1px solid #bcc6d2;background:#edf1f4;overflow:hidden}
+#fabioConsulta .consulta-foto img{display:block;width:100%;height:165px;object-fit:contain;background:#f7f8fa}
+#fabioConsulta .consulta-foto figcaption{font-size:11px;padding:7px;overflow-wrap:anywhere}
+#fabioConsulta .consulta-foto time{display:block;font-size:10px;color:#4b5969}
+#fabioConsulta .consulta-assinaturas{display:grid;grid-template-columns:1fr 1fr;gap:25px;margin-top:38px;text-align:center;font-size:11px}
+#fabioConsulta .consulta-assinaturas>div{border-top:1px solid #4e5b6b;padding-top:7px}
+#fabioConsulta .consulta-rodape{border-top:1px solid #d5dce5;margin-top:18px;padding-top:9px;font-size:10px;color:#536072}
+.os{cursor:pointer;transition:border-color .15s,background .15s}
+.os:hover,.os:focus-visible{border-color:#67d5ff;background:#183149}
+.os .card-abrir{font-size:1.02rem;color:#7de2ff;font-weight:800;margin-top:12px}
+@media(max-width:650px){
+ #fabioConsulta .consulta-topo{padding:8px;gap:6px}
+ #fabioConsulta .consulta-topo h2{width:100%;flex:1 0 100%;font-size:1rem;order:0}
+ #fabioConsulta .consulta-topo button{flex:1;min-height:43px;font-size:.86rem;padding:6px}
+ #fabioConsulta .consulta-rolagem{padding:6px}
+ #fabioConsulta .consulta-folha{padding:14px 11px;box-shadow:none;margin:0}
+ #fabioConsulta .consulta-timbre strong{font-size:15px}
+ #fabioConsulta .consulta-timbre .tipo{font-size:10px}
+ #fabioConsulta .consulta-logo{max-width:58px}
+ #fabioConsulta .consulta-dados th,#fabioConsulta .consulta-dados td{display:block;width:50%;float:left;min-height:36px;border-bottom:0}
+ #fabioConsulta .consulta-dados tr{display:flow-root;border-bottom:1px solid #bdc6d0}
+ #fabioConsulta .consulta-dados th{clear:left}
+ #fabioConsulta .consulta-dados tr td:nth-of-type(1){border-right:1px solid #bdc6d0}
+ #fabioConsulta .consulta-fotos{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+ #fabioConsulta .consulta-foto img{height:120px}
+ #fabioConsulta .consulta-tabela-rolagem{overflow-x:auto}
+ #fabioConsulta table{font-size:11px}
+ #fabioConsulta td,#fabioConsulta th{padding:6px 4px}
+ #fabioConsulta .consulta-total.forte{font-size:15px}
+}
+@media print{
+ body{background:#fff!important}
+ body>header,body>main,body>#fabioPdfDialog{display:none!important}
+ #fabioConsulta{position:static;display:block;background:#fff;overflow:visible}
+ #fabioConsulta .consulta-topo{display:none!important}
+ #fabioConsulta .consulta-rolagem{display:block;padding:0;overflow:visible}
+ #fabioConsulta .consulta-folha{max-width:none;padding:0;box-shadow:none;margin:0}
+ #fabioConsulta .consulta-bloco,#fabioConsulta .consulta-foto,#fabioConsulta tr{break-inside:avoid}
+ #fabioConsulta .consulta-titulo,#fabioConsulta th{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+ #fabioConsulta .consulta-dados th,#fabioConsulta .consulta-dados td{display:table-cell;float:none;width:auto;min-height:0;border-bottom:1px solid #bcc6d2}
+ #fabioConsulta .consulta-fotos{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+
+</style>
 </head>
 <body>
 <header><div><small>S.O.S. VALÊNCIO • VISÃO RÁPIDA DO GESTOR</small><h1>Minha oficina</h1></div><button id="sair" type="button">Sair</button></header>
@@ -70,6 +154,17 @@ button:hover{border-color:#68beed}button.active{background:#126c92;border-color:
 <div id="erro" role="alert"></div>
 <section id="lista" aria-label="Ordens de serviço" aria-live="polite"></section>
 </main>
+
+
+<div id="fabioConsulta" hidden role="dialog" aria-modal="true" aria-label="Ordem de serviço - consulta">
+ <div class="consulta-topo">
+  <h2 id="fabioConsultaTitulo">ORDEM DE SERVIÇO</h2>
+  <button id="fabioConsultaVoltar" type="button">← Voltar</button>
+  <button id="fabioConsultaImprimir" type="button">Imprimir</button>
+  <button id="fabioConsultaCompartilhar" type="button" class="principal">PDF / WhatsApp</button>
+ </div>
+ <div class="consulta-rolagem"><article id="fabioConsultaFolha" class="consulta-folha" aria-live="polite"></article></div>
+</div>
 
 <div class="pdf-fundo" id="fabioPdfDialog" hidden role="dialog" aria-modal="true" aria-labelledby="fabioPdfTitulo">
   <div class="pdf-box">
@@ -93,7 +188,8 @@ const cargo=(sessionStorage.getItem('j_cargo')||'').normalize('NFD').replace(/[\
 if(!tid || tid==='MASTER_ADMIN' || (!['admin','gestor'].includes(role) && cargo!=='gestor')){
   $('statusConexao').textContent='É necessário entrar com um perfil de gestor ou administrador autorizado.';
   $('erro').textContent='Acesso não autorizado. Faça login no sistema.';
-  document.querySelectorAll('.indicador,.filtros button').forEach(b=>b.disabled=true);
+  document.querySelectorAll('.indicador').forEach(b=>b.disabled=true);
+  $('sair').addEventListener('click',()=>{try{sessionStorage.clear();localStorage.removeItem('j_saved_login');localStorage.removeItem('j_saved_brand');}catch(_){}location.replace('index.html?logout=1');});
   return;
 }
 let os=[],clientes=new Map(),veiculos=new Map(),filtro='todos',busca='';
@@ -122,6 +218,7 @@ function render(){
  $('nEntregues').textContent=validos.filter(entregue).length;
  $('filtroTexto').textContent=({todos:'Todas as O.S.',aguardando:'Aguardando',servico:'Em serviço',prontos:'Prontos',entregues:'Entregues'})[filtro]+' • '+validos.length+' O.S. cadastradas';
  window.__fabioListaOS=os;window.__fabioDadosAtuais={os,clientes:[...clientes.values()],veiculos:[...veiculos.values()],oficina:(function(){try{return JSON.parse(sessionStorage.getItem('j_oficina')||'null')}catch(e){return null}})()};
+ window.fabioAtualizarOSAberta?.();
  const lista=$('lista');lista.replaceChildren();
  let exibidos=validos.filter(o=>{
    if(!pertence(o))return false;
@@ -147,10 +244,11 @@ function render(){
    add(pagamento,'span','etiqueta '+(recebeu(o)?'green':'yellow'),recebeu(o)?'💰 RECEBIMENTO MARCADO':'💰 RECEBIMENTO NÃO MARCADO');
    if(valorStatus(o)==='aprovado')add(pagamento,'span','etiqueta green','APROVADA');
    else if(aguardando(o))add(pagamento,'span','etiqueta yellow','AGUARDANDO APROVAÇÃO');
-   const botPdf=add(card,'button','pdf-botao','📄 VER O.S. + FOTOS / ENVIAR');
-   botPdf.type='button';
-   botPdf.setAttribute('aria-label','Abrir O.S. original com fotos, imprimir, baixar ou enviar PDF');
-   botPdf.addEventListener('click',()=>window.fabioAbrirPdfOS?.(o.id));
+   add(card,'div','card-abrir','TOQUE PARA ABRIR A O.S. →');
+   card.tabIndex=0;card.setAttribute('role','button');
+   card.setAttribute('aria-label','Ver ordem de serviço '+texto(o.numero||o.id)+' do veículo '+d.placa);
+   card.addEventListener('click',()=>window.fabioAbrirConsultaOS?.(o.id));
+   card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();window.fabioAbrirConsultaOS?.(o.id);}});
  }
 }
 document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click',()=>{
@@ -160,7 +258,13 @@ document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click'
 }));
 $('busca').addEventListener('input',e=>{busca=normal(e.target.value.trim());render();});
 $('limpar').addEventListener('click',()=>{$('busca').value='';busca='';filtro='todos';document.querySelectorAll('.indicador').forEach(x=>x.classList.remove('active'));render();});
-$('sair').addEventListener('click',()=>{unsub.forEach(f=>f());sessionStorage.removeItem('j_tid');sessionStorage.removeItem('j_role');location.replace('index.html');});
+$('sair').addEventListener('click',async()=>{
+  unsub.forEach(f=>{try{f();}catch(_){}});
+  try{sessionStorage.clear();}catch(_){}
+  try{['j_saved_login','j_saved_brand','j_last_user','j_role_master'].forEach(k=>localStorage.removeItem(k));}catch(_){}
+  try{if(firebase?.auth&&firebase.apps.length)await Promise.race([firebase.auth().signOut(),new Promise(r=>setTimeout(r,900))]);}catch(_){}
+  window.location.replace('index.html?logout=1');
+});
 try{
  const db=window.initFirebase();
  function acompanhar(col,update){
@@ -351,6 +455,132 @@ $('fabioPdfCompartilhar').addEventListener('click',()=>{
 $('fabioPdfFechar').addEventListener('click',()=>{$('fabioPdfDialog').hidden=true;$('fabioPdfViewer').removeAttribute('src');});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('fabioPdfDialog').hidden)$('fabioPdfFechar').click();});
 })();
+</script>
+<script>
+
+(function(){
+'use strict';
+const byId=id=>document.getElementById(id);
+const painel=byId('fabioConsulta'),folha=byId('fabioConsultaFolha');
+let aberto=null;
+function txt(v){return v===null||v===undefined?'':String(v);}
+function first(){for(let i=0;i<arguments.length;i++){const v=arguments[i];if(v!==null&&v!==undefined&&txt(v).trim())return v;}return '';}
+function norm(v){return txt(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();}
+function elem(tag,classe,valor,pai){const x=document.createElement(tag);if(classe)x.className=classe;if(valor!==undefined&&valor!==null)x.textContent=txt(valor);if(pai)pai.appendChild(x);return x;}
+function num(v){if(typeof v==='number')return Number.isFinite(v)?v:null;if(v===null||v===undefined||v==='')return null;let s=String(v).trim().replace(/[^\d,.-]/g,'');if(!s)return null;if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');const n=Number(s);return Number.isFinite(n)?n:null;}
+function reais(v){const n=num(v);return n===null?'Não informado':n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
+function data(v){if(!v)return '';try{const d=v.toDate?v.toDate():v.seconds?new Date(v.seconds*1000):new Date(v);return isNaN(d.getTime())?'':d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});}catch(e){return '';}}
+function quadro(titulo,conteudo){const sec=elem('section','consulta-bloco',null,folha);elem('h3','consulta-titulo',titulo,sec);elem('div','consulta-quadro',conteudo||'—',sec);return sec;}
+function secao(titulo){const sec=elem('section','consulta-bloco',null,folha);elem('h3','consulta-titulo',titulo,sec);return sec;}
+function tabela(parent,heads,rows){const wrap=elem('div','consulta-tabela-rolagem',null,parent);const t=elem('table','',null,wrap);const tr=elem('tr','',null,elem('thead','',null,t));heads.forEach(h=>elem('th','',h,tr));const body=elem('tbody','',null,t);for(const row of rows){const tr=elem('tr','',null,body);row.forEach(v=>{if(typeof v==='object'&&v!==null){const c=elem('td',v.classe||'',v.valor,tr);if(v.obs)elem('div',v.obsTipo||'consulta-pendente',v.obs,c);}else elem('td','',v,tr);});}return t;}
+function par(pai,titulo,valor){const item=elem('div','consulta-total',null,pai);elem('span','',titulo,item);elem('strong','',valor,item);return item;}
+function tag(pai,valor,tipo){elem('span','consulta-tag '+(tipo||''),valor,pai);}
+function valorStatus(o){return norm(o.status||'Triagem');}
+function statusItem(e,tipo){const v=norm(e&&e.status);const nomes={pendente:'Pendente',em_execucao:'Em execução',executado:'Serviço executado',nao_executado:'Não executado',trocada:'Peça trocada / executada',nao_encontrada:'Peça não encontrada',nao_trocada:'Não trocada'};return {label:nomes[v]||(!v?'Sem registro de execução':txt(e.status)),classe:(v==='executado'||v==='trocada')?'consulta-acerto':'consulta-pendente'};}
+function getInfo(o){
+ const f=window.__fabioDadosFonte?window.__fabioDadosFonte():null;
+ const c=f&&f.clientes?f.clientes.find(x=>x.id===o.clienteId)||{}:{};
+ const v=f&&f.veiculos?f.veiculos.find(x=>x.id===o.veiculoId)||{}:{};
+ return {o,c,v,oficina:(f&&f.oficina)||{}};
+}
+function aprovadoKeys(o){const a=o.aprovacao&&Array.isArray(o.aprovacao.itens)?o.aprovacao.itens:Array.isArray(o.itensAprovados)?o.itensAprovados:null;return a?new Set(a.map(x=>typeof x==='string'?x:x&&x.key).filter(Boolean)):null;}
+function fotosOS(o){
+ if(window.thiaEvidenciasOS&&typeof window.thiaEvidenciasOS.coletar==='function')return window.thiaEvidenciasOS.coletar(o,{somenteAnexosOS:true}).filter(x=>x.type!=='video');
+ const all=[...(Array.isArray(o.fotos)?o.fotos:[]),...(Array.isArray(o.media)?o.media:[])],seen=new Set();
+ return all.map(x=>typeof x==='string'?{url:x,type:'image'}:x).filter(x=>{const u=txt(x.url||x.secure_url);if(!/^https?:\/\//i.test(u)||/checklist/i.test(txt(x.origem||x.source))||/\/checklists?\//i.test(u)||seen.has(u)||/^video/i.test(txt(x.type)))return false;seen.add(u);return true;});
+}
+function pagamento(o){const n=num(o.valorRecebidoOperacional);return o.recebidaOperacional===true||(n!==null&&n>0);}
+function montar(id){
+ const lista=window.__fabioOsFonte?window.__fabioOsFonte():[];
+ const o=lista.find(x=>x.id===id);
+ if(!o){elem('p','consulta-vazio','O.S. não encontrada. Atualize o painel.',folha);return;}
+ const {c,v,oficina}=getInfo(o),keys=aprovadoKeys(o);
+ folha.replaceChildren();
+ const nomeOS=first(o.numero,o.numeroOS,txt(o.id).slice(-6).toUpperCase());
+ byId('fabioConsultaTitulo').textContent='OS '+nomeOS+' • '+first(o.placa,v.placa,'Veículo');
+ const topo=elem('div','consulta-timbre',null,folha),marca=elem('div','consulta-identidade',null,topo);
+ const logo=first(oficina.logoUrl,oficina.logotipoUrl,oficina.logo);
+ if(/^https?:\/\//i.test(txt(logo))){const img=elem('img','consulta-logo',null,marca);img.src=logo;img.alt='Logotipo da oficina';}
+ const institucional=elem('div','',null,marca);
+ elem('strong','',first(oficina.nomeFantasia,oficina.razaoSocial,window.sessionStorage.getItem('j_tnome'),'S.O.S. VALÊNCIO'),institucional);
+ const endereco=first(oficina.enderecoCompleto,[oficina.endereco,oficina.numero,oficina.bairro,oficina.cidade,oficina.uf,oficina.cep].filter(Boolean).join(', '));
+ [oficina.cnpj?'CNPJ: '+oficina.cnpj:'',oficina.telefone?'Tel/Whats: '+oficina.telefone:'',endereco,oficina.email].filter(Boolean).forEach(x=>elem('small','',x,institucional));
+ elem('div','tipo',c.tipoCliente==='governo'?'ORÇAMENTO / ORDEM DE SERVIÇO':'ORÇAMENTO / O.S.',topo);
+ const box=secao('DADOS DA ORDEM DE SERVIÇO');
+ const detalhes=[
+  ['Cliente',first(c.govUnidade,c.razaoSocial,c.nome,o.cliente,'—'),'CPF/CNPJ',first(c.doc,c.cpf,c.cnpj,'—')],
+  ['Telefone',first(c.wpp,c.telefone,c.celular,o.celular,'—'),'O.S.',nomeOS],
+  ['Veículo',[first(v.marca,o.marca),first(v.modelo,o.veiculo,o.modelo)].filter(Boolean).join(' ')||'—','Placa',first(o.placa,v.placa,'—')],
+  ['Ano',first(v.ano,o.ano,'—'),'KM',first(o.km,v.km,'—')],
+  ['Status',first(o.status,'Triagem'),'Abertura',data(first(o.createdAt,o.dataAbertura,o.abertaEm,o.data))||'—']
+ ];
+ const tb=elem('table','consulta-dados',null,box);const body=elem('tbody','',null,tb);
+ detalhes.forEach(row=>{const tr=elem('tr','',null,body);row.forEach((x,i)=>elem(i%2?'td':'th','',x,tr));});
+ const resumo=elem('div','consulta-alertas',null,folha);
+ tag(resumo,'O.S. CADASTRADA','ok');
+ tag(resumo,'STATUS: '+first(o.status,'Triagem'),['pronto','entregue'].includes(valorStatus(o))?'ok':'warn');
+ if(keys){tag(resumo,'APROVAÇÃO: '+keys.size+' item(ns) aprovado(s)','ok');}
+ else{tag(resumo,'APROVAÇÃO: '+(['aprovado','andamento','pronto','entregue'].includes(valorStatus(o))?'verificar itens':'sem itens confirmados'),'warn');}
+ tag(resumo,pagamento(o)?'RECEBIMENTO LANÇADO':'RECEBIMENTO NÃO MARCADO',pagamento(o)?'ok':'warn');
+ quadro('DEFEITO RECLAMADO / QUEIXA DO CLIENTE',first(o.relato,o.desc,o.descricao,'—'));
+ quadro('DIAGNÓSTICO TÉCNICO',first(o.diagnostico,'—'));
+ const serv=Array.isArray(o.servicos)?o.servicos:[], pec=Array.isArray(o.pecas)?o.pecas:[];
+ const exec=o.execucaoItens&&typeof o.execucaoItens==='object'?o.execucaoItens:{};
+ let concluidos=0,totalExecucao=0;
+ if(serv.length){
+  const sec=secao('SERVIÇOS / MÃO DE OBRA');
+  tabela(sec,['Cód.','Descrição do serviço','TMO','Valor','Aprovação / execução'],serv.map((it,i)=>{
+   const key='servico-'+i,e=exec[key]||{},sts=statusItem(e,'servico');
+   if(keys===null||keys.has(key)){totalExecucao++;if(norm(e.status)==='executado')concluidos++;}
+   const rotulo=keys===null?'Aprovação não discriminada':keys.has(key)?'APROVADO':'NÃO APROVADO';
+   return [first(it.codigoInterno,it.codigoTabela,it.codigo,'—'),first(it.desc,it.descricao,'—'),first(it.tempo,'—'),{valor:reais(first(it.valorFinal,it.valor)) ,classe:'consulta-valor'},{valor:rotulo,obs:sts.label+(e.obs?' — '+e.obs:''),obsTipo:sts.classe}];
+  }));
+ }else{const sec=secao('SERVIÇOS / MÃO DE OBRA');elem('p','consulta-vazio','Nenhum serviço lançado nesta O.S.',sec);}
+ const resumoExec=secao('ACOMPANHAMENTO DA EXECUÇÃO');
+ if(totalExecucao){elem('div','consulta-quadro',concluidos+' de '+totalExecucao+' serviços com execução confirmada no registro interno.',resumoExec);}
+ else{elem('div','consulta-quadro','Não há serviços aprovados com execução confirmada para contar.',resumoExec);}
+ if(pec.length){
+  const sec=secao('PEÇAS / MATERIAIS');
+  tabela(sec,['Código','Descrição','Qtd.','Valor unitário','Aprovação / aplicação'],pec.filter(p=>!((c.tipoCliente==='governo'||norm(c.tipoCliente)==='oficial')&&(p.pecaReal===true||p.tipoPeca==='real'||p.interno===true))).map((it,i)=>{
+   const key='peca-'+i,e=exec[key]||{},sts=statusItem(e,'peca');
+   return [first(it.codigo,it.cod,'—'),first(it.desc,it.descricao,it.descLivre,it.nome,'—'),first(it.qtd,it.q,1),reais(first(it.venda,it.valor,it.v)),{valor:keys===null?'Aprovação não discriminada':keys.has(key)?'APROVADA':'NÃO APROVADA',obs:sts.label+(e.obs?' — '+e.obs:''),obsTipo:sts.classe}];
+  }));
+ }else{const sec=secao('PEÇAS / MATERIAIS');elem('p','consulta-vazio','Nenhuma peça lançada nesta O.S.',sec);}
+ const totais=secao('RESUMO DE VALORES');
+ const boxTot=elem('div','consulta-totais',null,totais);
+ if(o.total!==null&&o.total!==undefined)par(boxTot,'Total registrado na O.S.',reais(o.total));
+ if(o.totalAprovado!==null&&o.totalAprovado!==undefined)par(boxTot,'Total aprovado',reais(o.totalAprovado));
+ if(pagamento(o)){par(boxTot,'Recebimento operacional',num(o.valorRecebidoOperacional)>0?reais(o.valorRecebidoOperacional):'Marcado como recebido');}
+ const aviso=elem('p','consulta-vazio','Valores e aprovações conforme os registros salvos. Para o laudo oficial com descontos e fotos, use PDF / WhatsApp.',totais);
+ aviso.style.fontSize='11px';
+ const fotos=fotosOS(o),secFotos=secao('EVIDÊNCIAS DIGITAIS — '+fotos.length+' FOTO(S)');
+ if(fotos.length){
+  const galeria=elem('div','consulta-fotos',null,secFotos);
+  fotos.forEach((m,i)=>{const fig=elem('figure','consulta-foto',null,galeria);
+   const img=elem('img','',null,fig);img.loading='lazy';img.alt='Foto '+(i+1)+' da OS';img.src=first(m.url,m.secure_url);
+   const cap=elem('figcaption','',null,fig);
+   elem('strong','','Foto '+(i+1)+' / '+fotos.length,cap);
+   const dh=data(first(m.uploadedAt,m.importedAt,m.enviadoEm,m.vinculadoEm));
+   if(dh)elem('time','',dh,cap);
+   const desc=first(m.descricao,m.legenda,m.observacao,m.obs);
+   if(desc)elem('div','',desc,cap);
+  });
+ }else{elem('p','consulta-vazio','Nenhuma foto anexada diretamente à O.S.',secFotos);}
+ const ass=elem('div','consulta-assinaturas',null,folha);
+ elem('div','',first(oficina.nomeFantasia,oficina.razaoSocial,'RESPONSÁVEL TÉCNICO')+' / RESPONSÁVEL TÉCNICO',ass);
+ elem('div','',first(c.nome,o.cliente,'CLIENTE')+' / ASSINATURA DO CLIENTE',ass);
+ elem('div','consulta-rodape','Consulta somente leitura • S.O.S. VALÊNCIO • Powered by thIAguinho Soluções Digitais',folha);
+}
+function fechar(){painel.hidden=true;aberto=null;document.body.style.overflow='';}
+window.fabioAbrirConsultaOS=function(id){aberto=id;painel.hidden=false;document.body.style.overflow='hidden';montar(id);painel.querySelector('.consulta-rolagem').scrollTop=0;};
+window.fabioAtualizarOSAberta=function(){if(aberto&&!painel.hidden)montar(aberto);};
+byId('fabioConsultaVoltar').addEventListener('click',fechar);
+byId('fabioConsultaImprimir').addEventListener('click',()=>{if(aberto)window.print();});
+byId('fabioConsultaCompartilhar').addEventListener('click',()=>{if(aberto&&typeof window.fabioAbrirPdfOS==='function')window.fabioAbrirPdfOS(aberto);});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!painel.hidden)fechar();});
+window.addEventListener('afterprint',()=>{if(aberto)document.body.style.overflow='hidden';});
+})();
+
 </script>
 </body>
 </html>
