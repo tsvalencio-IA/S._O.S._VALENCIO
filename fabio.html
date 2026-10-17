@@ -378,21 +378,35 @@ function mecanicosDaOS(o){
  return todos.filter(m=>m.id||!todos.some(x=>x.id&&normal(x.nome)===normal(m.nome)));
 }
 const foiPago=f=>['pago','liquidado','baixado','parcial'].includes(normal(f.status))||!!f.pagoEm||!!f.dataPgto;
-const foiCancelado=f=>['cancelado','cancelada','compensado'].includes(normal(f.status))||f.canceladoPorReemissaoOS===true;
+const foiCancelado=f=>['cancelado','cancelada','compensado','estornado'].includes(normal(f.status))||f.canceladoPorReemissaoOS===true||f.cancelado===true;
+const dinheiro=v=>{
+ if(typeof v==='number')return Number.isFinite(v)?v:0;
+ const t=String(v??'').trim().replace(/[^0-9,.-]/g,'');
+ const valor=t.includes(',')?Number(t.replace(/\./g,'').replace(',','.')):Number(t);
+ return Number.isFinite(valor)?valor:0;
+};
 function comissaoMec(o,m){
  if(!comissoesCarregadas)return {estado:comissoesErro?'indisponivel':'carregando',rotulo:comissoesErro?'Consulta financeira indisponível':'Verificando pagamentos'};
  const lancamentos=pagamentosOS(o).filter(f=>!foiCancelado(f)&&m.id&&String(f.mecId||'')===String(m.id));
  const pagos=lancamentos.filter(foiPago),abertos=lancamentos.filter(f=>!foiPago(f));
- const valorPago=pagos.reduce((v,f)=>v+(Number(f.valor)||0),0);
- const valorPendente=abertos.reduce((v,f)=>v+(Number(f.valor)||0),0);
+ const valorPago=pagos.reduce((v,f)=>v+Math.max(0,dinheiro(f.valor)),0);
+ const valorPendente=abertos.reduce((v,f)=>v+Math.max(0,dinheiro(f.valor)),0);
  const ultimo=pagos.slice().sort((a,b)=>String(b.pagoEm||b.dataPgto||b.updatedAt||'').localeCompare(String(a.pagoEm||a.dataPgto||a.updatedAt||'')))[0];
- if(valorPago>0&&normal(ultimo?.situacaoComissao)==='quitada'&&valorPendente<.005)
-  return {estado:'quitada',rotulo:'Comissão quitada',pago:valorPago,pendente:0};
- if(valorPago>0)return {estado:'registrada',rotulo:normal(ultimo?.situacaoComissao)==='parcial'||valorPendente>0?'Pagamento parcial':'Pagamento registrado (quitação não confirmada)',pago:valorPago,pendente:valorPendente};
- if(valorPendente>0)return {estado:'pendente',rotulo:'Pagamento pendente',pago:0,pendente:valorPendente};
- const control=o.comissaoControleV26?.[m.id];
- if(control?.pagosCentavos&&Object.values(control.pagosCentavos).some(n=>Number(n)>0))
-  return {estado:'conferir',rotulo:'Há controle de pagamento na OS; conferir financeiro'};
+ const controle=o.comissaoControleV26?.[m.id]||{};
+ const saldoDeclarado=ultimo?.saldoComissaoDepois!==undefined?dinheiro(ultimo.saldoComissaoDepois):null;
+ const previstoOficial=(o.comissaoOficialOS?.rateios||[]).filter(r=>String(r.mecId||r.id||'')===String(m.id)).reduce((v,r)=>v+Math.max(0,dinheiro(r.valor??r.valorPrevisto)),0);
+ const esperado=previstoOficial>0?previstoOficial:null;
+ const quitacaoComprovada=valorPago>0&&valorPendente<.005&&(
+  (saldoDeclarado!==null&&saldoDeclarado<.005&&normal(ultimo?.situacaoComissao)==='quitada')||
+  (esperado!==null&&valorPago+.005>=esperado&&saldoDeclarado!==null&&saldoDeclarado<.005)
+ );
+ if(quitacaoComprovada)return {estado:'quitada',rotulo:'Comissão quitada',pago:valorPago,pendente:0};
+ if(valorPago>0)return {estado:'registrada',
+   rotulo:valorPendente>.005||(saldoDeclarado!==null&&saldoDeclarado>.005)||normal(ultimo?.situacaoComissao)==='parcial'?'Pagamento parcial':'Pagamento registrado (quitação não confirmada)',
+   pago:valorPago,pendente:Math.max(valorPendente,saldoDeclarado||0)};
+ if(valorPendente>.005)return {estado:'pendente',rotulo:'Comissão pendente',pago:0,pendente:valorPendente};
+ if(controle.pagosCentavos&&Object.values(controle.pagosCentavos).some(n=>Number(n)>0))
+  return {estado:'conferir',rotulo:'Controle de comissão na OS; conferir financeiro'};
  return {estado:'sem-registro',rotulo:'Sem pagamento registrado',pago:0};
 }
 function resumoComissao(o){
