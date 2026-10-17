@@ -260,6 +260,18 @@ header h1,header small,.os .placa,.os h2,.etiqueta,#filtroTexto{overflow-wrap:an
  #fabioConsulta .consulta-timbre .tipo{white-space:normal}
 }
 
+
+/* Acompanhamento de prefixo, mecânicos e pagamento de comissão */
+.os .prefixo-destaque{display:inline-flex;max-width:100%;padding:7px 10px;margin:7px 0 9px;background:#0c4866;border:1px solid #30afd8;color:#e9faff;border-radius:10px;font-size:1.03rem;font-weight:900;overflow-wrap:anywhere}
+.os .resumo-equipe{margin:10px 0 6px;padding:9px 10px;border-left:4px solid #55c9ff;background:#183652;font-size:.95rem;font-weight:750;overflow-wrap:anywhere}
+.os .resumo-comissao{margin:6px 0;padding:9px 10px;border-radius:9px;font-size:.88rem;font-weight:800;overflow-wrap:anywhere}
+.os .resumo-comissao.green{background:#104c37}.os .resumo-comissao.yellow{background:#614719}
+#fabioConsulta .consulta-interno .consulta-mecanico{padding:10px 12px;border:1px solid #bdc9d5;border-radius:8px;margin-bottom:8px;overflow-wrap:anywhere}
+#fabioConsulta .consulta-interno .consulta-mecanico strong{display:block;font-size:14px}
+#fabioConsulta .consulta-interno .consulta-mecanico small{display:block;color:#4b5b6b;margin-top:5px;font-size:12px;overflow-wrap:anywhere}
+#fabioConsulta .consulta-interno .consulta-mecanico .status-verde{color:#166b43}
+#fabioConsulta .consulta-interno .consulta-mecanico .status-amarelo{color:#81540b}
+@media print{#fabioConsulta .consulta-interno{display:none!important}}
 </style>
 </head>
 <body>
@@ -314,6 +326,81 @@ if(!tid || tid==='MASTER_ADMIN' || (!['admin','gestor'].includes(role) && cargo!
   return;
 }
 let os=[],clientes=new Map(),veiculos=new Map(),filtro='todos',busca='';
+
+const funcionarios=new Map(),comissoesPorOS=new Map();
+let comissoesCarregadas=false,comissoesErro=false;
+const definido=v=>v!==null&&v!==undefined&&String(v).trim()!=='';
+const primeiro=(...valores)=>valores.find(definido)||'';
+function dadosVeiculo(o){
+ const v=veiculos.get(o.veiculoId)||o.veiculoSnapshot||{},c=clientes.get(o.clienteId)||{};
+ return {v,c,placa:texto(primeiro(o.placa,v.placa,'SEM PLACA')),
+ prefixo:texto(primeiro(o.prefixo,o.prefixoVeiculo,v.prefixo,v.prefixoVeiculo)),
+ marca:texto(primeiro(v.marca,o.veiculoSnapshot?.marca,o.marca)),
+ modelo:texto(primeiro(v.modelo,o.veiculoSnapshot?.modelo,o.veiculoModelo,o.modeloVeiculo,o.modelo,o.veiculo,'Modelo não informado')),
+ cliente:texto(primeiro(c.nome,c.razaoSocial,o.clienteNome,o.cliente,'Cliente não informado')),
+ ano:texto(primeiro(v.anoModelo,v.ano,o.anoModelo,o.ano)),km:texto(primeiro(o.km,v.km,o.quilometragem)),
+ patrimonio:texto(primeiro(o.patrimonio,v.patrimonio,v.numeroPatrimonio)),
+ chassi:texto(primeiro(o.chassi,v.chassis,v.chassi,o.chassis)),
+ cor:texto(primeiro(v.cor,o.cor)),combustivel:texto(primeiro(v.combustivel,o.combustivel))};
+}
+function pagamentosOS(o){return comissoesPorOS.get(String(o.id))||[];}
+function mecanicosDaOS(o){
+ const mapa=new Map();
+ function adicionar(id,nome,ativo=false){
+  id=texto(id).trim();nome=texto(nome).trim();
+  if(!id&&!nome)return;
+  const funcionario=funcionarios.get(id)||{};
+  const n=texto(primeiro(funcionario.nome,nome,id?'Mecânico '+id:''));
+  const key=id?'id:'+id:'nome:'+normal(n),old=mapa.get(key);
+  mapa.set(key,{id,nome:n,ativo:!!ativo||!!old?.ativo});
+ }
+ adicionar(o.mecId,o.mecNome);
+ (Array.isArray(o.mecIds)?o.mecIds:[]).forEach(x=>adicionar(x?.id||x?.mecId||x,x?.nome));
+ (Array.isArray(o.mecanicos)?o.mecanicos:[]).forEach(x=>adicionar(x?.id||x?.mecId||x,x?.nome||x?.mecNome));
+ const exec=o.execucaoItens||{};
+ (Array.isArray(o.servicos)?o.servicos:[]).forEach((sv,i)=>{
+  const e=exec['servico-'+i]||{},ativo=['em_execucao','em execucao'].includes(normal(e.status));
+  const atribuicoes=Array.isArray(sv.rateiosComissao)&&sv.rateiosComissao.length?sv.rateiosComissao:[{mecId:sv.mecId||sv.mecanicoId||sv.responsavelId,mecNome:sv.mecNome||sv.mecanicoNome||sv.responsavelNome}];
+  atribuicoes.forEach(r=>adicionar(r.mecId||r.id,r.mecNome||r.nome,ativo));
+  adicionar(e.mecId||e.responsavelId,e.mecNome||e.responsavelNome,ativo);
+ });
+ Object.values(exec).forEach(e=>{if(e&&typeof e==='object')adicionar(e.mecId||e.responsavelId,e.mecNome||e.responsavelNome,normal(e.status)==='em_execucao');});
+ (o.comissaoOficialOS?.rateios||[]).forEach(r=>adicionar(r.mecId||r.id,r.mecNome||r.nome));
+ Object.keys(o.comissaoControleV26||{}).forEach(id=>adicionar(id,''));
+ pagamentosOS(o).forEach(x=>adicionar(x.mecId,x.mecNome));
+ const todos=[...mapa.values()];
+ return todos.filter(m=>m.id||!todos.some(x=>x.id&&normal(x.nome)===normal(m.nome)));
+}
+const foiPago=f=>['pago','liquidado','baixado','parcial'].includes(normal(f.status))||!!f.pagoEm||!!f.dataPgto;
+const foiCancelado=f=>['cancelado','cancelada','compensado'].includes(normal(f.status))||f.canceladoPorReemissaoOS===true;
+function comissaoMec(o,m){
+ if(!comissoesCarregadas)return {estado:comissoesErro?'indisponivel':'carregando',rotulo:comissoesErro?'Consulta financeira indisponível':'Verificando pagamentos'};
+ const lancamentos=pagamentosOS(o).filter(f=>!foiCancelado(f)&&m.id&&String(f.mecId||'')===String(m.id));
+ const pagos=lancamentos.filter(foiPago),abertos=lancamentos.filter(f=>!foiPago(f));
+ const valorPago=pagos.reduce((v,f)=>v+(Number(f.valor)||0),0);
+ const valorPendente=abertos.reduce((v,f)=>v+(Number(f.valor)||0),0);
+ const ultimo=pagos.slice().sort((a,b)=>String(b.pagoEm||b.dataPgto||b.updatedAt||'').localeCompare(String(a.pagoEm||a.dataPgto||a.updatedAt||'')))[0];
+ if(valorPago>0&&normal(ultimo?.situacaoComissao)==='quitada'&&valorPendente<.005)
+  return {estado:'quitada',rotulo:'Comissão quitada',pago:valorPago,pendente:0};
+ if(valorPago>0)return {estado:'registrada',rotulo:normal(ultimo?.situacaoComissao)==='parcial'||valorPendente>0?'Pagamento parcial':'Pagamento registrado (quitação não confirmada)',pago:valorPago,pendente:valorPendente};
+ if(valorPendente>0)return {estado:'pendente',rotulo:'Pagamento pendente',pago:0,pendente:valorPendente};
+ const control=o.comissaoControleV26?.[m.id];
+ if(control?.pagosCentavos&&Object.values(control.pagosCentavos).some(n=>Number(n)>0))
+  return {estado:'conferir',rotulo:'Há controle de pagamento na OS; conferir financeiro'};
+ return {estado:'sem-registro',rotulo:'Sem pagamento registrado',pago:0};
+}
+function resumoComissao(o){
+ const mecs=mecanicosDaOS(o);
+ if(!mecs.length)return {label:'MECÂNICO NÃO VINCULADO',classe:'yellow'};
+ if(!comissoesCarregadas)return {label:comissoesErro?'COMISSÃO: CONSULTA INDISPONÍVEL':'COMISSÃO: VERIFICANDO...',classe:'yellow'};
+ const estados=mecs.map(m=>comissaoMec(o,m).estado),q=estados.filter(x=>x==='quitada').length,r=estados.filter(x=>x==='registrada').length,p=estados.filter(x=>x==='pendente').length,n=mecs.length-q-r-p;
+ if(q===mecs.length)return {label:'COMISSÕES QUITADAS ('+q+')',classe:'green'};
+ return {label:'COMISSÕES: '+[q?q+' quitada(s)':'',r?r+' com pagamento':'',p?p+' pendente(s)':'',n?n+' sem confirmação':''].filter(Boolean).join(' · '),classe:'yellow'};
+}
+window.__fabioVeiculoOS=dadosVeiculo;
+window.__fabioMecanicosOS=mecanicosDaOS;
+window.__fabioComissaoMecOS=comissaoMec;
+
 const unsub=[];
 function texto(x){return x==null?'':String(x);}
 function normal(s){return texto(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();}
@@ -329,7 +416,7 @@ function indicadorStatus(o){
 }
 function campo(el,classe,txt){const d=document.createElement(el);if(classe)d.className=classe;d.textContent=texto(txt);return d;}
 function add(parent,el,classe,txt){const e=campo(el,classe,txt);parent.appendChild(e);return e;}
-function dados(o){const v=veiculos.get(o.veiculoId)||{};const c=clientes.get(o.clienteId)||{};return {v,c,placa:texto(v.placa||o.placa||v.prefixo||o.prefixo||'SEM PLACA'),modelo:texto(v.modelo||o.veiculo||o.modelo||'Veículo não informado'),cliente:texto(c.nome||o.cliente||'Cliente não informado')};}
+function dados(o){return dadosVeiculo(o);}
 function pertence(o){if(filtro==='aguardando')return aguardando(o);if(filtro==='servico')return servico(o);if(filtro==='prontos')return pronto(o);if(filtro==='entregues')return entregue(o);return true;}
 function render(){
  const validos=os.filter(o=>normal(o.status)!=='cancelado'&&!o.deletedAt);
@@ -344,7 +431,7 @@ function render(){
  let exibidos=validos.filter(o=>{
    if(!pertence(o))return false;
    const d=dados(o);
-   return !busca||normal([d.placa,d.modelo,d.cliente,o.numero,o.numeroOS,o.prisma,o.numeroPrisma].join(' ')).includes(busca);
+   return !busca||normal([d.placa,d.prefixo,d.patrimonio,d.chassi,d.marca,d.modelo,d.ano,d.cliente,o.numero,o.numeroOS,o.prisma,o.numeroPrisma,...mecanicosDaOS(o).map(m=>m.nome)].join(' ')).includes(busca);
  });
  exibidos.sort((a,b)=>{const va=a.updatedAt||a.createdAt||0,vb=b.updatedAt||b.createdAt||0;const num=x=>typeof x==='number'?x:x?.seconds?x.seconds*1000:Date.parse(x)||0;return num(vb)-num(va);});
  if(!exibidos.length){let mensagem='Nenhuma O.S. encontrada.';
@@ -355,9 +442,15 @@ function render(){
    const d=dados(o),s=indicadorStatus(o);
    const card=add(lista,'article','os','');
    add(card,'div','muted','OS #'+texto(o.numero||o.numeroOS||o.id).slice(0,20));
+   if(d.prefixo)add(card,'div','prefixo-destaque','VIATURA • PREFIXO '+d.prefixo);
    add(card,'div','placa',d.placa);
-   add(card,'h2','',d.modelo);
+   add(card,'h2','',[d.marca,d.modelo].filter(Boolean).join(' '));
+   add(card,'div','muted',[d.ano?'Ano '+d.ano:'',d.km?'KM '+d.km:'',d.patrimonio?'Patrimônio '+d.patrimonio:''].filter(Boolean).join(' • '));
    add(card,'div','muted',d.cliente);
+   const mecs=mecanicosDaOS(o),ativos=mecs.filter(m=>m.ativo);
+   add(card,'div','resumo-equipe',ativos.length?'EM ATENDIMENTO: '+ativos.map(m=>m.nome).join(', '):'MECÂNICOS VINCULADOS: '+(mecs.length?mecs.map(m=>m.nome).join(', '):'Não vinculados'));
+   const resumoC=resumoComissao(o);
+   add(card,'div','resumo-comissao '+resumoC.classe,resumoC.label);
    const badges=add(card,'div','linha','');
    add(badges,'span','etiqueta green','O.S. FEITA');
    add(badges,'span','etiqueta '+s.classe,s.titulo.toUpperCase());
@@ -398,6 +491,22 @@ try{
  acompanhar('ordens_servico',items=>{os=items;window.fabioLimparCacheOS?.();});
  acompanhar('clientes',items=>clientes=new Map(items.map(x=>[x.id,x])));
  acompanhar('veiculos',items=>veiculos=new Map(items.map(x=>[x.id,x])));
+ acompanhar('funcionarios',items=>{funcionarios.clear();items.forEach(v=>funcionarios.set(String(v.id),v));});
+ // Consulta restrita aos documentos de comissão desta oficina. Não carrega o caixa inteiro.
+ unsub.push(db.collection('financeiro').where('tenantId','==',tid).where('isComissao','==',true).onSnapshot(snap=>{
+  comissoesPorOS.clear();
+  snap.docs.forEach(d=>{
+   const x={id:d.id,...d.data()};
+   if(!x.isComissao||String(x.tenantId)!==tid||!x.osId)return;
+   const id=String(x.osId);
+   if(!comissoesPorOS.has(id))comissoesPorOS.set(id,[]);
+   comissoesPorOS.get(id).push(x);
+  });
+  comissoesCarregadas=true;comissoesErro=false;render();
+ },e=>{
+  console.warn('[Fábio] comissão indisponível',e);
+  comissoesCarregadas=false;comissoesErro=true;render();
+ }));
 }catch(err){$('erro').textContent='Falha ao conectar ao sistema. Faça login novamente.';console.error(err);}
 })();
 </script>
