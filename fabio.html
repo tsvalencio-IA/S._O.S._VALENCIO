@@ -179,6 +179,87 @@ button:hover{border-color:#68beed}button.active{background:#126c92;border-color:
  #fabioConsulta .consulta-fotos{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 
+/* Hardening responsivo isolado: evita estouro sem esconder dados da OS */
+html,body{width:100%;max-width:100%;overflow-x:clip}
+header,main,.resumo,#lista,.os,.toolbar,.linha{min-width:0;max-width:100%}
+header h1,header small,.os .placa,.os h2,.etiqueta,#filtroTexto{overflow-wrap:anywhere;word-break:normal}
+.resumo .indicador{min-width:0;overflow-wrap:break-word}
+.resumo .indicador span{overflow-wrap:anywhere}
+.toolbar input,.toolbar button{max-width:100%}
+#fabioConsulta{height:100vh;height:100dvh;max-width:100%;overscroll-behavior:contain}
+#fabioConsulta .consulta-topo{min-width:0;max-width:100%;padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
+#fabioConsulta .consulta-topo h2{min-width:0;overflow-wrap:anywhere}
+#fabioConsulta .consulta-topo button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.2}
+#fabioConsulta .consulta-rolagem{min-height:0;min-width:0;width:100%;max-width:100%;padding-bottom:max(16px,env(safe-area-inset-bottom))}
+#fabioConsulta .consulta-folha{width:100%;min-width:0;max-width:900px;overflow-wrap:anywhere}
+#fabioConsulta .consulta-timbre{min-width:0;max-width:100%}
+#fabioConsulta .consulta-identidade,#fabioConsulta .consulta-identidade>div{min-width:0}
+#fabioConsulta .consulta-timbre .tipo{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;text-align:right}
+#fabioConsulta .consulta-valor{white-space:normal;overflow-wrap:anywhere}
+#fabioConsulta .consulta-dados{table-layout:fixed}
+#fabioConsulta .consulta-dados th,#fabioConsulta .consulta-dados td{overflow-wrap:anywhere;word-break:normal}
+#fabioConsulta .consulta-quadro,#fabioConsulta .consulta-bloco,#fabioConsulta .consulta-tabela-rolagem{min-width:0;max-width:100%}
+#fabioConsulta .consulta-itens td{overflow-wrap:anywhere;word-break:normal;min-width:0}
+#fabioConsulta .consulta-total>*{min-width:0;overflow-wrap:anywhere}
+#fabioConsulta .consulta-foto figcaption,#fabioConsulta .consulta-rodape,#fabioConsulta .consulta-assinaturas>div{overflow-wrap:anywhere}
+#fabioConsulta .consulta-assinatura-img{margin:8px auto 10px;max-width:100%;max-height:75px}
+.pdf-fundo{padding-top:max(8px,env(safe-area-inset-top));padding-bottom:max(8px,env(safe-area-inset-bottom));padding-left:max(8px,env(safe-area-inset-left));padding-right:max(8px,env(safe-area-inset-right));max-width:100%;overflow:hidden}
+.pdf-box{max-height:100%;min-height:0;min-width:0}
+.pdf-cabecalho{min-width:0}
+.pdf-cabecalho strong{min-width:0;overflow-wrap:anywhere}
+.pdf-cabecalho button{flex-shrink:0}
+.pdf-acoes{min-width:0}
+.pdf-acoes button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.2}
+#fabioPdfViewer{min-height:0;height:100%;min-width:0;max-width:100%}
+@media screen and (max-width:650px){
+ #fabioConsulta .consulta-topo{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding:8px max(8px,env(safe-area-inset-left))}
+ #fabioConsulta .consulta-topo h2{width:100%;grid-column:1/-1;flex:none;order:initial;font-size:clamp(.9rem,3.4vw,1.1rem);line-height:1.3}
+ #fabioConsulta .consulta-topo button{width:100%;min-height:44px;flex:none;padding:8px 5px;font-size:clamp(.73rem,2.8vw,.92rem)}
+ #fabioConsulta .consulta-timbre{flex-wrap:wrap;align-items:flex-start;gap:8px}
+ #fabioConsulta .consulta-identidade{flex:1 1 160px}
+ #fabioConsulta .consulta-timbre .tipo{flex:1 1 110px;white-space:normal;text-align:right;font-size:11px}
+ #fabioConsulta .consulta-dados{width:100%;table-layout:auto}
+ #fabioConsulta .consulta-dados tbody{display:block;width:100%}
+ #fabioConsulta .consulta-dados tr{display:grid;grid-template-columns:minmax(90px,38%) minmax(0,1fr);width:100%;border:1px solid #bdc6d0;border-bottom:0}
+ #fabioConsulta .consulta-dados tr:last-child{border-bottom:1px solid #bdc6d0}
+ #fabioConsulta .consulta-dados th,#fabioConsulta .consulta-dados td{display:block;width:auto;float:none;clear:none;min-height:0;margin:0;padding:8px;border:0;border-bottom:1px solid #e3e9f0;font-size:12px}
+ #fabioConsulta .consulta-dados tr>*:nth-last-child(-n+2){border-bottom:0}
+ #fabioConsulta .consulta-dados th{border-right:1px solid #bdc6d0}
+ #fabioConsulta .consulta-dados tr td:nth-of-type(1){border-right:0}
+ #fabioConsulta .consulta-totais{max-width:100%;width:100%}
+ #fabioConsulta .consulta-total{flex-wrap:wrap;gap:5px}
+ #fabioConsulta .consulta-total strong{text-align:right;flex:1 1 auto}
+ #fabioConsulta .consulta-fotos{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #fabioConsulta .consulta-assinaturas{gap:12px}
+}
+@media screen and (max-width:360px){
+ header{padding:12px;gap:6px}
+ header h1{font-size:1.12rem}
+ #sair{padding:9px 10px}
+ main{padding:12px 10px 60px}
+ .resumo{gap:7px}
+ .resumo .indicador{padding:11px 6px;min-height:90px}
+ .resumo .indicador b{font-size:1.75rem}
+ .resumo .indicador span{font-size:.78rem}
+ #fabioConsulta .consulta-folha{padding:10px 8px}
+ #fabioConsulta .consulta-timbre{display:block}
+ #fabioConsulta .consulta-timbre .tipo{display:block;text-align:left;margin-top:8px}
+ #fabioConsulta .consulta-itens tbody tr{grid-template-columns:minmax(0,1fr)}
+ #fabioConsulta .consulta-itens td{grid-column:1/-1!important;border-left:0!important}
+ #fabioConsulta .consulta-fotos{grid-template-columns:minmax(0,1fr)}
+ #fabioConsulta .consulta-assinaturas{grid-template-columns:minmax(0,1fr);gap:25px}
+ .pdf-acoes{gap:4px;padding:5px}
+ .pdf-acoes button{font-size:.72rem;padding:5px 3px}
+}
+@media print{
+ html,body{overflow:visible!important;max-width:none!important}
+ #fabioConsulta{height:auto!important;max-width:none!important}
+ #fabioConsulta .consulta-rolagem{overflow:visible!important;max-width:none!important}
+ #fabioConsulta .consulta-folha{max-width:none!important;width:100%!important}
+ #fabioConsulta .consulta-itens{table-layout:auto}
+ #fabioConsulta .consulta-timbre .tipo{white-space:normal}
+}
+
 </style>
 </head>
 <body>
@@ -212,8 +293,8 @@ button:hover{border-color:#68beed}button.active{background:#126c92;border-color:
   <div class="pdf-box">
     <div class="pdf-cabecalho"><strong id="fabioPdfTitulo">O.S. completa com fotos</strong><button type="button" id="fabioPdfFechar">✕ Fechar</button></div>
     <div class="pdf-acoes">
-      <button type="button" id="fabioPdfAbrir">Imprimir / abrir</button>
-      <button type="button" id="fabioPdfCompartilhar" class="pdf-compartilhar" disabled>WhatsApp / enviar</button>
+      <button type="button" id="fabioPdfAbrir">Abrir / imprimir</button>
+      <button type="button" id="fabioPdfCompartilhar" class="pdf-compartilhar" disabled>Enviar PDF</button>
       <button type="button" id="fabioPdfBaixar" disabled>Baixar PDF</button>
     </div>
     <div id="fabioPdfEstado" role="status" aria-live="polite"></div>
