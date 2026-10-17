@@ -202,7 +202,7 @@ window.addEventListener('load', () => {
       });
 
       setTimeout(() => {
-        window.location.href = saved.destino;
+        window.location.href = saved.session?.j_actor_type === 'equipe' && _normalizarCargoLogin(saved.session?.j_cargo) === 'gestor' ? 'fabio.html' : saved.destino;
       }, 1200);
     }
   }
@@ -453,7 +453,7 @@ async function autenticar() {
       const tenantIdEquipe = loginFuncionario.tenantId || dF.tenantId;
       const cargoFuncionario = _cargoLabelLogin(dF.cargo || 'mecanico');
       const acessoJarvis = _cargoAcessoJarvis(cargoFuncionario);
-      const destinoFuncionario = acessoJarvis ? 'jarvis.html' : 'equipe.html';
+      const destinoFuncionario = _normalizarCargoLogin(cargoFuncionario) === 'gestor' ? 'fabio.html' : (acessoJarvis ? 'jarvis.html' : 'equipe.html');
 
       const sessao = {
         j_tid:          tenantIdEquipe,
