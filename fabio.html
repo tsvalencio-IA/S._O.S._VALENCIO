@@ -10,6 +10,7 @@
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-auth-compat.js"></script>
 <script src="js/config.js"></script>
+<script src="js/os-utils.js?v=26.25.1"></script>
 <script src="js/os-evidencias-export.js"></script>
 <style>
 :root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#f1f6fc;background:#071222;color-scheme:dark}
@@ -524,30 +525,48 @@ function montar(id){
  tag(resumo,pagamento(o)?'RECEBIMENTO LANÇADO':'RECEBIMENTO NÃO MARCADO',pagamento(o)?'ok':'warn');
  quadro('DEFEITO RECLAMADO / QUEIXA DO CLIENTE',first(o.relato,o.desc,o.descricao,'—'));
  quadro('DIAGNÓSTICO TÉCNICO',first(o.diagnostico,'—'));
- const serv=Array.isArray(o.servicos)?o.servicos:[], pec=Array.isArray(o.pecas)?o.pecas:[];
+
+ // Reutiliza o MESMO cálculo de itens e proteção de peças internas do PDF Jarvis.
+ const U=window.JarvisOSUtils;
+ if(!U||typeof U.buildBudgetItems!=='function'){
+  const erro=secao('PEÇAS E SERVIÇOS');
+  elem('p','consulta-vazio','Não foi possível carregar a rotina oficial de itens. A consulta foi interrompida para evitar dados incompletos.',erro);
+  return;
+ }
+ const itens=U.buildBudgetItems(o,c);
+ const serv=itens.filter(x=>x.tipo==='servico');
+ const pec=itens.filter(x=>x.tipo==='peca');
  const exec=o.execucaoItens&&typeof o.execucaoItens==='object'?o.execucaoItens:{};
+ const statusExec=x=>statusItem(exec[x.key]||{},x.tipo);
  let concluidos=0,totalExecucao=0;
+ const servSec=secao('SERVIÇOS / MÃO DE OBRA');
  if(serv.length){
-  const sec=secao('SERVIÇOS / MÃO DE OBRA');
-  tabela(sec,['Cód.','Descrição do serviço','TMO','Valor','Aprovação / execução'],serv.map((it,i)=>{
-   const key='servico-'+i,e=exec[key]||{},sts=statusItem(e,'servico');
-   if(keys===null||keys.has(key)){totalExecucao++;if(norm(e.status)==='executado')concluidos++;}
-   const rotulo=keys===null?'Aprovação não discriminada':keys.has(key)?'APROVADO':'NÃO APROVADO';
-   return [first(it.codigoInterno,it.codigoTabela,it.codigo,'—'),first(it.desc,it.descricao,'—'),first(it.tempo,'—'),{valor:reais(first(it.valorFinal,it.valor)) ,classe:'consulta-valor'},{valor:rotulo,obs:sts.label+(e.obs?' — '+e.obs:''),obsTipo:sts.classe}];
+  tabela(servSec,['Cód.','Sistema','Descrição do serviço','TMO','Valor original','Desconto','Valor cobrado / Execução'],serv.map(it=>{
+   const ex=exec[it.key]||{},sts=statusExec(it);
+   if(!keys||keys.has(it.key)){totalExecucao++;if(norm(ex.status)==='executado')concluidos++;}
+   const aprov=keys?(keys.has(it.key)?'APROVADO':'NÃO APROVADO'):'Sem aprovação individual';
+   return [first(it.codigo,'—'),first(it.sistema,'—'),first(it.desc,'—'),
+    it.tempo||'—',reais(it.valorBruto),reais(it.descontoValor),
+    {valor:reais(it.valorFinal),classe:'consulta-valor',obs:aprov+' • '+sts.label+(ex.obs?' — '+ex.obs:''),obsTipo:sts.classe}];
   }));
- }else{const sec=secao('SERVIÇOS / MÃO DE OBRA');elem('p','consulta-vazio','Nenhum serviço lançado nesta O.S.',sec);}
- const resumoExec=secao('ACOMPANHAMENTO DA EXECUÇÃO');
- if(totalExecucao){elem('div','consulta-quadro',concluidos+' de '+totalExecucao+' serviços com execução confirmada no registro interno.',resumoExec);}
- else{elem('div','consulta-quadro','Não há serviços aprovados com execução confirmada para contar.',resumoExec);}
+ }else elem('p','consulta-vazio','Nenhum serviço lançado nesta O.S.',servSec);
+ const resumoExec=secao('EXECUÇÃO REAL DOS SERVIÇOS');
+ elem('div','consulta-quadro',
+  totalExecucao
+   ?concluidos+' de '+totalExecucao+' serviços têm execução marcada como concluída. Os demais não estão confirmados.'
+   :'Nenhum serviço possui confirmação de execução para contar.',resumoExec);
+ const pecaSec=secao('PEÇAS / MATERIAIS');
  if(pec.length){
-  const sec=secao('PEÇAS / MATERIAIS');
-  tabela(sec,['Código','Descrição','Qtd.','Valor unitário','Aprovação / aplicação'],pec.filter(p=>!((c.tipoCliente==='governo'||norm(c.tipoCliente)==='oficial')&&(p.pecaReal===true||p.tipoPeca==='real'||p.interno===true))).map((it,i)=>{
-   const key='peca-'+i,e=exec[key]||{},sts=statusItem(e,'peca');
-   return [first(it.codigo,it.cod,'—'),first(it.desc,it.descricao,it.descLivre,it.nome,'—'),first(it.qtd,it.q,1),reais(first(it.venda,it.valor,it.v)),{valor:keys===null?'Aprovação não discriminada':keys.has(key)?'APROVADA':'NÃO APROVADA',obs:sts.label+(e.obs?' — '+e.obs:''),obsTipo:sts.classe}];
+  tabela(pecaSec,['Código','Descrição','Qtd.','Valor unit.','Valor original','Desconto','Valor cobrado / Aplicação'],pec.map(it=>{
+   const ex=exec[it.key]||{},sts=statusExec(it);
+   const aprov=keys?(keys.has(it.key)?'APROVADA':'NÃO APROVADA'):'Sem aprovação individual';
+   return [first(it.codigo,'—'),first(it.desc,'—'),it.qtd,reais(it.valorUnit),reais(it.valorBruto),reais(it.descontoValor),
+    {valor:reais(it.valorFinal),classe:'consulta-valor',obs:aprov+' • '+sts.label+(ex.obs?' — '+ex.obs:''),obsTipo:sts.classe}];
   }));
- }else{const sec=secao('PEÇAS / MATERIAIS');elem('p','consulta-vazio','Nenhuma peça lançada nesta O.S.',sec);}
+ }else elem('p','consulta-vazio','Nenhuma peça lançada nesta O.S.',pecaSec);
  const totais=secao('RESUMO DE VALORES');
  const boxTot=elem('div','consulta-totais',null,totais);
+ par(boxTot,'Total do orçamento',reais(U.getValorOrcamento(o,c)));
  if(o.total!==null&&o.total!==undefined)par(boxTot,'Total registrado na O.S.',reais(o.total));
  if(o.totalAprovado!==null&&o.totalAprovado!==undefined)par(boxTot,'Total aprovado',reais(o.totalAprovado));
  if(pagamento(o)){par(boxTot,'Recebimento operacional',num(o.valorRecebidoOperacional)>0?reais(o.valorRecebidoOperacional):'Marcado como recebido');}
