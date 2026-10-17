@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#071222">
-<title>Fábio | Acompanhamento da Oficina</title>
+<title>Minha Oficina | Painel Gestor</title>
 <link rel="icon" href="favicon.ico">
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore-compat.js"></script>
@@ -22,7 +22,7 @@ button:hover{border-color:#68beed}button.active{background:#126c92;border-color:
 #sair{background:transparent}#erro{color:#ffb9b9;font-size:1rem;font-weight:700;margin:14px 0}
 .resumo{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0 18px}
 .indicador{background:#10243c;border:1px solid #29445e;border-radius:18px;padding:17px 12px;text-align:left;min-height:106px}
-.indicador b{display:block;font-size:2.2rem;line-height:1.15}.indicador span{display:block;color:#c7d7e6;font-size:.95rem;margin-top:6px}
+.indicador b{display:block;font-size:2.2rem;line-height:1.15}.indicador.active{background:#145e83;border:2px solid #50ccff}.indicador span{display:block;color:#c7d7e6;font-size:.95rem;margin-top:6px}
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}.toolbar input{flex:1 1 220px;min-width:0;background:#10243c;border:1px solid #34516a;border-radius:14px;color:white;padding:14px;font-size:1.05rem}
 .filtros{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}.filtros button{flex:1 1 auto}
 #lista{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
@@ -56,22 +56,16 @@ button:hover{border-color:#68beed}button.active{background:#126c92;border-color:
 </style>
 </head>
 <body>
-<header><div><small>S.O.S. VALÊNCIO • VISÃO DO PROPRIETÁRIO</small><h1>Fábio — Minha Oficina</h1></div><button id="sair" type="button">Sair</button></header>
+<header><div><small>S.O.S. VALÊNCIO • VISÃO RÁPIDA DO GESTOR</small><h1>Minha oficina</h1></div><button id="sair" type="button">Sair</button></header>
 <main>
-<div class="resumo" aria-label="Resumo dos veículos">
-<button class="indicador" data-filter="todos"><b id="nTodos">—</b><span>Todos os veículos</span></button>
-<button class="indicador" data-filter="aguardando"><b id="nAguardando">—</b><span>Aguardando aprovação</span></button>
+<div class="resumo" aria-label="Filtrar por situação">
+<button class="indicador" data-filter="aguardando"><b id="nAguardando">—</b><span>Aguardando</span></button>
 <button class="indicador" data-filter="servico"><b id="nServico">—</b><span>Em serviço</span></button>
-<button class="indicador" data-filter="prontos"><b id="nProntos">—</b><span>Prontos / entregues</span></button>
+<button class="indicador" data-filter="prontos"><b id="nProntos">—</b><span>Prontos</span></button>
+<button class="indicador" data-filter="entregues"><b id="nEntregues">—</b><span>Entregues</span></button>
 </div>
-<div class="toolbar"><input id="busca" aria-label="Buscar veículo, placa, cliente ou ordem" placeholder="Buscar placa, veículo, cliente ou O.S." autocomplete="off"><button id="limpar" type="button">Limpar</button></div>
-<div class="filtros" aria-label="Filtros rápidos">
-<button data-filter="todos" class="active">Todos</button>
-<button data-filter="aguardando">Aprovação</button>
-<button data-filter="servico">Em serviço</button>
-<button data-filter="prontos">Prontos</button>
-<button data-filter="recebidos">Recebidos</button>
-</div>
+<div class="toolbar"><input id="busca" aria-label="Buscar veículo, placa, cliente ou ordem" placeholder="Placa, cliente, veículo ou O.S." autocomplete="off"><button id="limpar" type="button">Ver todos</button></div>
+<p id="filtroTexto" class="muted" aria-live="polite">Todas as O.S. • Toque nos números para filtrar</p>
 <div id="statusConexao" role="status">Conectando ao sistema…</div>
 <div id="erro" role="alert"></div>
 <section id="lista" aria-label="Ordens de serviço" aria-live="polite"></section>
@@ -95,35 +89,38 @@ button:hover{border-color:#68beed}button.active{background:#126c92;border-color:
 const $=id=>document.getElementById(id);
 const tid=sessionStorage.getItem('j_tid');
 const role=(sessionStorage.getItem('j_role')||'').toLowerCase();
-if(!tid || tid==='MASTER_ADMIN' || !['admin','gestor'].includes(role)){
+const cargo=(sessionStorage.getItem('j_cargo')||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+if(!tid || tid==='MASTER_ADMIN' || (!['admin','gestor'].includes(role) && cargo!=='gestor')){
   $('statusConexao').textContent='É necessário entrar com um perfil de gestor ou administrador autorizado.';
   $('erro').textContent='Acesso não autorizado. Faça login no sistema.';
   document.querySelectorAll('.indicador,.filtros button').forEach(b=>b.disabled=true);
   return;
 }
-let os=[],clientes=new Map(),veiculos=new Map(),filtro='todos',busca='',abertos=new Set();
+let os=[],clientes=new Map(),veiculos=new Map(),filtro='todos',busca='';
 const unsub=[];
 function texto(x){return x==null?'':String(x);}
 function normal(s){return texto(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();}
 function valorStatus(o){return normal(o.status||'Triagem').trim();}
-function pronto(o){return ['pronto','entregue','finalizado','concluido'].includes(valorStatus(o));}
+function pronto(o){return ['pronto','finalizado','concluido'].includes(valorStatus(o));}
+function entregue(o){return valorStatus(o)==='entregue';}
 function servico(o){return ['andamento','em andamento','em servico','execucao','em execucao'].includes(valorStatus(o));}
 function aguardando(o){return ['triagem','orcamento','orcamento_enviado','orcamento enviado','aguardando aprovacao','aguardando_aprovacao'].includes(valorStatus(o));}
 function recebeu(o){const n=Number(o.valorRecebidoOperacional);return o.recebidaOperacional===true||(Number.isFinite(n)&&n>0);}
 function indicadorStatus(o){
  const s=valorStatus(o), rotulos={triagem:'Triagem',orcamento:'Orçamento',orcamento_enviado:'Orçamento enviado',aprovado:'Aprovado',andamento:'Em serviço',pronto:'Pronto',entregue:'Entregue'};
- return {titulo:rotulos[s]||texto(o.status||'Triagem'),classe:pronto(o)?'green':aguardando(o)?'yellow':servico(o)?'blue':'blue'};
+ return {titulo:rotulos[s]||texto(o.status||'Triagem'),classe:(pronto(o)||entregue(o))?'green':aguardando(o)?'yellow':'blue'};
 }
 function campo(el,classe,txt){const d=document.createElement(el);if(classe)d.className=classe;d.textContent=texto(txt);return d;}
 function add(parent,el,classe,txt){const e=campo(el,classe,txt);parent.appendChild(e);return e;}
 function dados(o){const v=veiculos.get(o.veiculoId)||{};const c=clientes.get(o.clienteId)||{};return {v,c,placa:texto(v.placa||o.placa||v.prefixo||o.prefixo||'SEM PLACA'),modelo:texto(v.modelo||o.veiculo||o.modelo||'Veículo não informado'),cliente:texto(c.nome||o.cliente||'Cliente não informado')};}
-function pertence(o){if(filtro==='aguardando')return aguardando(o);if(filtro==='servico')return servico(o);if(filtro==='prontos')return pronto(o);if(filtro==='recebidos')return recebeu(o);return true;}
+function pertence(o){if(filtro==='aguardando')return aguardando(o);if(filtro==='servico')return servico(o);if(filtro==='prontos')return pronto(o);if(filtro==='entregues')return entregue(o);return true;}
 function render(){
  const validos=os.filter(o=>normal(o.status)!=='cancelado'&&!o.deletedAt);
- $('nTodos').textContent=validos.length;
  $('nAguardando').textContent=validos.filter(aguardando).length;
  $('nServico').textContent=validos.filter(servico).length;
  $('nProntos').textContent=validos.filter(pronto).length;
+ $('nEntregues').textContent=validos.filter(entregue).length;
+ $('filtroTexto').textContent=({todos:'Todas as O.S.',aguardando:'Aguardando',servico:'Em serviço',prontos:'Prontos',entregues:'Entregues'})[filtro]+' • '+validos.length+' O.S. cadastradas';
  window.__fabioListaOS=os;window.__fabioDadosAtuais={os,clientes:[...clientes.values()],veiculos:[...veiculos.values()],oficina:(function(){try{return JSON.parse(sessionStorage.getItem('j_oficina')||'null')}catch(e){return null}})()};
  const lista=$('lista');lista.replaceChildren();
  let exibidos=validos.filter(o=>{
@@ -132,7 +129,10 @@ function render(){
    return !busca||normal([d.placa,d.modelo,d.cliente,o.numero,o.numeroOS,o.prisma,o.numeroPrisma].join(' ')).includes(busca);
  });
  exibidos.sort((a,b)=>{const va=a.updatedAt||a.createdAt||0,vb=b.updatedAt||b.createdAt||0;const num=x=>typeof x==='number'?x:x?.seconds?x.seconds*1000:Date.parse(x)||0;return num(vb)-num(va);});
- if(!exibidos.length){add(lista,'p','empty','Nenhum veículo encontrado.');return;}
+ if(!exibidos.length){let mensagem='Nenhuma O.S. encontrada.';
+  if(busca){const v=[...veiculos.values()].find(v=>normal([v.placa,v.modelo,v.marca,v.prefixo].join(' ')).includes(busca));
+   if(v&&!validos.some(o=>o.veiculoId===v.id||(v.placa&&normal(o.placa)===normal(v.placa))))mensagem='Veículo cadastrado, mas não foi localizada uma O.S.';
+  }add(lista,'p','empty',mensagem);return;}
  for(const o of exibidos){
    const d=dados(o),s=indicadorStatus(o);
    const card=add(lista,'article','os','');
@@ -141,34 +141,25 @@ function render(){
    add(card,'h2','',d.modelo);
    add(card,'div','muted',d.cliente);
    const badges=add(card,'div','linha','');
-   add(badges,'span','etiqueta '+s.classe,s.titulo);
-   add(badges,'span','etiqueta '+(recebeu(o)?'green':'yellow'),recebeu(o)?'💰 Recebido':'💰 Não marcado como recebido');
-   const botPdf=add(card,'button','pdf-botao','📄 Abrir O.S. verdadeira • PDF com fotos');
+   add(badges,'span','etiqueta green','O.S. FEITA');
+   add(badges,'span','etiqueta '+s.classe,s.titulo.toUpperCase());
+   const pagamento=add(card,'div','linha','');
+   add(pagamento,'span','etiqueta '+(recebeu(o)?'green':'yellow'),recebeu(o)?'💰 RECEBIMENTO MARCADO':'💰 RECEBIMENTO NÃO MARCADO');
+   if(valorStatus(o)==='aprovado')add(pagamento,'span','etiqueta green','APROVADA');
+   else if(aguardando(o))add(pagamento,'span','etiqueta yellow','AGUARDANDO APROVAÇÃO');
+   const botPdf=add(card,'button','pdf-botao','📄 VER O.S. + FOTOS / ENVIAR');
    botPdf.type='button';
+   botPdf.setAttribute('aria-label','Abrir O.S. original com fotos, imprimir, baixar ou enviar PDF');
    botPdf.addEventListener('click',()=>window.fabioAbrirPdfOS?.(o.id));
-   const aberto=abertos.has(o.id);
-   const bot=add(card,'button','full',aberto?'Fechar detalhes':'Ver situação completa');
-   bot.type='button';bot.setAttribute('aria-expanded',String(aberto));
-   if(aberto){
-      const detalhe=add(card,'div','detalhes','');
-      add(detalhe,'p','','Situação: '+s.titulo);
-      const aprov=valorStatus(o)==='aprovado'||servico(o)||pronto(o);
-      add(detalhe,'p','','Aprovação: '+(aprov?'Status indica aprovado/etapa posterior':o.aprovacao||o.totalAprovado!=null?'Há registro de aprovação':'Sem confirmação explícita no status'));
-      add(detalhe,'p','','Execução: '+(pronto(o)?'Status de pronto/entregue':servico(o)?'Status em serviço':'Consultar andamento da O.S.'));
-      add(detalhe,'p','','Recebimento operacional: '+(recebeu(o)?'Marcado como recebido':'Ainda não marcado como recebido'));
-      if(Number(o.valorRecebidoOperacional)>0){add(detalhe,'p','','Valor marcado: '+Number(o.valorRecebidoOperacional).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}));}
-      add(detalhe,'p','muted','Consulta somente leitura. Nenhum dado é alterado.');
-   }
-   bot.addEventListener('click',()=>{if(abertos.has(o.id))abertos.delete(o.id);else abertos.add(o.id);render();});
  }
 }
 document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click',()=>{
- filtro=b.dataset.filter;
- document.querySelectorAll('.filtros button').forEach(x=>x.classList.toggle('active',x.dataset.filter===filtro));
+ filtro=filtro===b.dataset.filter?'todos':b.dataset.filter;
+ document.querySelectorAll('.indicador').forEach(x=>x.classList.toggle('active',x.dataset.filter===filtro));
  render();
 }));
 $('busca').addEventListener('input',e=>{busca=normal(e.target.value.trim());render();});
-$('limpar').addEventListener('click',()=>{$('busca').value='';busca='';filtro='todos';document.querySelectorAll('.filtros button').forEach(x=>x.classList.toggle('active',x.dataset.filter===filtro));render();});
+$('limpar').addEventListener('click',()=>{$('busca').value='';busca='';filtro='todos';document.querySelectorAll('.indicador').forEach(x=>x.classList.remove('active'));render();});
 $('sair').addEventListener('click',()=>{unsub.forEach(f=>f());sessionStorage.removeItem('j_tid');sessionStorage.removeItem('j_role');location.replace('index.html');});
 try{
  const db=window.initFirebase();
@@ -287,16 +278,30 @@ async function gerarDoc(id){
  await new Promise(resolve=>setTimeout(resolve,250)); // aguarda a associação de veículo já prevista no JARVIS
  if(w.document.getElementById('osId')?.value!==id)throw Error('A O.S. não foi carregada corretamente.');
  await garantirLibs(w);
+ // SalvarBlobArquivoOS é função LOCAL do JARVIS: capturar o próprio Blob exportado e
+ // suprimir apenas o download automático dentro do iframe técnico.
  let salvo=null;
- const anterior=w.salvarBlobArquivoOS;
- w.salvarBlobArquivoOS=async function(blob,name,tipo){
-  if(tipo!=='application/pdf'||blob?.type!=='application/pdf')throw Error('O gerador não retornou um PDF');
-  salvo={blob,fileName:name||'OS.pdf',numero:String(os.numero||os.numeroOS||id.slice(-6)).toUpperCase()};
-  return {capturado:true};
+ const originalURL=w.URL.createObjectURL.bind(w.URL);
+ const originalClick=w.HTMLAnchorElement.prototype.click;
+ let ultimoNome='OS.pdf';
+ w.URL.createObjectURL=function(blob){
+  if(blob?.type==='application/pdf'&&blob.size>0)
+   salvo={blob,fileName:ultimoNome,numero:String(os.numero||os.numeroOS||id.slice(-6)).toUpperCase()};
+  return originalURL(blob);
  };
- try{
-  await w.gerarPDFOS(); // SEM parâmetro visualizar: não remover fotos!
- }finally{w.salvarBlobArquivoOS=anterior;}
+ w.HTMLAnchorElement.prototype.click=function(){
+  if(this.download&&String(this.download).toLowerCase().endsWith('.pdf')){
+   ultimoNome=this.download;
+   if(salvo)salvo.fileName=ultimoNome;
+   return;
+  }
+  return originalClick.call(this);
+ };
+ try{await w.gerarPDFOS();} // PDF ORIGINAL COMPLETO, inclusive fotos
+ finally{
+  w.URL.createObjectURL=originalURL;
+  w.HTMLAnchorElement.prototype.click=originalClick;
+ }
  if(!salvo||!salvo.blob||salvo.blob.size<1000)throw Error('O motor original não retornou um PDF válido.');
  if((await salvo.blob.slice(0,5).text())!=='%PDF-')throw Error('Arquivo gerado não é um PDF válido.');
  if(cache.size>=3)cache.delete(cache.keys().next().value);
