@@ -37,6 +37,23 @@ button:hover{border-color:#68beed}button.active{background:#126c92;border-color:
 @media(max-width:720px){#lista{grid-template-columns:1fr}.resumo{grid-template-columns:repeat(2,minmax(0,1fr))}header{padding:17px}.indicador b{font-size:2rem}}
 @media(max-width:340px){.resumo{grid-template-columns:1fr 1fr}.indicador{padding:12px 8px}}
 </style>
+
+<style id="fabio-pdf-v2">
+.pdf-botao{width:100%;margin-top:8px;background:#087554;border-color:#26bb94;font-weight:850}
+.pdf-fundo[hidden]{display:none!important}
+.pdf-fundo{position:fixed;inset:0;background:rgba(3,8,18,.93);z-index:99999;display:flex;align-items:stretch;justify-content:center;padding:8px}
+.pdf-box{display:flex;flex-direction:column;min-width:0;max-width:1000px;width:100%;border-radius:16px;overflow:hidden;background:#09192d;border:1px solid #31516f}
+.pdf-cabecalho{padding:12px 14px;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.pdf-cabecalho strong{font-size:1.08rem}
+.pdf-acoes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:8px 12px}
+.pdf-acoes button{padding:8px;font-size:.94rem}
+.pdf-compartilhar{background:#08784d!important;border-color:#2fca92!important}
+#fabioPdfViewer{background:#fff;width:100%;border:0;flex:1;min-height:40vh}
+#fabioPdfEstado{padding:9px 14px;font-size:.9rem;color:#bfdef3}
+#fabioPdfEstado:empty{display:none}
+.pdf-offscreen{position:fixed;left:-300vw;top:-300vh;width:1200px;height:800px;opacity:0;pointer-events:none;border:0}
+@media(max-width:420px){.pdf-cabecalho{padding:8px 10px}.pdf-acoes{padding:6px;gap:4px}.pdf-acoes button{font-size:.82rem;padding:6px 4px}}
+</style>
 </head>
 <body>
 <header><div><small>S.O.S. VALÊNCIO • VISÃO DO PROPRIETÁRIO</small><h1>Fábio — Minha Oficina</h1></div><button id="sair" type="button">Sair</button></header>
@@ -59,6 +76,19 @@ button:hover{border-color:#68beed}button.active{background:#126c92;border-color:
 <div id="erro" role="alert"></div>
 <section id="lista" aria-label="Ordens de serviço" aria-live="polite"></section>
 </main>
+
+<div class="pdf-fundo" id="fabioPdfDialog" hidden role="dialog" aria-modal="true" aria-labelledby="fabioPdfTitulo">
+  <div class="pdf-box">
+    <div class="pdf-cabecalho"><strong id="fabioPdfTitulo">O.S. completa com fotos</strong><button type="button" id="fabioPdfFechar">✕ Fechar</button></div>
+    <div class="pdf-acoes">
+      <button type="button" id="fabioPdfAbrir">Imprimir / abrir</button>
+      <button type="button" id="fabioPdfCompartilhar" class="pdf-compartilhar" disabled>WhatsApp / enviar</button>
+      <button type="button" id="fabioPdfBaixar" disabled>Baixar PDF</button>
+    </div>
+    <div id="fabioPdfEstado" role="status" aria-live="polite"></div>
+    <iframe id="fabioPdfViewer" title="Documento PDF original da ordem de serviço" allow="fullscreen"></iframe>
+  </div>
+</div>
 <script>
 (function(){
 'use strict';
@@ -94,6 +124,7 @@ function render(){
  $('nAguardando').textContent=validos.filter(aguardando).length;
  $('nServico').textContent=validos.filter(servico).length;
  $('nProntos').textContent=validos.filter(pronto).length;
+ window.__fabioListaOS=os;window.__fabioDadosAtuais={os,clientes:[...clientes.values()],veiculos:[...veiculos.values()],oficina:(function(){try{return JSON.parse(sessionStorage.getItem('j_oficina')||'null')}catch(e){return null}})()};
  const lista=$('lista');lista.replaceChildren();
  let exibidos=validos.filter(o=>{
    if(!pertence(o))return false;
@@ -112,6 +143,9 @@ function render(){
    const badges=add(card,'div','linha','');
    add(badges,'span','etiqueta '+s.classe,s.titulo);
    add(badges,'span','etiqueta '+(recebeu(o)?'green':'yellow'),recebeu(o)?'💰 Recebido':'💰 Não marcado como recebido');
+   const botPdf=add(card,'button','pdf-botao','📄 Abrir O.S. verdadeira • PDF com fotos');
+   botPdf.type='button';
+   botPdf.addEventListener('click',()=>window.fabioAbrirPdfOS?.(o.id));
    const aberto=abertos.has(o.id);
    const bot=add(card,'button','full',aberto?'Fechar detalhes':'Ver situação completa');
    bot.type='button';bot.setAttribute('aria-expanded',String(aberto));
@@ -149,6 +183,156 @@ try{
  acompanhar('clientes',items=>clientes=new Map(items.map(x=>[x.id,x])));
  acompanhar('veiculos',items=>veiculos=new Map(items.map(x=>[x.id,x])));
 }catch(err){$('erro').textContent='Falha ao conectar ao sistema. Faça login novamente.';console.error(err);}
+})();
+</script>
+
+<script>
+/* PAINEL FÁBIO — documentos oficiais: reutiliza o gerador ORIGINAL do jarvis.html/js/os.js
+   Nenhum estado de O.S. é salvo; o JARVIS fica apenas em uma janela técnica isolada.
+   O bloqueio de escrita é adicional de segurança nessa janela e não substitui RBAC do servidor. */
+(function(){
+'use strict';
+const $ = id => document.getElementById(id);
+let arquivo=null, linkBlob=null, gerador=null, gerando=false, numero=null;
+const cache=new Map();
+const estado = s => { $('fabioPdfEstado').textContent=s||''; };
+function carregarEspecifico(win, src){
+ return new Promise((resolve,reject)=>{
+  const script=win.document.createElement('script');script.src=src;
+  script.onload=resolve;script.onerror=()=>reject(Error('Falha ao carregar biblioteca do PDF'));
+  win.document.head.appendChild(script);
+ });
+}
+const bloqueio=String.raw`<script>
+/* Somente leitura dentro do motor de exportação, nunca no Jarvis verdadeiro. */
+(function(){
+const fs=firebase.firestore;
+function bloquear(){return Promise.reject(new Error('Acesso somente leitura: painel Fábio'));}
+const itens=[[fs.DocumentReference,['set','update','delete']],[fs.CollectionReference,['add']],[fs.WriteBatch,['commit']],[fs.Transaction,['set','update','delete']],[fs.Firestore,['runTransaction']]];
+for(const [classe,metodos] of itens){if(!classe||!classe.prototype)continue;for(const metodo of metodos){if(typeof classe.prototype[metodo]==='function')classe.prototype[metodo]=bloquear;}}
+window.__fabioProtecaoSomenteLeitura=true;
+})();
+<\/script>`;
+async function iniciarGerador(){
+ if(gerador && gerador.contentWindow?.prepOS && gerador.contentWindow?.gerarPDFOS)return gerador.contentWindow;
+ const res=await fetch('jarvis.html',{cache:'no-store',credentials:'same-origin'});
+ if(!res.ok)throw Error('Não foi possível abrir o motor de PDF do JARVIS (HTTP '+res.status+')');
+ let fonte=await res.text();
+ const marca='<script src="js/config.js?v=26.13.0"></script>';
+ if(!fonte.includes(marca))throw Error('A versão do JARVIS mudou. Geração bloqueada para preservar o PDF original.');
+ fonte=fonte.replace(marca,bloqueio+'\n'+marca);
+ let frame=document.createElement('iframe');
+ frame.className='pdf-offscreen';
+ frame.setAttribute('aria-hidden','true');
+ frame.setAttribute('tabindex','-1');
+ frame.setAttribute('sandbox','allow-scripts allow-same-origin');
+ frame.title='Motor de PDF original do JARVIS, somente leitura';
+ document.body.appendChild(frame);
+ gerador=frame;
+ await new Promise((resolve,reject)=>{
+   const timeout=setTimeout(()=>reject(Error('O motor do JARVIS não respondeu.')),45000);
+   frame.onload=()=>{clearTimeout(timeout);resolve();};
+   frame.onerror=()=>{clearTimeout(timeout);reject(Error('Não foi possível carregar o motor de PDF'));};
+   frame.srcdoc=fonte;
+ });
+ const w=frame.contentWindow;
+ if(!w?.__fabioProtecaoSomenteLeitura)throw Error('Proteção somente leitura indisponível; PDF bloqueado.');
+ if(typeof w.prepOS!=='function'||typeof w.gerarPDFOS!=='function')throw Error('Gerador oficial de OS não disponível.');
+ return w;
+}
+async function garantirLibs(w){
+ if(typeof w.jspdf?.jsPDF!=='function'){
+  await carregarEspecifico(w,'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+ }
+ if(typeof w.jspdf?.jsPDF?.API?.autoTable!=='function'){
+  await carregarEspecifico(w,'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js');
+ }
+ if(typeof w.jspdf?.jsPDF?.API?.autoTable!=='function')throw Error('Biblioteca de tabelas do PDF indisponível');
+}
+function mostrarArquivo(doc){
+ arquivo=doc;
+ if(linkBlob)URL.revokeObjectURL(linkBlob);
+ linkBlob=URL.createObjectURL(doc.blob);
+ $('fabioPdfViewer').src=linkBlob+'#toolbar=1&navpanes=0';
+ $('fabioPdfTitulo').textContent='O.S. '+doc.numero+' • PDF original com fotos';
+ $('fabioPdfCompartilhar').disabled=false;
+ $('fabioPdfBaixar').disabled=false;
+ estado('PDF completo do JARVIS pronto. Para enviar no iPhone, toque WhatsApp / enviar e escolha WhatsApp.');
+}
+async function gerarDoc(id){
+ const f=cache.get(id);if(f)return f;
+ const w=await iniciarGerador();
+ const os=window.__fabioOsFonte?.().find(x=>x.id===id);
+ if(!os)throw Error('O.S. não encontrada. Atualize o painel.');
+ // Dados de leitura já disponíveis no painel: evita refazer consultas na tela principal.
+ const fontes=window.__fabioDadosFonte?.();
+ if(!fontes)throw Error('Dados atuais indisponíveis.');
+ w.J.os=fontes.os.map(x=>({...x}));
+ w.J.clientes=fontes.clientes.map(x=>({...x}));
+ w.J.veiculos=fontes.veiculos.map(x=>({...x}));
+ w.J.oficina=fontes.oficina||w.J.oficina;
+ // O preenchimento original do formulário monta peças/serviços e evidências reais.
+ w.prepOS('edit',id);
+ await new Promise(resolve=>setTimeout(resolve,250)); // aguarda a associação de veículo já prevista no JARVIS
+ if(w.document.getElementById('osId')?.value!==id)throw Error('A O.S. não foi carregada corretamente.');
+ await garantirLibs(w);
+ let salvo=null;
+ const anterior=w.salvarBlobArquivoOS;
+ w.salvarBlobArquivoOS=async function(blob,name,tipo){
+  if(tipo!=='application/pdf'||blob?.type!=='application/pdf')throw Error('O gerador não retornou um PDF');
+  salvo={blob,fileName:name||'OS.pdf',numero:String(os.numero||os.numeroOS||id.slice(-6)).toUpperCase()};
+  return {capturado:true};
+ };
+ try{
+  await w.gerarPDFOS(); // SEM parâmetro visualizar: não remover fotos!
+ }finally{w.salvarBlobArquivoOS=anterior;}
+ if(!salvo||!salvo.blob||salvo.blob.size<1000)throw Error('O motor original não retornou um PDF válido.');
+ if((await salvo.blob.slice(0,5).text())!=='%PDF-')throw Error('Arquivo gerado não é um PDF válido.');
+ cache.set(id,salvo);return salvo;
+}
+window.__fabioOsFonte=()=>Array.isArray(window.__fabioListaOS)?window.__fabioListaOS:[];
+window.__fabioDadosFonte=()=>window.__fabioDadosAtuais||null;
+window.fabioAbrirPdfOS=async function(id){
+ if(gerando)return;
+ const dados=window.__fabioOsFonte().find(x=>x.id===id);if(!dados)return;
+ numero=String(dados.numero||dados.numeroOS||id.slice(-6)).toUpperCase();
+ $('fabioPdfDialog').hidden=false;
+ $('fabioPdfTitulo').textContent='O.S. '+numero+' • PDF com fotos';
+ $('fabioPdfCompartilhar').disabled=true;
+ $('fabioPdfBaixar').disabled=true;
+ $('fabioPdfViewer').removeAttribute('src');
+ arquivo=null;gerando=true;
+ estado('Preparando o laudo original do JARVIS, com peças, serviços e fotos da O.S.…');
+ try{mostrarArquivo(await gerarDoc(id));}
+ catch(err){console.error('[Fábio PDF]',err);estado('Não foi possível gerar o PDF original: '+(err?.message||err)+'. Nenhum documento incompleto foi enviado.');}
+ finally{gerando=false;}
+};
+function salvarArquivo(){
+ if(!arquivo)return;
+ const a=document.createElement('a');a.href=linkBlob;a.download=arquivo.fileName;
+ document.body.appendChild(a);a.click();a.remove();
+}
+$('fabioPdfBaixar').addEventListener('click',salvarArquivo);
+$('fabioPdfAbrir').addEventListener('click',()=>{
+ if(!arquivo){estado('Aguarde a geração do PDF completo.');return;}
+ const aba=window.open(linkBlob,'_blank','noopener');
+ if(!aba)estado('O navegador bloqueou a nova aba. Use Baixar PDF e abra o arquivo para imprimir.');
+ else estado('No iPhone, use Compartilhar > Imprimir no visualizador do PDF. No computador, use a impressão do navegador.');
+});
+$('fabioPdfCompartilhar').addEventListener('click',()=>{
+ if(!arquivo||gerando)return;
+ const file=new File([arquivo.blob],arquivo.fileName,{type:'application/pdf'});
+ const dados={files:[file],title:'O.S. '+arquivo.numero,text:'Segue a ordem de serviço completa com fotos — S.O.S. Valêncio.'};
+ if(typeof navigator.share==='function'&&(!navigator.canShare||navigator.canShare({files:[file]}))){
+  // Chamada direta no clique: necessária à ativação de compartilhamento do iOS.
+  navigator.share(dados).catch(e=>{if(e?.name!=='AbortError')estado('Falha ao compartilhar: '+(e?.message||e)+'. Use Baixar PDF para anexar ao WhatsApp.');});
+ }else{
+  salvarArquivo();
+  estado('PDF baixado. Anexe o arquivo na conversa do WhatsApp. O navegador não disponibilizou envio direto do PDF.');
+ }
+});
+$('fabioPdfFechar').addEventListener('click',()=>{$('fabioPdfDialog').hidden=true;$('fabioPdfViewer').removeAttribute('src');});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('fabioPdfDialog').hidden)$('fabioPdfFechar').click();});
 })();
 </script>
 </body>
