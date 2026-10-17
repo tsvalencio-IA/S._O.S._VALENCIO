@@ -272,6 +272,16 @@ async function gerarDoc(id){
  w.J.clientes=fontes.clientes.map(x=>({...x}));
  w.J.veiculos=fontes.veiculos.map(x=>({...x}));
  w.J.oficina=fontes.oficina||w.J.oficina;
+ // Prepara os mesmos vínculos de cliente/veículo do editor oficial.
+ w.popularSelects?.();
+ // Busca apenas as peças de estoque vinculadas à OS, sem trazer o estoque inteiro.
+ const idsEstoque=[...new Set((Array.isArray(os.pecas)?os.pecas:[])
+  .map(p=>String(p?.estoqueId||'').trim()).filter(id=>id&&!id.includes('/')))];
+ if(idsEstoque.length){
+  const estoqueSalvo=await Promise.all(idsEstoque.map(id=>w.J.db.collection('estoqueItems').doc(id).get()
+   .then(d=>d.exists?{id:d.id,...d.data()}:null).catch(()=>null)));
+  w.J.estoque=estoqueSalvo.filter(Boolean);
+ }
  // O preenchimento original do formulário monta peças/serviços e evidências reais.
  w.prepOS('edit',id);
  await new Promise(resolve=>setTimeout(resolve,250)); // aguarda a associação de veículo já prevista no JARVIS
