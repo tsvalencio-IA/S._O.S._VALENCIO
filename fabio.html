@@ -361,7 +361,13 @@ function mecanicosDaOS(o){
  (Array.isArray(o.servicos)?o.servicos:[]).forEach((sv,i)=>{
   const e=exec['servico-'+i]||{},ativo=['em_execucao','em execucao'].includes(normal(e.status));
   const atribuicoes=Array.isArray(sv.rateiosComissao)&&sv.rateiosComissao.length?sv.rateiosComissao:[{mecId:sv.mecId||sv.mecanicoId||sv.responsavelId,mecNome:sv.mecNome||sv.mecanicoNome||sv.responsavelNome}];
-  atribuicoes.forEach(r=>adicionar(r.mecId||r.id,r.mecNome||r.nome,ativo));
+  const executante=String(e.mecId||e.responsavelId||'');
+  atribuicoes.forEach(r=>{
+   const idR=String(r.mecId||r.id||'');
+   // Uma marcação 'em execução' pertence ao mecânico informado no registro,
+   // nunca a todos os participantes de um rateio de comissão.
+   adicionar(r.mecId||r.id,r.mecNome||r.nome,ativo&&!!executante&&idR===executante);
+  });
   adicionar(e.mecId||e.responsavelId,e.mecNome||e.responsavelNome,ativo);
  });
  Object.values(exec).forEach(e=>{if(e&&typeof e==='object')adicionar(e.mecId||e.responsavelId,e.mecNome||e.responsavelNome,normal(e.status)==='em_execucao');});
