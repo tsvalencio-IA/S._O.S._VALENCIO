@@ -187,10 +187,8 @@ const tid=sessionStorage.getItem('j_tid');
 const role=(sessionStorage.getItem('j_role')||'').toLowerCase();
 const cargo=(sessionStorage.getItem('j_cargo')||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 if(!tid || tid==='MASTER_ADMIN' || (!['admin','gestor'].includes(role) && cargo!=='gestor')){
-  $('statusConexao').textContent='É necessário entrar com um perfil de gestor ou administrador autorizado.';
-  $('erro').textContent='Acesso não autorizado. Faça login no sistema.';
-  document.querySelectorAll('.indicador').forEach(b=>b.disabled=true);
-  $('sair').addEventListener('click',()=>{try{sessionStorage.clear();localStorage.removeItem('j_saved_login');localStorage.removeItem('j_saved_brand');}catch(_){}location.replace('index.html?logout=1');});
+  // Atalho do iPhone / nova aba sem sessao: abre login, nunca deixa usuario preso na tela.
+  window.location.replace('index.html?destino=fabio.html');
   return;
 }
 let os=[],clientes=new Map(),veiculos=new Map(),filtro='todos',busca='';
