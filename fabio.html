@@ -203,7 +203,7 @@ function carregarEspecifico(win, src){
   win.document.head.appendChild(script);
  });
 }
-const bloqueio=`<script>
+const bloqueio=`<scr${'ipt'}>
 /* Somente leitura dentro do motor de exportação, nunca no Jarvis verdadeiro. */
 (function(){
 const fs=firebase.firestore;
@@ -212,13 +212,13 @@ const itens=[[fs.DocumentReference,['set','update','delete']],[fs.CollectionRefe
 for(const [classe,metodos] of itens){if(!classe||!classe.prototype)continue;for(const metodo of metodos){if(typeof classe.prototype[metodo]==='function')classe.prototype[metodo]=bloquear;}}
 window.__fabioProtecaoSomenteLeitura=true;
 })();
-<\/script>`;
+</scr${'ipt'}>`;
 async function iniciarGerador(){
  if(gerador && gerador.contentWindow?.prepOS && gerador.contentWindow?.gerarPDFOS)return gerador.contentWindow;
  const res=await fetch('jarvis.html',{cache:'no-store',credentials:'same-origin'});
  if(!res.ok)throw Error('Não foi possível abrir o motor de PDF do JARVIS (HTTP '+res.status+')');
  let fonte=await res.text();
- const marca='<script src="js/config.js?v=26.13.0"><'+'/script>';
+ const marca='<scr'+'ipt src="js/config.js?v=26.13.0"></scr'+'ipt>';
  if(!fonte.includes(marca))throw Error('A versão do JARVIS mudou. Geração bloqueada para preservar o PDF original.');
  fonte=fonte.replace(marca,bloqueio+'\n'+marca);
  let frame=document.createElement('iframe');
