@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#091323">
+<meta name="color-scheme" content="dark">
+<title>Fábio • Acompanhamento da Oficina</title>
+<link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png">
+<style>
+:root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark;--bg:#091323;--card:#131f34;--card2:#1b2a42;--line:#2d4059;--fg:#f2f7ff;--muted:#aabbd0;--cyan:#37d6f5;--green:#41dc9b;--orange:#ffb54a;--red:#ff7575;--blue:#85aaff}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#101f35,#091323 45%);color:var(--fg);min-height:100vh}button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:3px solid var(--cyan);outline-offset:3px}button:disabled{cursor:not-allowed;opacity:.6}
+.shell{max-width:1380px;margin:auto;padding:22px 22px 70px}.head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:22px}.brand{display:flex;align-items:center;gap:14px;min-width:0}.brand img{width:58px;height:58px;object-fit:contain;border-radius:14px;background:#fff;padding:4px}.brand h1{margin:0;font-size:clamp(1.55rem,2.6vw,2.35rem);line-height:1.07}.sub{color:var(--muted);font-size:.99rem;font-weight:500;margin-top:5px}.live{border:1px solid var(--line);background:#142339;border-radius:999px;padding:10px 14px;font-size:.88rem;color:var(--muted);white-space:nowrap}.live[data-ok="true"]{color:var(--green);border-color:#245e50}.dot{display:inline-block;width:9px;height:9px;background:currentColor;border-radius:50%;margin-right:6px}
+.totals{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.metric{color:var(--fg);text-align:left;background:#16243b;border:2px solid #34475f;border-radius:18px;min-height:118px;padding:16px;display:flex;flex-direction:column;justify-content:space-between;transition:border-color .15s,transform .15s}.metric:hover{border-color:#6683a3}.metric[aria-pressed="true"]{border-color:var(--cyan);background:#173049;box-shadow:0 0 0 1px #1a6677}.metric:active{transform:scale(.985)}.metric strong{font-size:2.35rem;line-height:1;font-weight:850;letter-spacing:-.05em}.metric span{font-size:1.02rem;font-weight:800;letter-spacing:.01em}.metric small{font-size:.78rem;color:var(--muted)}.metric.warn[aria-pressed="true"]{border-color:var(--orange)}.metric.good[aria-pressed="true"]{border-color:var(--green)}
+.toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:27px 0 15px}.toolbar h2{margin:0;font-size:1.35rem}.toolbar .count{font-size:.95rem;color:var(--muted)}.grow{flex:1}.search{width:min(100%,310px);background:#17263d;color:var(--fg);border:1px solid #47617c;border-radius:12px;padding:12px 14px;font-size:1rem}.search::placeholder{color:#9eaec1}.link{border:none;color:var(--cyan);background:transparent;font-weight:800;font-size:1rem;padding:10px}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}.os-card{width:100%;text-align:left;color:var(--fg);background:var(--card);border:1px solid var(--line);border-left:6px solid var(--blue);border-radius:17px;padding:17px;min-width:0;display:flex;flex-direction:column;gap:13px;transition:transform .15s,border-color .15s}.os-card:hover{border-color:#6790b0}.os-card:active{transform:scale(.99)}.cardtop{display:flex;align-items:flex-start;justify-content:space-between;gap:7px}.placa{font-size:1.57rem;letter-spacing:.02em;font-weight:900}.modelo{font-size:1rem;font-weight:650;color:#cbd8e8;overflow-wrap:anywhere;margin-top:4px}.prisma{color:#0c1c2d;background:var(--orange);font-weight:900;border-radius:9px;font-size:.9rem;padding:7px 9px;white-space:nowrap}.cliente{font-size:1.07rem;font-weight:720;overflow-wrap:anywhere}.line{height:1px;background:var(--line)}.stage{padding:9px 12px;background:#253752;border:1px solid #35506f;border-radius:12px;font-size:1rem;font-weight:850;line-height:1.25}.stage[data-stage="Triagem"]{color:#d5dfec}.stage[data-stage="Orcamento"],.stage[data-stage="Orcamento_Enviado"]{color:#ffcd75}.stage[data-stage="Aprovado"]{color:#a9bcff}.stage[data-stage="Andamento"]{color:#ffba78}.stage[data-stage="Pronto"],.stage[data-stage="Entregue"]{color:#73e9b8}.stage[data-stage="Cancelado"]{color:#ff9a9a}
+.flags{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.flag{border-radius:10px;padding:9px 5px;text-align:center;background:#203048;border:1px solid #34465e;display:flex;flex-direction:column;gap:2px;min-width:0}.flag b{font-size:.77rem;color:#b8cbe0}.flag span{font-size:.86rem;font-weight:800;overflow-wrap:anywhere}.flag.yes span{color:var(--green)}.flag.no span{color:var(--orange)}.flag.maybe span{color:var(--muted)}.foot{display:flex;align-items:center;justify-content:space-between;gap:6px;color:var(--muted);font-size:.8rem}.arrow{font-weight:800;color:var(--cyan);font-size:1rem}.empty{grid-column:1/-1;text-align:center;color:var(--muted);border:1px dashed var(--line);padding:32px;border-radius:16px;font-size:1.12rem}
+.footer{text-align:center;margin-top:30px;color:#8298b2;font-size:.83rem}
+.overlay{position:fixed;inset:0;z-index:15;background:rgba(3,8,16,.84);display:flex;align-items:center;justify-content:center;padding:14px}.overlay[hidden]{display:none}.sheet{background:#14243b;border:1px solid #4e6884;border-radius:22px;width:min(100%,700px);max-height:94dvh;overflow-y:auto;padding:22px;box-shadow:0 18px 80px #0009}.sheethead{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.sheet h2{font-size:1.7rem;margin:0}.x{background:#253b57;color:#fff;border:1px solid #47627e;border-radius:50%;font-size:1.7rem;line-height:1;width:46px;height:46px;flex-shrink:0}.sheetgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:19px 0}.detail{padding:13px;background:#1b2c46;border-radius:12px}.detail small{display:block;font-size:.78rem;color:#adbed1;font-weight:700;margin-bottom:6px}.detail strong{display:block;font-size:1rem;overflow-wrap:anywhere}.sheet h3{font-size:1.08rem;margin:22px 0 10px}.notes{white-space:pre-wrap;overflow-wrap:anywhere;background:#1b2c46;border-radius:12px;padding:14px;line-height:1.5}.events{list-style:none;margin:0;padding:0}.events li{padding:11px 4px;border-bottom:1px solid #2e415c;line-height:1.45;overflow-wrap:anywhere}.events small{display:block;color:var(--muted);font-size:.8rem}.alert{padding:18px;border:1px solid #845e36;background:#332718;color:#ffdb9c;border-radius:14px;margin:20px 0}.signlink{color:var(--cyan);font-weight:800}
+@media(max-width:1050px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:690px){.shell{padding:15px 12px 45px}.head{align-items:flex-start}.brand img{width:46px;height:46px}.live{font-size:.75rem;padding:8px}.totals{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.metric{min-height:105px;border-radius:14px;padding:12px}.metric strong{font-size:2rem}.metric span{font-size:.96rem}.metric small{font-size:.73rem}.toolbar{gap:8px;margin-top:21px}.toolbar h2{font-size:1.2rem}.search{width:100%;order:3}.cards{grid-template-columns:1fr}.os-card{padding:15px}.sheet{padding:17px}.sheetgrid{grid-template-columns:1fr 1fr}.foot{font-size:.82rem}}@media(max-width:365px){.flags{grid-template-columns:1fr 1fr 1fr}.flag b{font-size:.7rem}.flag span{font-size:.74rem}.sheetgrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main class="shell">
+  <header class="head">
+    <div class="brand">
+      <img src="assets/icon-192.png" alt="S.O.S. Valêncio" onerror="this.style.display='none'">
+      <div><h1>PAINEL DO FÁBIO</h1><div id="oficina" class="sub">S.O.S. Valêncio • Acompanhamento</div></div>
+    </div>
+    <div class="live" id="live"><span class="dot"></span><span id="liveText">Conectando...</span></div>
+  </header>
+  <section aria-label="Acesso rápido" class="totals">
+    <button class="metric" type="button" data-filter="patio" aria-pressed="true"><span>🚗 NO PÁTIO</span><strong id="nPatio">—</strong><small>Veículos em atendimento</small></button>
+    <button class="metric warn" type="button" data-filter="atencao" aria-pressed="false"><span>⚠️ ATENÇÃO</span><strong id="nAtencao">—</strong><small>Precisam de acompanhamento</small></button>
+    <button class="metric good" type="button" data-filter="prontos" aria-pressed="false"><span>✅ PRONTOS</span><strong id="nProntos">—</strong><small>Prontos para retirada</small></button>
+    <button class="metric good" type="button" data-filter="recebidos" aria-pressed="false"><span>💰 RECEBIDOS</span><strong id="nRecebidos">—</strong><small>Marcados como recebidos</small></button>
+  </section>
+  <section class="toolbar" aria-label="Pesquisa de ordens">
+    <h2 id="viewTitle">Veículos no pátio</h2><span class="count" id="viewCount"></span><div class="grow"></div>
+    <button class="link" type="button" id="allBtn">VER TODAS AS OS</button>
+    <input class="search" id="search" type="search" placeholder="Buscar placa, cliente ou OS" aria-label="Buscar veículo, cliente ou ordem de serviço" autocomplete="off">
+  </section>
+  <section class="cards" id="cards" aria-live="polite"><div class="empty">Carregando ordens de serviço...</div></section>
+  <footer class="footer">Somente acompanhamento • Nenhuma alteração é feita nas ordens de serviço.</footer>
+</main>
+<div class="overlay" id="overlay" hidden>
+  <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="detailTitle" tabindex="-1">
+    <div class="sheethead"><div><h2 id="detailTitle">Ordem de serviço</h2><div class="sub" id="detailSubtitle"></div></div><button type="button" class="x" id="closeBtn" aria-label="Fechar">×</button></div>
+    <div id="detailBody"></div>
+  </section>
+</div>
+<script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore-compat.js"></script>
+<script src="js/config.js?v=26.13.0"></script>
+<script>
+(function(){
+  'use strict';
+  // Este painel somente consulta dados. Não existem operações set, add, update ou delete.
+  var $ = function(id){return document.getElementById(id);};
+  var session = window.sessionStorage;
+  var tenant = session.getItem('j_tid') || '';
+  var role = (session.getItem('j_role') || '').toLowerCase();
+  var rolesLeitura = ['admin','gestor','gerente','dono','oficina_admin'];
+  var state = {os:[],clientes:new Map(),veiculos:new Map(),filter:'patio',selected:null,ready:false};
+  var nf = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
+  var df = new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  var titles = {patio:'Veículos no pátio',atencao:'Precisam de atenção',prontos:'Prontos para retirada',recebidos:'Recebidos',all:'Todas as ordens'};
+  function clean(v){return String(v == null ? '' : v);}
+  function safe(v){return clean(v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function norm(v){return clean(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();}
+  function value(v){if(typeof v === 'number')return Number.isFinite(v)?v:0;var s=clean(v).replace(/[^\d,.-]/g,'');if(s.indexOf(',')>=0)s=s.replace(/\./g,'').replace(',','.');var n=Number(s);return Number.isFinite(n)?n:0;}
+  function money(v){return nf.format(value(v));}
+  function time(v){if(!v)return 0;try{if(v.toDate)return v.toDate().getTime();if(typeof v.seconds==='number')return v.seconds*1000;if(typeof v==='number')return v;var n=Date.parse(v);return Number.isFinite(n)?n:0;}catch(e){return 0;}}
+  function date(v){var t=time(v);return t?df.format(new Date(t)):'Sem data';}
+  function stage(o){var n=norm(o.status);var names={'triagem':'Triagem','aguardando':'Triagem','patio':'Triagem','orcamento':'Orcamento','em_orcamento':'Orcamento','em orcamento':'Orcamento','orcamento_enviado':'Orcamento_Enviado','aprovacao':'Orcamento_Enviado','aprovado':'Aprovado','andamento':'Andamento','box':'Andamento','em servico':'Andamento','pronto':'Pronto','pronto_retirada':'Pronto','faturado':'Pronto','entregue':'Entregue','concluido':'Entregue','cancelado':'Cancelado'};return names[n]||clean(o.status)||'Triagem';}
+  function stageText(s){return {Triagem:'🔎 EM TRIAGEM',Orcamento:'🧾 FAZENDO ORÇAMENTO',Orcamento_Enviado:'⏳ AGUARDANDO APROVAÇÃO',Aprovado:'✅ APROVADO / NA FILA',Andamento:'🔧 EM SERVIÇO',Pronto:'✅ PRONTO / CAIXA',Entregue:'🚗 ENTREGUE',Cancelado:'✕ CANCELADO'}[s] || clean(s).toUpperCase();}
+  function received(o){return o.recebidaOperacional===true||value(o.valorRecebidoOperacional)>0;}
+  function financePaid(o){return o.pgtoQuitado===true;}
+  function approved(o){var a=o.aprovacao;return o.aprovacaoAtiva!==false && !!(a && Array.isArray(a.itens) || Array.isArray(o.itensAprovados) && o.itensAprovados.length>0);}
+  function progress(o){var exec=o.execucaoItens;var a=exec&&typeof exec==='object'&&!Array.isArray(exec)?Object.values(exec):[];var done=a.filter(function(x){return /^(executado|executado_obs|concluido|finalizado|feito|realizado|trocada)$/i.test(clean(x&&x.status).trim());});var st=stage(o);if(a.length)return done.length+' / '+a.length;return st==='Pronto'||st==='Entregue'?'PRONTO':'SEM REGISTRO';}
+  function approvedLabel(o){return approved(o)?'SIM':(['Aprovado','Andamento','Pronto','Entregue'].includes(stage(o))?'ETAPA':'NÃO');}
+  function doneLabel(o){var st=stage(o);if(st==='Pronto'||st==='Entregue')return 'PRONTO';var p=progress(o);return p==='SEM REGISTRO'?'—':p;}
+  function payLabel(o){return received(o)?'SIM':financePaid(o)?'PAGO*':'NÃO';}
+  function isPatio(o){return !['Entregue','Cancelado'].includes(stage(o));}
+  function attention(o){var s=stage(o);return ['Triagem','Orcamento','Orcamento_Enviado','Aprovado'].includes(s)||(s==='Pronto'&&!received(o)&&!financePaid(o));}
+  function matchFilter(o,f){if(f==='patio')return isPatio(o);if(f==='atencao')return attention(o);if(f==='prontos')return stage(o)==='Pronto';if(f==='recebidos')return received(o)||financePaid(o);return true;}
+  function vehicle(o){return state.veiculos.get(clean(o.veiculoId))||{};}
+  function client(o){return state.clientes.get(clean(o.clienteId))||{};}
+  function plate(o,v){return clean(o.placa||v.placa||o.veiculoPlaca||'SEM PLACA').toUpperCase();}
+  function model(o,v){return clean(v.modelo||v.nome||o.veiculoSnapshot&&o.veiculoSnapshot.modelo||o.veiculoModelo||o.modeloVeiculo||o.modelo||o.veiculo||'Veículo sem modelo');}
+  function number(o){return clean(o.numero||o.numeroOS||o.osNumero||o.id||'—');}
+  function sortKey(o){var s=stage(o);return (s==='Pronto'&&!received(o)?0:s==='Orcamento_Enviado'?1:s==='Aprovado'?2:s==='Andamento'?3:s==='Triagem'?4:s==='Orcamento'?5:s==='Pronto'?6:s==='Entregue'?7:8);}
+  function setLive(message,ok){$('liveText').textContent=message;$('live').dataset.ok=String(!!ok);}
+  function setFilter(f){state.filter=f;$('search').value='';render();}
+  function flag(name,label,tone){return '<div class="flag '+tone+'"><b>'+safe(name)+'</b><span>'+safe(label)+'</span></div>';}
+  function render(){
+    document.querySelectorAll('[data-filter]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.filter===state.filter));});
+    $('nPatio').textContent=state.os.filter(isPatio).length;
+    $('nAtencao').textContent=state.os.filter(attention).length;
+    $('nProntos').textContent=state.os.filter(function(o){return stage(o)==='Pronto';}).length;
+    $('nRecebidos').textContent=state.os.filter(function(o){return received(o)||financePaid(o);}).length;
+    var q=norm($('search').value);
+    var list=state.os.filter(function(o){
+      if(!q)return matchFilter(o,state.filter);
+      var v=vehicle(o),c=client(o);
+      return norm([plate(o,v),model(o,v),c.nome,o.cliente,number(o),o.id,o.prefixo,v.prefixo,o.prisma,o.numeroPrisma].join(' ')).indexOf(q)!==-1;
+    });
+    list.sort(function(a,b){var d=sortKey(a)-sortKey(b);return d||time(b.updatedAt||b.createdAt)-time(a.updatedAt||a.createdAt);});
+    $('viewTitle').textContent=q?'Resultado da busca':titles[state.filter];
+    $('viewCount').textContent=list.length+' OS';
+    $('allBtn').hidden=state.filter==='all'&&!q;
+    var host=$('cards');host.replaceChildren();
+    if(!list.length){var e=document.createElement('div');e.className='empty';e.textContent=state.ready?'Nenhuma ordem encontrada.':'Carregando ordens de serviço...';host.append(e);return;}
+    list.forEach(function(o){
+      var v=vehicle(o),c=client(o),s=stage(o),flagRecebido=payLabel(o),pref=clean(o.prefixo||o.prefixoVeiculo||v.prefixo||'');
+      var btn=document.createElement('button');btn.type='button';btn.className='os-card';btn.style.borderLeftColor=({Orcamento:'#ffb54a',Orcamento_Enviado:'#e2aaff',Aprovado:'#85aaff',Andamento:'#ff9656',Pronto:'#41dc9b',Entregue:'#41dc9b',Cancelado:'#ff7575'})[s]||'#a7bbd1';
+      btn.setAttribute('aria-label','Abrir ordem '+number(o)+' do veículo '+plate(o,v));
+      btn.innerHTML='<div class="cardtop"><div><div class="placa">'+safe(pref?pref+' / '+plate(o,v):plate(o,v))+'</div><div class="modelo">'+safe(model(o,v))+'</div></div>'+(o.prisma||o.numeroPrisma?'<span class="prisma">PRISMA '+safe(o.prisma||o.numeroPrisma)+'</span>':'')+'</div>'+
+       '<div class="cliente">'+safe(c.nome||o.cliente||'Cliente não informado')+'</div>'+
+       '<div class="stage" data-stage="'+safe(s)+'">'+stageText(s)+'</div>'+
+       '<div class="flags">'+flag('APROVADO',approvedLabel(o),approved(o)?'yes':approvedLabel(o)==='ETAPA'?'maybe':'no')+flag('SERVIÇO',doneLabel(o),doneLabel(o)==='PRONTO'?'yes':'maybe')+flag('RECEBIDO',flagRecebido,flagRecebido==='NÃO'?'no':'yes')+'</div>'+
+       '<div class="foot"><span>OS '+safe(number(o))+' · '+safe(date(o.updatedAt||o.createdAt||o.data))+'</span><span class="arrow">VER RESUMO →</span></div>';
+      btn.addEventListener('click',function(){openDetail(o.id);});host.append(btn);
+    });
+  }
+  function detail(label,content){return '<div class="detail"><small>'+safe(label)+'</small><strong>'+safe(content)+'</strong></div>';}
+  function openDetail(id){
+    var o=state.os.find(function(it){return it.id===id;});if(!o)return;
+    state.selected=id;var v=vehicle(o),c=client(o),s=stage(o),ap=approved(o);
+    $('detailTitle').textContent=plate(o,v);
+    $('detailSubtitle').textContent=model(o,v)+' • OS '+number(o);
+    var ready=['Pronto','Entregue'].includes(s);
+    var receivedOp=received(o);
+    var paymentText=receivedOp?'SIM — RECEBIMENTO OPERACIONAL':financePaid(o)?'QUITADO INFORMADO NA OS':'SEM RECEBIMENTO OPERACIONAL';
+    var exec=o.execucaoItens&&typeof o.execucaoItens==='object'?Object.values(o.execucaoItens):[];
+    var itemText=exec.length?progress(o)+' itens executados':'Sem controle de itens registrado';
+    var apprText=ap?'SIM — REGISTRO DE APROVAÇÃO':(['Aprovado','Andamento','Pronto','Entregue'].includes(s)?'ETAPA APROVADA; DETALHE NÃO ENCONTRADO':'SEM REGISTRO');
+    var html='<div class="sheetgrid">'+
+      detail('STATUS ATUAL',stageText(s))+
+      detail('CLIENTE',c.nome||o.cliente||'Não informado')+
+      detail('PRISMA',o.prisma||o.numeroPrisma||'Sem prisma')+
+      detail('ÚLTIMA MOVIMENTAÇÃO',date(o.updatedAt||o.createdAt||o.data))+
+      detail('APROVAÇÃO',apprText)+
+      detail('SERVIÇO',ready?'PRONTO / FINALIZADO':itemText)+
+      detail('RECEBIMENTO',paymentText)+
+      detail('QUITAÇÃO INFORMADA',financePaid(o)?'SIM':'NÃO CONFIRMADA')+
+      detail('TOTAL DA OS',o.total!=null?money(o.total):'Não informado')+
+      detail('VALOR APROVADO',o.totalAprovado!=null?money(o.totalAprovado):'Não informado')+
+      detail('VALOR RECEBIDO OPERACIONAL',o.valorRecebidoOperacional!=null?money(o.valorRecebidoOperacional):'Não informado')+
+      detail('DATA DE ENTRADA',date(o.createdAt||o.data))+
+      '</div>';
+    if(o.desc||o.relato||o.defeito){html+='<h3>Resumo do veículo</h3><div class="notes">'+safe(o.desc||o.relato||o.defeito)+'</div>';}
+    if(exec.length){html+='<h3>Execução dos serviços</h3><div class="notes">'+safe(itemText)+'</div>';}
+    var audit=Array.isArray(o.timeline)?o.timeline.slice():[];
+    audit.sort(function(a,b){return time(b.dt||b.data||b.ts)-time(a.dt||a.data||a.ts);});
+    if(audit.length){html+='<h3>Últimas movimentações</h3><ul class="events">'+audit.slice(0,5).map(function(x){return '<li>'+safe(x.acao||x.descricao||x.mensagem||x.tipo||'Movimentação')+'<small>'+safe(x.user||x.usuario||'Equipe')+' · '+safe(date(x.dt||x.data||x.ts))+'</small></li>';}).join('')+'</ul>';}
+    html+='<p class="sub">A marcação “Recebido” é operacional e não comprova conciliação financeira. “Quitado informado” é um dado da OS, não uma verificação bancária.</p>';
+    $('detailBody').innerHTML=html;$('overlay').hidden=false;document.body.style.overflow='hidden';$('closeBtn').focus();
+  }
+  function closeDetail(){$('overlay').hidden=true;document.body.style.overflow='';state.selected=null;}
+  $('closeBtn').addEventListener('click',closeDetail);
+  $('overlay').addEventListener('click',function(ev){if(ev.target===$('overlay'))closeDetail();});
+  document.addEventListener('keydown',function(ev){if(ev.key==='Escape'&&!$('overlay').hidden)closeDetail();});
+  document.querySelectorAll('[data-filter]').forEach(function(b){b.addEventListener('click',function(){setFilter(b.dataset.filter);});});
+  $('allBtn').addEventListener('click',function(){setFilter('all');});
+  $('search').addEventListener('input',render);
+  function error(message){
+    state.ready=true;$('cards').replaceChildren();
+    var div=document.createElement('div');div.className='empty';div.textContent=message;$('cards').append(div);
+    setLive('Acesso indisponível',false);
+  }
+  if(!tenant || tenant==='MASTER_ADMIN' || rolesLeitura.indexOf(role)<0){
+    error('Entre com sua sessão autorizada da oficina para acompanhar as ordens de serviço.');
+    var a=document.createElement('a');a.className='signlink';a.href='index.html';a.textContent='ABRIR LOGIN DA OFICINA';$('cards').append(a);return;
+  }
+  $('oficina').textContent=(session.getItem('j_tnome')||'S.O.S. Valêncio')+' • Somente leitura';
+  try{
+    var db=window.initFirebase();
+    if(!db)throw new Error('Firebase indisponível.');
+    // Apenas três leituras por tenant: OS ao vivo; clientes e veículos consultados uma vez.
+    db.collection('ordens_servico').where('tenantId','==',tenant).onSnapshot(function(snapshot){
+      state.os=snapshot.docs.map(function(d){return Object.assign({id:d.id},d.data());});
+      state.ready=true;setLive('AO VIVO',true);render();if(state.selected)openDetail(state.selected);
+    },function(err){console.warn('[fabio/os]',err.code||err.message);error('Não foi possível consultar as OS. Verifique a sessão e as permissões do Firebase.');});
+    [['clientes','clientes'],['veiculos','veiculos']].forEach(function(pair){
+      db.collection(pair[0]).where('tenantId','==',tenant).get().then(function(snap){
+        state[pair[1]]=new Map(snap.docs.map(function(d){return [d.id,Object.assign({id:d.id},d.data())];}));
+        render();if(state.selected)openDetail(state.selected);
+      }).catch(function(err){console.warn('[fabio/'+pair[0]+']',err.code||err.message);});
+    });
+  }catch(ex){console.warn('[fabio/bootstrap]',ex.message);error('Falha ao abrir os dados. Use o login oficial da oficina e tente novamente.');}
+})();
+</script>
+</body>
+</html>
