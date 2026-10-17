@@ -101,6 +101,7 @@ button:hover{border-color:#68beed}button.active{background:#126c92;border-color:
 #fabioConsulta .consulta-foto time{display:block;font-size:10px;color:#4b5969}
 #fabioConsulta .consulta-assinaturas{display:grid;grid-template-columns:1fr 1fr;gap:25px;margin-top:38px;text-align:center;font-size:11px}
 #fabioConsulta .consulta-assinaturas>div{border-top:1px solid #4e5b6b;padding-top:7px}
+#fabioConsulta .consulta-assinatura-img{max-width:100%;max-height:75px;object-fit:contain;display:block;margin:-70px auto 10px}
 #fabioConsulta .consulta-rodape{border-top:1px solid #d5dce5;margin-top:18px;padding-top:9px;font-size:10px;color:#536072}
 .os{cursor:pointer;transition:border-color .15s,background .15s}
 .os:hover,.os:focus-visible{border-color:#67d5ff;background:#183149}
@@ -584,7 +585,13 @@ function montar(id){
   });
  }else{elem('p','consulta-vazio','Nenhuma foto anexada diretamente à O.S.',secFotos);}
  const ass=elem('div','consulta-assinaturas',null,folha);
- elem('div','',first(oficina.nomeFantasia,oficina.razaoSocial,'RESPONSÁVEL TÉCNICO')+' / RESPONSÁVEL TÉCNICO',ass);
+ const responsavel=elem('div','',null,ass);
+ const assinatura=first(o.assinaturaResponsavel,o.assinaturaOS,o.assinaturaUsada,oficina.assinatura);
+ const urlAssinatura=typeof assinatura==='object'&&assinatura!==null?first(assinatura.url,assinatura.cloudUrl,assinatura.assinaturaUrl,assinatura.urlAssinatura):'';
+ if(/^(https?:\/\/|data:image\/(png|jpeg|webp);base64,)/i.test(txt(urlAssinatura))){
+  const img=elem('img','consulta-assinatura-img',null,responsavel);img.src=urlAssinatura;img.alt='Assinatura registrada na O.S.';
+ }
+ elem('div','',first(assinatura&&assinatura.nomeResponsavel,assinatura&&assinatura.nome,oficina.nomeFantasia,oficina.razaoSocial,'RESPONSÁVEL TÉCNICO')+' / RESPONSÁVEL TÉCNICO',responsavel);
  elem('div','',first(c.nome,o.cliente,'CLIENTE')+' / ASSINATURA DO CLIENTE',ass);
  elem('div','consulta-rodape','Consulta somente leitura • S.O.S. VALÊNCIO • Powered by thIAguinho Soluções Digitais',folha);
 }
