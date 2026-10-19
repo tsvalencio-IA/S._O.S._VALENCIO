@@ -600,7 +600,7 @@ body.equipe-page .overlay.open{display:flex!important;}
     <button class="modal-close" onclick="fecharModal('modalOS')">✕</button>
   </div>
   <div id="bannerHistVeiculo" style="display:none;padding:10px 20px;background:rgba(255,184,0,0.06);border-bottom:1px solid rgba(255,184,0,0.2);">
-    <div style="font-family:var(--fm);font-size:0.58rem;color:var(--warn);letter-spacing:1px;margin-bottom:5px;">⚠ HISTÓRICO DESTE VEÍCULO NA OFICINA</div>
+    <div style="font-family:var(--fm);font-size:0.58rem;color:var(--warn);letter-spacing:1px;margin-bottom:5px;">HISTÓRICO DE O.S. ANTERIORES — SOMENTE CONSULTA</div>
     <div id="bannerHistContent" style="font-size:0.78rem;color:var(--text);line-height:1.6;"></div>
   </div>
   <div class="modal-tabs">
@@ -2074,10 +2074,10 @@ function _atualizarStatusVisualEquipe(status){
 function _escapeEquipe(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function renderObservacoesEquipeOS(os){
   const box=$('osObsEquipeHistorico'); if(!box)return;
-  const lista=Array.isArray(os?.observacoesEquipe)?os.observacoesEquipe.slice(-5).reverse():[];
+  const lista=Array.isArray(os?.observacoesEquipe)?os.observacoesEquipe.slice(-12).reverse():[];
   if(!lista.length){box.style.display='none';box.innerHTML='';return;}
   box.style.display='block';
-  box.innerHTML='<b style="color:var(--warn);">ÚLTIMAS OBSERVAÇÕES</b><br>'+lista.map(o=>`${_escapeEquipe(new Date(o.dt||o.data||Date.now()).toLocaleString('pt-BR'))} · <b>${_escapeEquipe(o.usuario||o.user||'Equipe')}</b> — ${_escapeEquipe(_equipeValoresOSLiberadosPorServidor ? (o.texto||o.obs||'') : textoEquipeSemValores(o.texto||o.obs||''))}`).join('<br>');
+  box.innerHTML='<b style="color:var(--warn);">AVISOS INTERNOS — EQUIPE / JARVIS</b><br>'+lista.map(o=>`${_escapeEquipe(new Date(o.dt||o.data||Date.now()).toLocaleString('pt-BR'))} · <b>${_escapeEquipe(o.usuario||o.user||'Equipe')}</b> — ${_escapeEquipe(_equipeValoresOSLiberadosPorServidor ? (o.texto||o.obs||'') : textoEquipeSemValores(o.texto||o.obs||''))}`).join('<br>');
 }
 async function auditarEquipeOperacao(modulo,acao,extra={}){
   try{await db.collection('lixeira_auditoria').add({tenantId:J.tid,modulo,acao,usuario:J.nome||'Equipe',usuarioId:J.fid||'',perfil:J.role||'equipe',ts:new Date().toISOString(),...extra});}catch(e){console.warn('[Equipe] auditoria:',e?.message||e);}
@@ -2832,7 +2832,7 @@ function abrirGaleriaFotosEquipe(indiceMedia){
   const ov=document.createElement('div');ov.id='equipeGaleriaFotosOverlay';ov.setAttribute('role','dialog');ov.setAttribute('aria-modal','true');
   ov.style.cssText='position:fixed;inset:0;z-index:10050;background:rgba(0,0,0,.94);display:flex;align-items:center;justify-content:center;padding:12px;';
   ov.innerHTML=`<div style="width:min(1050px,100%);height:min(90vh,820px);display:flex;flex-direction:column;background:#090d12;border:1px solid rgba(0,212,255,.28);border-radius:8px;overflow:hidden;">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border-bottom:1px solid rgba(255,255,255,.1);"><strong data-eq-galeria-count style="font-family:var(--fm);color:var(--cyan);font-size:.72rem;">Foto</strong><div style="display:flex;gap:8px;"><button type="button" class="btn-ghost" onclick="baixarFotoGaleriaEquipe()">BAIXAR FOTO</button><button type="button" class="btn-ghost" onclick="fecharGaleriaFotosEquipe()">✕</button></div></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border-bottom:1px solid rgba(255,255,255,.1);"><strong data-eq-galeria-count style="font-family:var(--fm);color:var(--cyan);font-size:.72rem;">Foto</strong><div style="display:flex;gap:8px;"><button type="button" class="btn-ghost" onclick="baixarFotoGaleriaEquipe()">BAIXAR FOTO</button><button type="button" class="btn-ghost" aria-label="Fechar galeria" onclick="fecharGaleriaFotosEquipe()" style="position:fixed;top:max(10px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right));z-index:10070;background:#b52b36;color:#fff;border:2px solid #fff;border-radius:9px;min-height:48px;min-width:108px;padding:10px;font-size:14px;font-weight:900;box-shadow:0 4px 18px #000b;">✕ FECHAR</button></div></div>
     <div data-eq-area style="position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:pan-y;"><button data-eq-nav type="button" onclick="navegarGaleriaFotosEquipe(-1)" style="position:absolute;left:8px;z-index:2;width:46px;height:62px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);color:#fff;font-size:30px;border-radius:6px;">‹</button><img data-eq-galeria-img style="max-width:100%;max-height:100%;object-fit:contain;user-select:none;-webkit-user-drag:none;"><button data-eq-nav type="button" onclick="navegarGaleriaFotosEquipe(1)" style="position:absolute;right:8px;z-index:2;width:46px;height:62px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);color:#fff;font-size:30px;border-radius:6px;">›</button></div></div>`;
   ov.addEventListener('click',e=>{if(e.target===ov)fecharGaleriaFotosEquipe();});
   const area=ov.querySelector('[data-eq-area]'),img=ov.querySelector('[data-eq-galeria-img]');
@@ -3009,46 +3009,87 @@ $('chatInput')?.addEventListener('keydown',e=>{
 // ═══════════════════════════════════════════════════════════════
 // PLACA + HISTÓRICO DO VEÍCULO NO CABEÇALHO DA O.S.
 // ═══════════════════════════════════════════════════════════════
-function atualizarHeaderOS(veiculoId, clienteId) {
-  const v = dbVeiculos.find(x => x.id === veiculoId);
-  const c = dbClientes.find(x => x.id === clienteId);
-  const placa = v?.placa || '';
-  const modelo = v?.modelo || '';
-  const nomeCliente = c?.nome || '';
 
-  const placaEl = document.getElementById('osPlacanHeader');
-  const cliEl   = document.getElementById('osClienteHeader');
-  if (placaEl) {
-    if (placa) { placaEl.innerText = placa; placaEl.style.display = ''; }
-    else placaEl.style.display = 'none';
-  }
-  if (cliEl) cliEl.innerText = nomeCliente ? `${nomeCliente}${modelo ? ' · ' + modelo : ''}` : modelo;
-
-  // Histórico
-  const banner  = document.getElementById('bannerHistVeiculo');
-  const content = document.getElementById('bannerHistContent');
-  if (!banner || !content || !veiculoId) { if(banner) banner.style.display='none'; return; }
-
-  const osVeiculo = dbOS
-    .filter(o => o.veiculoId === veiculoId && o.id !== $v('osId'))
-    .sort((a,b) => new Date(b.createdAt||b.updatedAt||0) - new Date(a.createdAt||a.updatedAt||0))
-    .slice(0, 4);
-
-  if (!osVeiculo.length) { banner.style.display = 'none'; return; }
-
-  content.innerHTML = osVeiculo.map(o => {
-    const data = o.data ? new Date(o.data + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
-    const km   = o.km   ? ` · ${o.km} km` : '';
-    const desc = (o.desc || o.relato || 'S/desc').substring(0, 70);
-    const pecasStr = o.pecas?.filter(p=>p.desc).map(p=>p.desc).slice(0,3).join(', ');
-    const servStr  = o.servicos?.filter(s=>s.desc).map(s=>s.desc).slice(0,3).join(', ');
-    const detalhe  = pecasStr || servStr || '';
-    return `<div style="padding:4px 0;border-bottom:1px solid rgba(255,184,0,0.08);font-size:0.76rem;">
-      <strong style="color:var(--warn);">${data}${km}</strong> — ${desc}
-      ${detalhe ? `<br><span style="color:var(--muted2);font-size:0.7rem;">↳ ${detalhe}</span>` : ''}
-    </div>`;
-  }).join('');
-  banner.style.display = 'block';
+let _eqHistReq=0;
+const _eqHistOS=new Map();
+function eqHistTxt(v){
+ return textoEquipeSemValores(String(v??''))
+  .replace(/\b(?:código|codigo|ref\.?|sku)\s*[:#-]?\s*[A-Z0-9._-]+/gi,'[código oculto]')
+  .replace(/\b[A-Z]{0,4}\d{5,}[A-Z0-9-]*\b/gi,'[código oculto]').trim();
+}
+function eqHistDate(o){
+ const v=o.data||o.createdAt||o.updatedAt;
+ if(!v)return 'Data não informada';
+ const d=typeof v?.toDate==='function'?v.toDate():new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(v))?v+'T12:00:00':v);
+ return Number.isNaN(d.getTime())?'Data não informada':d.toLocaleDateString('pt-BR');
+}
+function fecharHistoricoOSAnteriorEquipe(){document.getElementById('equipeHistoricoAnteriorOverlay')?.remove();}
+function abrirHistoricoOSAnteriorEquipe(id){
+ const o=_eqHistOS.get(String(id));if(!o||String(o.tenantId||'')!==String(J.tid))return;
+ fecharHistoricoOSAnteriorEquipe();
+ const overlay=document.createElement('div');overlay.id='equipeHistoricoAnteriorOverlay';
+ overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');
+ overlay.style.cssText='position:fixed;inset:0;z-index:10060;background:rgba(0,0,0,.93);display:flex;align-items:center;justify-content:center;padding:max(8px,env(safe-area-inset-top)) 8px max(8px,env(safe-area-inset-bottom));';
+ const panel=document.createElement('div');panel.style.cssText='background:var(--surf2);color:var(--text);width:min(720px,100%);max-height:95%;min-height:0;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--border2);border-radius:8px;';
+ const bar=document.createElement('div');bar.style.cssText='padding:12px;display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border2);';
+ const title=document.createElement('strong');title.textContent='O.S. ANTERIOR • '+eqHistDate(o)+' • '+eqHistTxt(o.status);
+ title.style.cssText='flex:1;min-width:0;overflow-wrap:anywhere;';
+ const close=document.createElement('button');close.className='btn-outline';close.type='button';close.textContent='✕ FECHAR';close.style.minHeight='44px';
+ close.onclick=fecharHistoricoOSAnteriorEquipe;bar.append(title,close);panel.appendChild(bar);
+ const body=document.createElement('div');body.style.cssText='overflow:auto;min-height:0;padding:14px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;font-size:.82rem;';
+ const intro=document.createElement('small');intro.textContent='Histórico somente leitura. Valores financeiros e códigos não são exibidos.';intro.style.color='var(--muted2)';body.appendChild(intro);
+ function line(name,val){
+  const b=document.createElement('div');b.style.marginTop='14px';
+  const h=document.createElement('strong');h.textContent=name;h.style.color='var(--cyan)';
+  const p=document.createElement('div');p.textContent=eqHistTxt(val)||'Não registrado';
+  b.append(h,p);body.appendChild(b);
+ }
+ line('Queixa',o.desc||o.relato||o.descricao);
+ line('Diagnóstico',o.diagnostico);
+ const exec=o.execucaoItens||{};
+ line('Serviços registrados',(Array.isArray(o.servicos)?o.servicos:[]).map((x,i)=>'• '+eqHistTxt(x.desc||x.descricao||'Serviço')+(String(exec['servico-'+i]?.status||'').toLowerCase()==='executado'?' — execução confirmada':' — execução não confirmada')).join('\n'));
+ line('Peças registradas',(Array.isArray(o.pecas)?o.pecas:[]).filter(x=>!x.pecaReal&&!x.interno&&x.tipoPeca!=='real').map((x,i)=>'• '+eqHistTxt(x.desc||x.descricao||'Peça')+(['executado','trocada'].includes(String(exec['peca-'+i]?.status||'').toLowerCase())?' — aplicação confirmada':' — aplicação não confirmada')).join('\n'));
+ panel.appendChild(body);overlay.appendChild(panel);document.body.appendChild(overlay);
+ overlay.onclick=e=>{if(e.target===overlay)fecharHistoricoOSAnteriorEquipe();};
+}
+function renderHistoricoOSCardsEquipe(lista,aviso=''){
+ const area=document.getElementById('bannerHistVeiculo'),box=document.getElementById('bannerHistContent');
+ if(!area||!box)return;
+ box.replaceChildren();_eqHistOS.clear();
+ lista.filter(o=>o?.id&&String(o.tenantId||J.tid)===String(J.tid))
+ .sort((a,b)=>String(b.createdAt||b.data||'').localeCompare(String(a.createdAt||a.data||'')))
+ .forEach(o=>{
+  _eqHistOS.set(String(o.id),o);
+  const card=document.createElement('button');card.type='button';
+  card.style.cssText='width:100%;display:block;text-align:left;min-height:65px;margin:7px 0;padding:12px;border:1px solid rgba(255,184,0,.35);border-radius:7px;background:var(--surf2);color:var(--text);white-space:normal;overflow-wrap:anywhere;cursor:pointer;';
+  const h=document.createElement('strong');h.style.color='var(--warn)';h.textContent=eqHistDate(o)+' • '+eqHistTxt(o.status||'O.S.');
+  const p=document.createElement('div');p.textContent=eqHistTxt(o.desc||o.relato||(o.servicos||[])[0]?.desc||'Ver serviços e diagnóstico');p.style.marginTop='5px';
+  const d=document.createElement('small');d.style.cssText='display:block;color:var(--cyan);margin-top:7px';d.textContent='ABRIR OS ANTERIOR →';
+  card.append(h,p,d);card.onclick=()=>abrirHistoricoOSAnteriorEquipe(o.id);box.appendChild(card);
+ });
+ if(aviso){const p=document.createElement('p');p.textContent=aviso;p.style.color='var(--warn)';box.appendChild(p);}
+ area.style.display=box.childElementCount?'block':'none';box.style.cssText='max-height:240px;overflow-y:auto;overscroll-behavior:contain;';
+}
+function atualizarHeaderOS(veiculoId,clienteId){
+ const v=dbVeiculos.find(x=>x.id===veiculoId),c=dbClientes.find(x=>x.id===clienteId);
+ const placa=document.getElementById('osPlacanHeader'),cliente=document.getElementById('osClienteHeader');
+ if(placa){placa.textContent=v?.placa||'';placa.style.display=v?.placa?'':'none';}
+ if(cliente)cliente.textContent=c?.nome?c.nome+(v?.modelo?' · '+v.modelo:''):v?.modelo||'';
+ const req=++_eqHistReq;
+ if(!veiculoId){renderHistoricoOSCardsEquipe([]);return;}
+ const atual=String(document.getElementById('osId')?.value||'');
+ const local=(Array.isArray(dbOS)?dbOS:[]).filter(o=>String(o.veiculoId)===String(veiculoId)&&String(o.id)!==atual);
+ renderHistoricoOSCardsEquipe(local);
+ db.collection('ordens_servico').where('tenantId','==',J.tid).where('veiculoId','==',veiculoId).get().then(snap=>{
+  if(req!==_eqHistReq)return;
+  const map=new Map(local.map(o=>[String(o.id),o]));
+  snap.docs.forEach(d=>{if(d.id!==atual&&String(d.data().tenantId)===String(J.tid))map.set(d.id,{id:d.id,...d.data()});});
+  renderHistoricoOSCardsEquipe([...map.values()]);
+ }).catch(err=>{
+  if(req!==_eqHistReq)return;
+  console.warn('[Equipe histórico veículo]',err?.message||err);
+  renderHistoricoOSCardsEquipe(local,'Histórico completo indisponível. Mostrando apenas OS já carregadas.');
+ });
 }
 
 document.addEventListener('change', function(e) {
