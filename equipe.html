@@ -1740,15 +1740,12 @@ function _renderPreviewOS(){
     const mediaEl = isVideo ? `<video src="${url}" muted></video>` : `<img src="${url}" alt="prévia">`;
     return `<div class="media-item" data-idx="${i}">
       ${mediaEl}
-      <button class="media-del" type="button" onclick="removerFotoPreview(${i})" title="Remover">✕</button>
     </div>`;
   }).join('');
 }
 
 function removerFotoPreview(idx){
-  if(idx<0 || idx>=_batchOSFiles.length) return;
-  _batchOSFiles.splice(idx,1);
-  _renderPreviewOS();
+  toast('Equipe: não é permitido excluir anexos. Solicite ao gestor no JARVIS.','warn');
 }
 
 function limparPreviewOS(){
@@ -2616,7 +2613,14 @@ async function salvarOS(){
     timeline:tl,updatedAt:new Date().toISOString()
   };
 
-  auditarMidiasIndividualEquipe(p.timeline, p.media, osBaseEquipe.media || osBaseEquipe.fotos || []);
+  // Ao salvar pelo Equipe, antigos anexos não são excluídos nem auditados como removidos.
+  const mediaAntesEquipe=Array.isArray(osBaseEquipe.media)?osBaseEquipe.media:(Array.isArray(osBaseEquipe.fotos)?osBaseEquipe.fotos:[]);
+  const urlsEquipe=new Set(p.media.map(m=>typeof m==='string'?m:(m?.url||m?.secure_url||'')).filter(Boolean));
+  for(const m of mediaAntesEquipe){
+    const url=typeof m==='string'?m:(m?.url||m?.secure_url||'');
+    if(url&&!urlsEquipe.has(url)){p.media.push(m);urlsEquipe.add(url);}
+  }
+  auditarMidiasIndividualEquipe(p.timeline,p.media,mediaAntesEquipe);
 
   const osAntigaAprovacao = id ? (dbOS.find(x => x.id === id) || {}) : {};
   const UOS = window.JOS || window.JarvisOSUtils || {};
@@ -2629,6 +2633,8 @@ async function salvarOS(){
     p.total = osAntigaAprovacao.total ?? p.total;
     p.maoObra = osAntigaAprovacao.maoObra ?? p.maoObra;
     if (moverTriagemConfirmado && isTriagemEquipe(p.status)) {
+      toast('Equipe não pode arquivar ou excluir aprovação. Solicite ao gestor no JARVIS.','warn');
+      return;
       const hist = Array.isArray(osAntigaAprovacao.aprovacaoHistorico) ? osAntigaAprovacao.aprovacaoHistorico.slice() : [];
       hist.push({
         aprovadoEm: osAntigaAprovacao.aprovacao?.aprovadoEm || osAntigaAprovacao.updatedAt || new Date().toISOString(),
@@ -2731,34 +2737,33 @@ async function salvarOS(){
           throw new Error('O gestor atualizou o status/aprovação desta O.S. Reabra a ficha para editar sem sobrescrever dados recentes.');
         }
         const mudanca={...p};
-        // Preserva itens antigos e todos os seus campos financeiros.
+        // EQUIPE SOMENTE ACRESCENTA: o Firestore é a fonte de verdade.
+        // Nenhum item existente pode ser apagado, substituído ou ter seus
+        // dados anteriores alterados pelo salvamento de uma ficha do mecânico.
         for(const campo of ['pecas','servicos']){
           const antigos=Array.isArray(atual[campo])?atual[campo]:[];
+          const base=Array.isArray(osBaseEquipe[campo])?osBaseEquipe[campo]:[];
           const novos=Array.isArray(mudanca[campo])?mudanca[campo]:[];
-          if(novos.length<antigos.length)throw new Error('Equipe não pode excluir peças ou serviços.');
-          for(let i=0;i<antigos.length;i++){
-            const ant=antigos[i]||{},novo=novos[i];
-            if(!novo || (campo==='pecas'&&String(novo.estoqueId||'')!==String(ant.estoqueId||'')))
-              throw new Error('Equipe não pode remover ou substituir peça existente.');
-            const protegidos=/^(valor|venda|custo|preco|total|subtotal|desconto|descIndividual|descGeral|margem|lucro|rateiosComissao|comissao)/i;
-            const copiado={...novo};
-            for(const k of Object.keys(copiado))if(protegidos.test(k)&&!(k in ant))delete copiado[k];
-            for(const [k,v] of Object.entries(ant))if(protegidos.test(k))copiado[k]=v;
-            novos[i]=copiado;
-          }
-          mudanca[campo]=novos;
+          const acrescimos=novos.slice(base.length).filter(item=>item&&typeof item==='object');
+          mudanca[campo]=[...antigos,...acrescimos];
         }
-        // Preserva mídias que outros usuários anexaram depois da abertura.
-        // Uma remoção intencional de item já existente no formulário continua válida.
-        const antigasMedia=new Set((Array.isArray(osBaseEquipe.media)?osBaseEquipe.media:[]).map(m=>typeof m==='string'?m:m?.url).filter(Boolean));
-        const novasMedia=new Set((Array.isArray(mudanca.media)?mudanca.media:[]).map(m=>typeof m==='string'?m:m?.url).filter(Boolean));
-        for(const midia of (Array.isArray(atual.media)?atual.media:[])){
-          const url=typeof midia==='string'?midia:midia?.url;
-          if(url&&!antigasMedia.has(url)&&!novasMedia.has(url)){
-            mudanca.media=Array.isArray(mudanca.media)?mudanca.media:[];
-            mudanca.media.push(midia);
-            novasMedia.add(url);
-          }
+        // Mantém todas as mídias já persistidas, inclusive as adicionadas
+        // por outros usuários enquanto o mecânico estava com a OS aberta.
+        const mediaServidor=Array.isArray(atual.media)?atual.media:(Array.isArray(atual.fotos)?atual.fotos:[]);
+        const mediaFormulario=Array.isArray(mudanca.media)?mudanca.media:[];
+        const urlMedia=m=>typeof m==='string'?m:(m?.url||m?.secure_url||'');
+        const urlsExistentes=new Set(mediaServidor.map(urlMedia).filter(Boolean));
+        const anexosNovos=mediaFormulario.filter(m=>{
+          const url=urlMedia(m);
+          if(!url||urlsExistentes.has(url))return false;
+          urlsExistentes.add(url);
+          return true;
+        });
+        mudanca.media=[...mediaServidor,...anexosNovos];
+        // Nunca limpar texto ou observações existentes por campo vazio.
+        for(const campo of ['desc','diagnostico','km','prisma','numeroPrisma','chkObs']){
+          if((mudanca[campo]===null||mudanca[campo]===undefined||String(mudanca[campo]).trim()==='')&&atual[campo])
+            mudanca[campo]=atual[campo];
         }
         mudanca.total=atual.total ?? mudanca.total;
         mudanca.maoObra=atual.maoObra ?? mudanca.maoObra;
@@ -2962,13 +2967,11 @@ function renderMediaGrid(){
     return `<div class="media-item">
       ${isVideo?`<video src="${url}" controls playsinline preload="metadata"></video>`:`<button type="button" class="eq-media-open" onclick="abrirGaleriaFotosEquipe(${i})" aria-label="Ampliar foto ${i+1} da O.S."><img src="${url}" loading="lazy" referrerpolicy="no-referrer" alt="Foto ${i+1} da O.S."></button>`}
       <div class="eq-media-caption">${m?.uploadedAt?`Envio: ${escMediaEquipe(dataHoraEvidenciaEquipe(m.uploadedAt))}`:'Foto da O.S.'}${m?.importedAt?` · Na O.S.: ${escMediaEquipe(dataHoraEvidenciaEquipe(m.importedAt))}`:''}</div>
-      <button type="button" class="media-del" onclick="event.stopPropagation();rmMedia(${i})">✕</button>
     </div>`;
   }).join('');
 }
 function rmMedia(idx){
-  const media=JSON.parse($('mediaArray').value||'[]');
-  media.splice(idx,1); $('mediaArray').value=JSON.stringify(media); renderMediaGrid();
+  toast('Equipe: fotos e vídeos da OS não podem ser excluídos. Solicite ao gestor.','warn');
 }
 function renderTimeline(){
   const tl=JSON.parse($('tlData')?.value||'[]');
