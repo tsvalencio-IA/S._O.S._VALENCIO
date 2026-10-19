@@ -4974,6 +4974,7 @@ window.salvarOS = async function() {
   const statusPedeAprovacao = ['Aprovado', 'Andamento'].includes(payload.status);
   const reabrindoParaEdicaoOS = !!(osId && statusReabreEdicaoOrcamentoOS(payload.status) &&
     !statusReabreEdicaoOrcamentoOS(oldOSParaAprovacao.status) &&
+    normalizarStatusFluxoOS(oldOSParaAprovacao.status)!=='aguardando' &&
     osTemAprovacaoAtivaOS(oldOSParaAprovacao));
   let registroReaberturaAprovacaoOS = null;
 
