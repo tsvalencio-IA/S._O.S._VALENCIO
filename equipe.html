@@ -2712,7 +2712,7 @@ async function salvarOS(){
         // dados anteriores alterados pelo salvamento de uma ficha do mecânico.
         for(const campo of ['pecas','servicos']){
           const antigos=Array.isArray(atual[campo])?atual[campo]:[];
-          const base=Array.isArray(osBaseEquipe[campo])?osBaseEquipe[campo]:[];
+          const base=Array.isArray(osAtualPreservar[campo])?osAtualPreservar[campo]:[];
           const novos=Array.isArray(mudanca[campo])?mudanca[campo]:[];
           const acrescimos=novos.slice(base.length).filter(item=>item&&typeof item==='object');
           mudanca[campo]=[...antigos,...acrescimos];
