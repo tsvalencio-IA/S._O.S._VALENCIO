@@ -7505,8 +7505,18 @@ window.imprimirRelatorioPecasReaisOS = async function() {
     win.document.close();
   } catch (_) {}
 
-  await garantirDadosKardexRelatorioPecasReaisOS();
+  // Evita deixar uma janela vazia se a atualização do Kardex estiver lenta.
+  // O relatório pode usar os dados já carregados, conforme o comportamento de fallback existente.
+  try {
+    await Promise.race([
+      garantirDadosKardexRelatorioPecasReaisOS(),
+      new Promise(resolve => setTimeout(resolve, 8000))
+    ]);
+  } catch (e) {
+    console.warn('[RELATÓRIO REAL] Rastreio fiscal indisponível; usando dados carregados.', e);
+  }
 
+  try {
   const osId = document.getElementById('osId')?.value || '';
   const osAtual = (window.J?.os || []).find(o => String(o.id) === String(osId)) || {};
   const clienteId = document.getElementById('osCliente')?.value || osAtual.clienteId || '';
@@ -7516,8 +7526,11 @@ window.imprimirRelatorioPecasReaisOS = async function() {
   const pecasBase = pecasReaisAtuaisParaRelatorioOS(osAtual);
   const servicosReais = servicosReaisAtuaisParaRelatorioOS(osAtual);
   if (!pecasBase.length && !servicosReais.length) {
-    try { win.close?.(); } catch (_) {}
-    window.toast?.('Esta O.S. não possui peças ou serviços reais registrados para imprimir.', 'warn');
+    const aviso='Esta O.S. ainda não possui peças ou serviços reais registrados. Verifique os lançamentos na área restrita *177.';
+    win.document.open();
+    win.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório real — sem registros</title></head><body style="font:16px/1.5 Arial;padding:28px"><h1>Relatório de peças reais</h1><p>'+aviso+'</p><p>Retorne à O.S. para conferir os registros.</p></body></html>');
+    win.document.close();
+    window.toast?.(aviso,'warn');
     return;
   }
   // NF vinculada é compra, não prova instalação. Linhas antigas incompletas
@@ -7543,10 +7556,10 @@ window.imprimirRelatorioPecasReaisOS = async function() {
   });
   const pecas = instaladasBase.map(p => enriquecerPecaRelatorioEstoqueOS(p, osAtual));
   const pecasConferencia = pendentesBase.map(p => enriquecerPecaRelatorioEstoqueOS(p, osAtual));
+  // Se há registros reais ainda não confirmados, mostra-os em área de
+  // CONFERÊNCIA (nunca como itens instalados). Não fecha uma aba em branco.
   if (!pecas.length && !servicosReais.length) {
-    try { win.close?.(); } catch (_) {}
-    window.toast?.('Sem instalacoes confirmadas. Registros pendentes continuam no historico *177, mas nao integram o relatorio de instaladas.', 'warn');
-    return;
+    window.toast?.('Nenhuma instalação confirmada. O relatório mostrará os itens pendentes para conferência.','warn');
   }
 
   const oficina = window.J?.oficina || {};
@@ -7674,7 +7687,7 @@ window.imprimirRelatorioPecasReaisOS = async function() {
     <div class="box wide"><b>Local da troca</b>${escOS([nomeOficina, enderecoOficina].filter(Boolean).join(' — '))}</div>
   </section>
   ${pecas.length ? `<h2 style="font-size:12px;margin:10px 0 5px;">PEÇAS REAIS INSTALADAS (${pecas.length}) — CONFIRMADAS/DOCUMENTADAS</h2><div class="table-wrap"><table><colgroup><col style="width:3%"><col style="width:9%"><col style="width:20%"><col style="width:4%"><col style="width:12%"><col style="width:9%"><col style="width:8%"><col style="width:16%"><col style="width:9%"><col style="width:10%"></colgroup><thead><tr><th>#</th><th>Código real</th><th>Descrição real instalada</th><th>Qtd.</th><th>Onde comprou / fornecedor</th><th>Nota fiscal / rastreio</th><th>Data compra / entrada</th><th>Origem / estoque</th><th>Custo unit.</th><th>Custo total</th></tr></thead><tbody>${linhas}</tbody><tfoot><tr><td colspan="10" class="total-geral"><b>CUSTO REAL TOTAL DAS PEÇAS</b><b>${moedaLocal(total)}</b></td></tr></tfoot></table></div>` : ''}
-  <!-- Itens sem instalacao confirmada permanecem no historico, nao no relatorio. -->
+  ${pecasConferencia.length ? `<h2 style="font-size:12px;margin:12px 0 5px;">PEÇAS EM CONFERÊNCIA — NÃO CONFIRMADAS COMO INSTALADAS (${pecasConferencia.length})</h2><p style="font-size:10px;color:#8a2b11">Registros mantidos separados: não entram no custo das peças realmente instaladas até confirmação na O.S.</p><div class="table-wrap"><table><thead><tr><th>#</th><th>Código</th><th>Descrição</th><th>Qtd.</th><th>Motivo</th><th>Origem</th><th>NF</th><th>Fornecedor</th><th>Situação</th><th>Custo informado</th></tr></thead><tbody>${linhasPecasConferencia}</tbody></table></div>` : ''}
   ${servicosReais.length ? `<h2 style="font-size:12px;margin:12px 0 5px;">SERVIÇOS TERCEIRIZADOS REAIS</h2><div class="table-wrap"><table><colgroup><col style="width:4%"><col style="width:31%"><col style="width:23%"><col style="width:16%"><col style="width:12%"><col style="width:14%"></colgroup><thead><tr><th>#</th><th>Serviço terceirizado</th><th>Prestador / fornecedor</th><th>Nota / documento</th><th>Data</th><th>Custo real</th></tr></thead><tbody>${linhasServicosReais}</tbody><tfoot><tr><td colspan="6" class="total-geral"><b>CUSTO REAL TOTAL DOS SERVIÇOS</b><b>${moedaLocal(totalServicosReais)}</b></td></tr></tfoot></table></div>` : ''}
   <div style="display:flex;justify-content:flex-end;margin-top:10px;"><div style="border:2px solid #111;padding:8px 12px;font-size:13px;display:flex;gap:24px;"><b>CUSTO REAL GERAL</b><b>${moedaLocal(totalRealGeral)}</b></div></div>
   <div class="rodape"><span>Documento interno gerado pelo OFICIN-IA. Peças de estoque mantêm rastreio Kardex; serviços terceirizados são registros internos da O.S.</span><span>Powered by thIAguinho Soluções Digitais</span></div></main></body></html>`;
@@ -7683,7 +7696,20 @@ window.imprimirRelatorioPecasReaisOS = async function() {
   win.document.write(html);
   win.document.close();
   win.focus();
-  setTimeout(() => { try { win.print(); } catch (_) {} }, 350);
+  setTimeout(() => { try { if(!win.closed)win.print(); } catch (_) {} }, 900);
+  } catch (erro) {
+    console.error('[RELATÓRIO REAL] Falha ao montar relatório:', erro);
+    const mensagem=String(erro?.message||erro||'Falha inesperada');
+    try {
+      if (!win.closed) {
+        win.document.open();
+        win.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Falha ao gerar relatório real</title></head><body style="font:16px/1.5 Arial;padding:24px"><h1>Não foi possível montar o relatório</h1><p id="erro"></p><p>Os registros da O.S. não foram alterados.</p></body></html>');
+        win.document.close();
+        win.document.getElementById('erro').textContent=mensagem;
+      }
+    } catch (_) {}
+    window.toast?.('Falha no relatório real: '+mensagem,'err');
+  }
 };
 
 window.adicionarPecaRealRow = function(p) {
