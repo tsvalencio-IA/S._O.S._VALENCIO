@@ -1322,6 +1322,90 @@
     return payload;
   };
 
+  // Autorização técnica por item (inclusive R$ 0) independente do status do veículo.
+  // Preserva a aprovação anterior e usa transação para não sobrescrever a auditoria.
+  U.autorizarExecucaoItensOS = async function(options){
+    const role=String(options?.actorRole||'').toLowerCase();
+    if(!['admin','gestor','gerente','superadmin','dono','oficina_admin'].includes(role))
+      throw Error('Somente o gestor pode autorizar execução pelo JARVIS.');
+    const db=options?.db||window.db,osId=String(options?.osId||'');
+    const actor=String(options?.actorName||'').trim();
+    if(!db||!osId||!actor)throw Error('Sessão ou O.S. não identificada.');
+    const ref=db.collection('ordens_servico').doc(osId);
+    const doc=await ref.get({source:'server'});
+    if(!doc.exists)throw Error('O.S. não encontrada.');
+    const old={id:osId,...doc.data()};
+    if(String(old.tenantId||'')!==String(options?.tenantId||''))throw Error('Oficina divergente.');
+    const cli=U.getCliente(old,options?.clientes);
+    const itens=U.buildBudgetItems(old,cli);
+    const jaAprovados=U.getApprovedKeys(old);
+    const disponiveis=itens.filter(i=>!jaAprovados.has(i.key));
+    if(!disponiveis.length)throw Error('Todos os itens atuais já estão autorizados.');
+    const choice=await U.openApprovalModal(old,{clientes:options?.clientes,cliente:cli,defaultAll:false,toast:options?.toast});
+    if(!choice)return null;
+    const keys=new Set((choice.keys||[]).filter(key=>disponiveis.some(i=>i.key===key)));
+    if(!keys.size)throw Error('Selecione ao menos um item ainda não autorizado.');
+    const assinaturas=new Map(disponiveis.filter(i=>keys.has(i.key)).map(i=>[
+      i.key,JSON.stringify([i.key,i.tipo,i.desc,i.codigo,i.qtd,i.valorUnit,i.valorFinal])
+    ]));
+    const result=await db.runTransaction(async trx=>{
+      const snap=await trx.get(ref);
+      if(!snap.exists)throw Error('O.S. não encontrada no servidor.');
+      const os={id:osId,...snap.data()};
+      if(String(os.tenantId||'')!==String(options.tenantId))throw Error('Oficina divergente.');
+      const cliAgora=U.getCliente(os,options?.clientes);
+      const atuais=U.buildBudgetItems(os,cliAgora),map=new Map(atuais.map(i=>[i.key,i]));
+      const atuaisAutorizados=U.getApprovedKeys(os);
+      const inclusoes=[];
+      for(const key of keys){
+        const item=map.get(key);
+        if(!item||atuaisAutorizados.has(key)||
+          JSON.stringify([item.key,item.tipo,item.desc,item.codigo,item.qtd,item.valorUnit,item.valorFinal])!==assinaturas.get(key))
+          throw Error('O item '+key+' mudou. Reabra a autorização.');
+        inclusoes.push(item);
+      }
+      const aprovadosAnteriores=Array.isArray(os.aprovacao?.itens)?os.aprovacao.itens:[];
+      const indexAnteriores=new Set(aprovadosAnteriores.map(i=>i?.key).filter(Boolean));
+      const itensAntigos=[...aprovadosAnteriores];
+      for(const key of atuaisAutorizados){
+        if(indexAnteriores.has(key))continue;
+        const item=map.get(key);
+        if(item){itensAntigos.push(item);indexAnteriores.add(key);}
+      }
+      const itensAprovados=[...itensAntigos,...inclusoes];
+      const keysFinal=[...new Set([...atuaisAutorizados,...keys])];
+      const novoValor=+inclusoes.reduce((v,item)=>v+U.parseNumberBR(item.valorFinal),0).toFixed(2);
+      const anterior=U.parseNumberBR(os.totalAprovado??os.aprovacao?.totalAprovado??0);
+      const novoTotal=+(anterior+novoValor).toFixed(2),agora=new Date().toISOString();
+      const valorPendente={...(os.autorizacoesSemValor||{})};
+      inclusoes.forEach(i=>{
+        if(Math.abs(U.parseNumberBR(i.valorFinal))<0.01)
+          valorPendente[i.key]={tipo:i.tipo,desc:i.desc,codigo:i.codigo||'',qtd:i.qtd,
+            autorizadoEm:agora,autorizadoPor:actor,valorNoMomento:0};
+      });
+      const evento={dt:agora,user:actor,tipo:'autorizacao_execucao_sem_mudar_status',
+        usuarioId:String(options.actorId||''),perfil:role,interno:true,visivelCliente:false,
+        statusVeiculo:os.status||'',itens:inclusoes.map(i=>({key:i.key,tipo:i.tipo,desc:i.desc,valor:i.valorFinal})),
+        valorAdicional:novoValor,acao:actor+' autorizou a execução de '+
+          inclusoes.length+' item(ns) na O.S., inclusive valores ainda não definidos. '+
+          'Total autorizado nesta etapa: '+U.moeda(novoValor)+
+          '. Status do veículo preservado: '+String(os.status||'Triagem')};
+      trx.update(ref,{
+        aprovacao:{...(os.aprovacao||{}),status:keysFinal.length===atuais.length?'total':'parcial',
+          aprovadoEm:os.aprovacao?.aprovadoEm||agora,aprovadoPor:os.aprovacao?.aprovadoPor||actor,
+          aprovadoPorTipo:os.aprovacao?.aprovadoPorTipo||'jarvis',
+          totalOrcamento:+atuais.reduce((v,i)=>v+U.parseNumberBR(i.valorFinal),0).toFixed(2),
+          totalAprovado:novoTotal,itens:itensAprovados,
+          ultimaAutorizacaoExecucaoEm:agora,ultimaAutorizacaoExecucaoPor:actor},
+        itensAprovados:keysFinal,totalAprovado:novoTotal,aprovacaoAtiva:true,
+        autorizacoesSemValor:valorPendente,
+        timeline:firebase.firestore.FieldValue.arrayUnion(evento),updatedAt:agora
+      });
+      return {itens:inclusoes.length,valorAdicional:novoValor,statusPreservado:os.status||''};
+    });
+    return result;
+  };
+
   // Aprovação complementar: não substitui nem reabre a aprovação original.
   // Apenas itens explicitamente marcados pendentes após a aprovação entram aqui.
   U.listarComplementosPendentesOS = function(os,cliente) {
