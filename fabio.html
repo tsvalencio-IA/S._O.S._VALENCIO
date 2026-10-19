@@ -1292,7 +1292,7 @@ window.addEventListener('afterprint',()=>{if(aberto)document.body.style.overflow
 'use strict';
 const get=id=>document.getElementById(id);
 const folha=get('fabioConsultaFolha'),dialog=get('fabioConsulta');
-let idAtual='',cliente=false,arquivo=null,processando=false;
+let idAtual='',cliente=false,arquivo=null,processando=false,refArquivo=null;
 const baseAbrir=window.fabioAbrirConsultaOS;
 const fonte=id=>window.__fabioOsFonte?.().find(x=>String(x.id)===String(id));
 const nome=v=>v===undefined||v===null?'':String(v);
@@ -1302,7 +1302,7 @@ function ui(){
  get('fabioClienteEnviar').hidden=!cliente;
  get('fabioClienteEnviar').disabled=processando;
  get('fabioClienteEnviar').textContent=processando?'GERANDO PDF…':arquivo?'↗ ENVIAR PDF CONFERIDO':'📤 PREPARAR PDF PARA ENVIO';
- if(!processando)get('fabioClienteEstado').textContent=cliente?'PRÉVIA PARA CLIENTE — sem códigos de peças/serviços, mecânicos ou comissões. Confira antes de enviar.':'INTERNO — veja o que cada mecânico realizou ou registrou.';
+ if(!processando&&!get('fabioClienteEstado').textContent)get('fabioClienteEstado').textContent=cliente?'PRÉVIA PARA CLIENTE — sem códigos de peças/serviços, mecânicos ou comissões. Confira antes de enviar.':'INTERNO — veja o que cada mecânico realizou ou registrou.';
 }
 function incluirMecanicos(){
  const o=fonte(idAtual);if(!o)return;
@@ -1331,45 +1331,123 @@ function incluirMecanicos(){
  });
 }
 function gerarClienteEmTela(){
- // Produz a prévia exclusivamente copiando a consulta e excluindo campos restritos.
- const clone=folha.cloneNode(true);
- clone.querySelectorAll('.consulta-interno,.consulta-alertas,.fabio-execucao-por-mecanico').forEach(el=>el.remove());
- clone.querySelectorAll('.consulta-bloco').forEach(sec=>{
-  const titulo=nome(sec.querySelector('.consulta-titulo')?.textContent).toLowerCase();
-  if(titulo.includes('execução real dos serviços'))sec.remove();
+ // Fábio: construir documento para cliente por inclusão positiva, nunca por subtração da OS interna.
+ const fonteInterna=folha,limpo=document.createElement('article');
+ limpo.className='consulta-folha';
+ const colocar=(pai,tag,classe,texto)=>{
+  const n=document.createElement(tag);if(classe)n.className=classe;
+  if(texto!==undefined&&texto!==null)n.textContent=String(texto);
+  pai.appendChild(n);return n;
+ };
+ const origemSecoes=[...fonteInterna.querySelectorAll(':scope > .consulta-bloco')];
+ const original=t=>origemSecoes.find(e=>e.querySelector('.consulta-titulo')?.textContent.trim()===t);
+ const sec=t=>{const e=colocar(limpo,'section','consulta-bloco');colocar(e,'h3','consulta-titulo',t);return e};
+ const cabFonte=fonteInterna.querySelector('.consulta-timbre');
+ const identidade=cabFonte?.querySelector('.consulta-identidade');
+ if(!identidade?.querySelector('strong'))throw Error('Dados da oficina incompletos.');
+ const cab=colocar(limpo,'div','consulta-timbre'),marca=colocar(cab,'div','consulta-identidade');
+ const logo=identidade.querySelector('.consulta-logo');
+ if(logo?.src){
+  const img=colocar(marca,'img','consulta-logo');img.alt='Logotipo';img.loading='eager';img.crossOrigin='anonymous';img.src=logo.currentSrc||logo.src;
+ }
+ const cadastro=colocar(marca,'div');
+ colocar(cadastro,'strong','',identidade.querySelector('strong').textContent);
+ identidade.querySelectorAll('small').forEach(e=>colocar(cadastro,'small','',e.textContent));
+ colocar(cab,'div','tipo','ORÇAMENTO / ORDEM DE SERVIÇO');
+ const dadosOrig=original('DADOS DA ORDEM DE SERVIÇO');
+ if(!dadosOrig)throw Error('Dados da OS ausentes.');
+ const permitido=new Set(['cliente','cpf/cnpj','telefone','o.s.','veículo','placa','ano','km','status']);
+ const tb=colocar(sec('DADOS DA ORDEM DE SERVIÇO'),'table','consulta-dados'),bd=colocar(tb,'tbody');
+ let linhas=0;
+ dadosOrig.querySelectorAll('tbody tr').forEach(tr=>{
+  const cel=[...tr.children],pares=[];
+  for(let i=0;i+1<cel.length;i+=2){
+   const label=cel[i].textContent.trim();
+   if(permitido.has(label.toLocaleLowerCase('pt-BR')))pares.push([label,cel[i+1].textContent]);
+  }
+  if(pares.length){const r=colocar(bd,'tr');pares.forEach(([a,b])=>{colocar(r,'th','',a);colocar(r,'td','',b)});linhas++}
  });
- clone.querySelectorAll('table.consulta-itens').forEach(table=>{
-  const cols=[...table.querySelectorAll('thead th')],remove=cols.map((c,i)=>/^(cód\.?|código)$/i.test(c.textContent.trim())?i:-1).filter(i=>i>=0);
-  remove.reverse().forEach(i=>table.querySelectorAll('tr').forEach(tr=>tr.children[i]?.remove()));
-  table.querySelectorAll('.consulta-item-resultado div').forEach(el=>el.remove());
-  table.querySelectorAll('td').forEach(td=>{
-   if(/mecânico|execução não confirmada|APROVAD[OA]/i.test(td.textContent)&&td.classList.contains('consulta-item-resultado')){
-    td.textContent=nome(td.firstChild?.textContent||'').trim();
+ if(!linhas)throw Error('Campos de identificação ausentes.');
+ for(const t of ['DEFEITO RECLAMADO / QUEIXA DO CLIENTE','DIAGNÓSTICO TÉCNICO']){
+  const orig=original(t);if(!orig)throw Error('Seção obrigatória ausente: '+t);
+  colocar(sec(t),'div','consulta-quadro',orig.querySelector('.consulta-quadro')?.textContent||'—');
+ }
+ function itens(t,lista){
+  const ant=original(t);if(!ant)throw Error('Itens da OS ausentes: '+t);
+  const dest=sec(t),tab=ant.querySelector('.consulta-itens');
+  if(!tab){colocar(dest,'div','consulta-vazio',ant.querySelector('.consulta-vazio')?.textContent||'Nenhum item lançado.');return}
+  const colOrig=[...tab.querySelectorAll('thead th')].map(e=>e.textContent.trim());
+  const col=lista.map(([interno,publico])=>{
+   const i=colOrig.indexOf(interno);if(i<0)throw Error('Coluna da OS mudou: '+interno);return {i,publico};
+  });
+  const tabela=colocar(colocar(dest,'div','consulta-tabela-rolagem'),'table','consulta-itens');
+  const trCab=colocar(colocar(tabela,'thead'),'tr');
+  col.forEach(v=>colocar(trCab,'th','',v.publico));
+  const tbody=colocar(tabela,'tbody');
+  tab.querySelectorAll('tbody tr').forEach(trOrig=>{
+   const cells=[...trOrig.children],tr=colocar(tbody,'tr');
+   col.forEach(({i,publico})=>{
+    if(!cells[i])throw Error('Peça/serviço com coluna ausente.');
+    const td=colocar(tr,'td',/descri[cç][aã]o/i.test(publico)?'consulta-item-descricao':'',cells[i].firstChild?.textContent||'');
+    td.dataset.label=publico;
+   });
+  });
+ }
+ itens('SERVIÇOS / MÃO DE OBRA',[
+  ['Descrição do serviço','Descrição do serviço'],['TMO','TMO'],
+  ['Valor original','Valor original'],['Desconto','Desconto'],['Valor cobrado / Execução','Valor cobrado']
+ ]);
+ itens('PEÇAS / MATERIAIS',[
+  ['Descrição','Descrição'],['Qtd.','Qtd.'],['Valor unit.','Valor unit.'],
+  ['Valor original','Valor original'],['Desconto','Desconto'],['Valor cobrado / Aplicação','Valor cobrado']
+ ]);
+ const totOrig=original('RESUMO DE VALORES');if(!totOrig)throw Error('Total da OS ausente.');
+ const totais=colocar(sec('RESUMO DE VALORES'),'div','consulta-totais');
+ const permitidoTotal=new Set(['total do orçamento','total registrado na o.s.','total aprovado']);
+ let nTotais=0;
+ totOrig.querySelectorAll('.consulta-total').forEach(l=>{
+  const nome=l.querySelector('span')?.textContent.trim()||'';
+  if(!permitidoTotal.has(nome.toLocaleLowerCase('pt-BR')))return;
+  const row=colocar(totais,'div','consulta-total');
+  colocar(row,'span','',nome);colocar(row,'strong','',l.querySelector('strong')?.textContent||'');nTotais++;
+ });
+ if(!nTotais)throw Error('Totais não encontrados.');
+ const fotoOrig=origemSecoes.find(e=>(e.querySelector('.consulta-titulo')?.textContent||'').startsWith('EVIDÊNCIAS DIGITAIS'));
+ if(!fotoOrig)throw Error('Evidências indisponíveis.');
+ const fotos=[...fotoOrig.querySelectorAll('.consulta-foto')],area=sec('EVIDÊNCIAS DIGITAIS — '+fotos.length+' FOTO(S)');
+ if(!fotos.length)colocar(area,'div','consulta-vazio','Nenhuma foto anexada diretamente à OS.');
+ else{
+  const grid=colocar(area,'div','consulta-fotos');
+  fotos.forEach((f,i)=>{
+   const old=f.querySelector('img');if(!old?.src)throw Error('Foto ausente: '+(i+1));
+   const fig=colocar(grid,'figure','consulta-foto'),im=colocar(fig,'img');
+   im.alt='Foto '+(i+1);im.loading='eager';im.crossOrigin='anonymous';im.src=old.currentSrc||old.src;
+   const cap=colocar(fig,'figcaption');colocar(cap,'strong','','Foto '+(i+1)+' / '+fotos.length);
+   const hora=f.querySelector('time');if(hora)colocar(cap,'time','',hora.textContent);
+  });
+ }
+ const ass=fonteInterna.querySelector(':scope > .consulta-assinaturas');
+ if(ass){
+  const final=colocar(limpo,'div','consulta-assinaturas');
+  ass.querySelectorAll(':scope > div').forEach(orig=>{
+   const box=colocar(final,'div'),foto=orig.querySelector('img');
+   if(foto?.src){
+    const img=colocar(box,'img','consulta-assinatura-img');
+    img.alt='Assinatura';img.loading='eager';img.crossOrigin='anonymous';img.src=foto.currentSrc||foto.src;
    }
+   const nome=orig.querySelector('div');
+   if(nome)colocar(box,'div','',nome.textContent);
   });
-  table.querySelectorAll('th,td').forEach(cell=>{
-   const txt=nome(cell.textContent).replace(/\s*\/\s*(Execução|Aplicação)\s*$/i,'');
-   if(cell.tagName==='TH')cell.textContent=txt;
-   cell.dataset.label=nome(cell.dataset.label).replace(/\s*\/\s*(Execução|Aplicação)\s*$/i,'');
-  });
- });
- clone.querySelectorAll('.consulta-total').forEach(x=>{
-  if(/recebimento operacional|pagamento|comissão/i.test(nome(x.textContent)))x.remove();
- });
- clone.querySelectorAll('.consulta-dados tr').forEach(x=>{
-  if(/chassi|prefixo da viatura|patrimônio/i.test(nome(x.querySelector('th')?.textContent)))x.remove();
- });
- clone.querySelectorAll('.consulta-foto figcaption div').forEach(x=>x.remove());
- clone.querySelectorAll('.consulta-rodape').forEach(x=>x.textContent='Documento para cliente — S.O.S. VALÊNCIO');
- // Bloqueia qualquer texto explícito de controle interno que possa sobreviver à filtragem.
- const residuo=nome(clone.textContent);
- if(/MECÂNICOS\s*\/|COMISSÕES|REGISTROS DO MECÂNICO|execução individual atribuída/i.test(residuo))
-  throw Error('Prévia ainda contém informação interna. Compartilhamento bloqueado.');
- folha.replaceChildren(...[...clone.childNodes]);
- get('fabioConsultaTitulo').textContent='DOCUMENTO PARA CLIENTE — '+nome(fonte(idAtual)?.numero||fonte(idAtual)?.numeroOS||idAtual.slice(-6));
+ }
+ colocar(limpo,'div','consulta-rodape','S.O.S. VALÊNCIO • Documento para o cliente');
+ if(limpo.querySelector('.consulta-interno,.consulta-mecanico,.fabio-execucao-por-mecanico'))throw Error('Dados internos identificados na prévia.');
+ if([...limpo.querySelectorAll('.consulta-itens th')].some(e=>/cód|mec[aâ]nico|comiss[aã]o|execu[cç][aã]o|aplica[cç][aã]o/i.test(e.textContent)))throw Error('Coluna interna identificada.');
+ folha.replaceChildren(...[...limpo.childNodes]);
+ get('fabioConsultaTitulo').textContent='PRÉVIA CLIENTE • OS '+nome(fonte(idAtual)?.numero||fonte(idAtual)?.numeroOS||idAtual.slice(-6));
 }
 function abrirInterno(id){
- idAtual=id;cliente=false;arquivo=null;
+ idAtual=id;cliente=false;arquivo=null;refArquivo=null;
+ get('fabioClienteEstado').textContent='';
  baseAbrir(id);
  incluirMecanicos();ui();
 }
@@ -1391,7 +1469,7 @@ window.fabioAtualizarOSAberta=function(){
 function alternar(){
  if(!idAtual)return;
  if(cliente){abrirInterno(idAtual);return;}
- cliente=true;arquivo=null;
+ cliente=true;arquivo=null;refArquivo=null;get('fabioClienteEstado').textContent='';
  try{gerarClienteEmTela();ui();dialog.querySelector('.consulta-rolagem').scrollTop=0;}
  catch(e){cliente=false;abrirInterno(idAtual);get('fabioClienteEstado').textContent='Falha ao montar prévia segura: '+e.message;}
 }
@@ -1421,6 +1499,7 @@ async function criarCliente(id){
   }
   await carregaLib('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>typeof window.html2canvas==='function');
   await carregaLib('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>typeof window.jspdf?.jsPDF==='function');
+  const refInicio=fonte(id);
   const imgs=[...folha.querySelectorAll('img')];
   await Promise.all(imgs.map(async im=>{
    if(!im.complete)await im.decode();
@@ -1442,7 +1521,7 @@ async function criarCliente(id){
    if(pag++)pdf.addPage();
    pdf.addImage(recorte.toDataURL('image/jpeg',.87),'JPEG',8,8,largura,largura*h/canvas.width);
   }
-  if(mudouDuranteGeracao)throw Error('A OS foi atualizada durante a geração. Confira novamente antes de enviar.');
+  if(mudouDuranteGeracao||fonte(id)!==refInicio)throw Error('A OS foi atualizada durante a geração. Confira novamente antes de enviar.');
   const blob=pdf.output('blob');
   if(blob.size<1000||(await blob.slice(0,5).text())!=='%PDF-')throw Error('Arquivo PDF não validado.');
   const o=fonte(id)||{},n=nome(o.numero||o.numeroOS||id.slice(-6));
@@ -1459,11 +1538,12 @@ get('fabioClienteEnviar').addEventListener('click',async()=>{
  if(!arquivo){
   try{
    get('fabioClienteEstado').textContent='Gerando o arquivo conforme a prévia…';
-   arquivo=await criarCliente(idAtual);
+   arquivo=await criarCliente(idAtual);refArquivo=fonte(idAtual);
    get('fabioClienteEstado').textContent='PDF do cliente preparado. Confira a visualização e toque ENVIAR PDF CONFERIDO.';
   }catch(e){arquivo=null;get('fabioClienteEstado').textContent='Exportação bloqueada: '+(e.message||e)+'. Nada foi enviado.';}
   ui();return;
  }
+ if(refArquivo!==fonte(idAtual)||!cliente){arquivo=null;refArquivo=null;get('fabioClienteEstado').textContent='A OS mudou após a conferência. Gere novamente antes de enviar.';ui();return;}
  const file=new File([arquivo.blob],arquivo.fileName,{type:'application/pdf'});
  if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){
   navigator.share({files:[file],title:'OS '+arquivo.numero,text:'Segue a ordem de serviço S.O.S. Valêncio.'})
