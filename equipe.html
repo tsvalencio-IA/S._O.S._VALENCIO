@@ -25,6 +25,7 @@ if ('serviceWorker' in navigator) {
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore-compat.js"></script>
 <script src="js/config.js?v=26.13.0"></script>
 <script src="js/os-utils.js?v=22.0.0"></script>
+<script src="js/os-media-persist-v1.js?v=1.0.0"></script>
 <script src="js/links-publicos.js?v=26.24.0"></script>
 <script src="js/tenant-modules.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=JetBrains+Mono:wght@400;700&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -1585,7 +1586,10 @@ async function comprimirImagemEquipe(file){
   });
 }
 
+const _equipeUploadCache=new WeakMap();
 async function uploadEquipeCloudinary(file){
+  const anterior=_equipeUploadCache.get(file);
+  if(anterior)return anterior;
   const finalFile = await comprimirImagemEquipe(file);
   const fd = new FormData();
   fd.append('file', finalFile);
@@ -1593,7 +1597,7 @@ async function uploadEquipeCloudinary(file){
   const res = await fetch(`https://api.cloudinary.com/v1_1/${J.cloudName}/auto/upload`,{method:'POST',body:fd});
   const data = await res.json();
   if(!data || !data.secure_url) throw new Error(data?.error?.message || 'Falha no upload.');
-  return {
+  const resultado = {
     url:data.secure_url,
     type:data.resource_type || (/^video\//.test(file.type||'') ? 'video' : 'image'),
     name:file.name || '',
@@ -1601,8 +1605,9 @@ async function uploadEquipeCloudinary(file){
     uploadedAt:data.created_at && !Number.isNaN(Date.parse(data.created_at)) ? new Date(data.created_at).toISOString() : new Date().toISOString(),
     uploadHorarioOrigem:data.created_at ? 'cloudinary' : 'dispositivo'
   };
+  _equipeUploadCache.set(file,resultado);
+  return resultado;
 }
-
 async function uploadEquipeComLimite(files, limit, onProgress){
   const fila = Array.from(files || []);
   const results = new Array(fila.length);
@@ -1663,37 +1668,55 @@ function limparPreviewOS(){
 }
 
 async function enviarFotosBatch(){
-  const fInput = $('mediaFile');
-  if(fInput && fInput.files && fInput.files.length){
-    _batchOSFiles = _batchOSFiles.concat(Array.from(fInput.files));
-    try{ fInput.value=''; }catch(e){}
+  const fInput=$('mediaFile');
+  if(fInput?.files?.length){
+    _batchOSFiles=_batchOSFiles.concat(Array.from(fInput.files));
+    try{fInput.value='';}catch(e){}
     _renderPreviewOS();
   }
-  if(!_batchOSFiles.length){ toast('Selecione ao menos uma foto.','warn'); return; }
-
-  const btn = $('btnUpload'); const prog = $('mediaProgress');
-  if(btn){ btn.disabled=true; btn.innerText='ENVIANDO...'; }
-  if(prog){ prog.style.display='inline'; prog.innerText='0/'+_batchOSFiles.length; }
-
-  const total = _batchOSFiles.length;
-  const resultados = await uploadEquipeComLimite(_batchOSFiles, 2, (done, all)=>{
-    if(prog){ prog.innerText = done+'/'+all; }
-  });
-  const novasUrls = resultados.filter(r=>r && r.ok && r.item).map(r=>r.item);
-  const sucesso = novasUrls.length;
-  const falhas = total - sucesso;
-
-  const jaSalvo = JSON.parse($('mediaArray').value||'[]');
-  const final = jaSalvo.concat(novasUrls);
-  $('mediaArray').value = JSON.stringify(final);
-  renderMediaGrid();
-  _batchOSFiles = []; _renderPreviewOS();
-
-  if(btn){ btn.disabled=false; btn.innerText='ENVIAR FILA'; }
-  if(prog){ prog.style.display='none'; prog.innerText=''; }
-  if(sucesso && !falhas) toast(`✓ ${sucesso} arquivo(s) enviado(s). Lembre de SALVAR a O.S.`,'ok');
-  else if(sucesso && falhas) toast(`⚠ ${sucesso} ok, ${falhas} falhou. Lembre de SALVAR a O.S.`,'warn');
-  else toast('✕ Nenhum arquivo enviado.','err');
+  if(!_batchOSFiles.length){toast('Selecione ao menos uma foto ou vídeo.','warn');return;}
+  if(!window.sosMediaOsPersist){toast('Módulo de anexos indisponível. Nada foi enviado.','err');return;}
+  const btn=$('btnUpload'),prog=$('mediaProgress'),arquivos=_batchOSFiles.slice();
+  if(btn){btn.disabled=true;btn.innerText='ENVIANDO E SALVANDO...';}
+  if(prog){prog.style.display='inline';prog.innerText='Preparando O.S....';}
+  try{
+    let osId=$v('osId');
+    if(!osId){
+      const criada=await window.sosMediaOsPersist.garantirOS({
+        db,tid:J.tid,clienteId:$v('osCliente'),veiculoId:$v('osVeiculo'),
+        campos:{tipoVeiculo:$v('osTipo'),data:$v('osData'),km:$v('osKm'),mecId:J.fid,mecNome:J.nome},
+        ator:J.nome||'Equipe'
+      });
+      osId=criada.id;
+      $('osId').value=osId;
+      $('osIdBadge').innerText='OS#'+osId.slice(-5).toUpperCase();
+      window._equipeOSAtual=criada.rascunho;
+    }
+    if(prog)prog.innerText='0/'+arquivos.length+' • enviando...';
+    const resultados=await uploadEquipeComLimite(arquivos,3,(done,all)=>{
+      if(prog)prog.innerText=done+'/'+all+' • enviando...';
+    });
+    const novas=resultados.filter(r=>r?.ok&&r.item).map(r=>r.item);
+    const falhas=arquivos.length-novas.length;
+    if(!novas.length){toast('✕ Nenhum arquivo enviado. Fila preservada para tentar novamente.','err');return;}
+    if(prog)prog.innerText='Gravando '+novas.length+' arquivo(s) na O.S....';
+    const salvo=await window.sosMediaOsPersist.gravar({
+      db,tid:J.tid,osId,itens:novas,ator:J.nome||'Equipe'
+    });
+    const anteriores=JSON.parse($('mediaArray')?.value||'[]');
+    $('mediaArray').value=JSON.stringify(window.sosMediaOsPersist.uniq([...anteriores,...salvo.media]));
+    renderMediaGrid();
+    _batchOSFiles=arquivos.filter((_,i)=>!resultados[i]?.ok);
+    _renderPreviewOS();
+    if(!falhas)toast('✓ '+novas.length+' arquivo(s) salvo(s) diretamente na O.S.','ok');
+    else toast('✓ '+novas.length+' salvo(s) na O.S.; '+falhas+' pendente(s) para tentar novamente.','warn');
+  }catch(e){
+    console.error('[Equipe upload persistente]',e);
+    toast('✕ Anexos não confirmados na O.S.: '+(e?.message||e)+'. Fila preservada.','err');
+  }finally{
+    if(btn){btn.disabled=false;btn.innerText='ENVIAR FILA';}
+    if(prog){prog.style.display='none';prog.innerText='';}
+  }
 }
 
 // ============================================================
@@ -2624,6 +2647,18 @@ async function salvarOS(){
             novos[i]=copiado;
           }
           mudanca[campo]=novos;
+        }
+        // Preserva mídias que outros usuários anexaram depois da abertura.
+        // Uma remoção intencional de item já existente no formulário continua válida.
+        const antigasMedia=new Set((Array.isArray(osBaseEquipe.media)?osBaseEquipe.media:[]).map(m=>typeof m==='string'?m:m?.url).filter(Boolean));
+        const novasMedia=new Set((Array.isArray(mudanca.media)?mudanca.media:[]).map(m=>typeof m==='string'?m:m?.url).filter(Boolean));
+        for(const midia of (Array.isArray(atual.media)?atual.media:[])){
+          const url=typeof midia==='string'?midia:midia?.url;
+          if(url&&!antigasMedia.has(url)&&!novasMedia.has(url)){
+            mudanca.media=Array.isArray(mudanca.media)?mudanca.media:[];
+            mudanca.media.push(midia);
+            novasMedia.add(url);
+          }
         }
         mudanca.total=atual.total ?? mudanca.total;
         mudanca.maoObra=atual.maoObra ?? mudanca.maoObra;
