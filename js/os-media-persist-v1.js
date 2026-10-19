@@ -27,7 +27,9 @@ async function garantirOS({db,tid,id,clienteId,veiculoId,campos,ator}){
   status:'Aguardando',
   data:campos?.data||now.slice(0,10),
   km:campos?.km||'',
-  media:[],timeline:[{
+  media:[],
+  ...(campos?.mecId?{mecId:String(campos.mecId),mecNome:String(campos.mecNome||ator||''),mecIds:[String(campos.mecId)]}:{}),
+  timeline:[{
    dt:now,user:ator||'Equipe',tipo:'os_criada_para_evidencias',
    acao:'O.S. registrada automaticamente ao enviar fotos/vídeos. Demais dados podem ser salvos depois.'
   }],
