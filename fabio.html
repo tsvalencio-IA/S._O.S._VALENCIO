@@ -1687,9 +1687,12 @@ get('fabioClienteEnviar').addEventListener('click',async()=>{
 // Fonte única do documento: gerarPDFOS() original do JARVIS, em iframe protegido.
 const g=id=>document.getElementById(id),source=id=>window.__fabioOsFonte?.().find(x=>String(x.id)===String(id));
 const text=v=>v===undefined||v===null?'':String(v);
-let docAtual=null,modo='interna',osAtual='',preparando=false,paginasValidas=false,epoch=0,urlAtual='';
+let docAtual=null,modo='interna',osAtual='',refOS=null,preparando=false,paginasValidas=false,epoch=0,urlAtual='';
 const display=s=>{g('fabioPdfEstado').textContent=s};
 const update=()=>{
+ const fila=(window.__fabioFilaNavegacao||[]).length?window.__fabioFilaNavegacao:(window.__fabioFiltradosIds||[]);
+ const pos=fila.indexOf(osAtual);
+ g('fabioPdfPosicao').textContent=(pos>=0?pos+1:1)+' de '+(fila.length||1);
  g('fabioDocConfirmacao').hidden=modo!=='cliente'||!paginasValidas;
  g('fabioDocAlternar').textContent=modo==='cliente'?'← VOLTAR AO PDF ORIGINAL':'📄 CONFERIR VERSÃO PARA CLIENTE';
  g('fabioDocExecucoes').hidden=modo==='cliente';
@@ -1698,8 +1701,8 @@ const update=()=>{
  g('fabioPdfBaixar').disabled=!docAtual||preparando;
  g('fabioPdfAbrir').disabled=!docAtual||preparando;
  g('fabioDocAlternar').disabled=preparando;
- g('fabioPdfAnterior').disabled=preparando;
- g('fabioPdfProximo').disabled=preparando;
+ g('fabioPdfAnterior').disabled=preparando||pos<=0;
+ g('fabioPdfProximo').disabled=preparando||pos<0||pos>=fila.length-1;
 };
 function montarEquipe(o){
  const target=g('fabioDocMecanicos');target.replaceChildren();
@@ -1734,6 +1737,20 @@ async function pdfLib(){
  if(!window.pdfjsLib?.getDocument)throw Error('PDF.js não inicializou.');
  window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
+async function validarConteudoClientePDF(doc){
+ await pdfLib();
+ const pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(await doc.blob.arrayBuffer())}).promise;
+ if(pdf.numPages<1)throw Error('O arquivo do cliente está vazio.');
+ let textoCompleto='';
+ for(let i=1;i<=pdf.numPages;i++){
+  const page=await pdf.getPage(i);
+  textoCompleto+=' '+(await page.getTextContent()).items.map(t=>t.str||'').join(' ');
+ }
+ if(/(?:^|\s)(?:Cód\.|Código da peça|Códigos)(?:\s|$)/i.test(textoCompleto)||
+    /(?:mec[aâ]nicos\s*\/\s*atendimento|comiss[oõ]es|registros do mec[aâ]nico)/i.test(textoCompleto))
+  throw Error('O documento ainda contém dados internos. Nenhum arquivo será compartilhado.');
+ return true;
+}
 async function desenharPDF(doc,client,token){
  await pdfLib();
  const bytes=new Uint8Array(await doc.blob.arrayBuffer());
@@ -1763,7 +1780,7 @@ async function desenharPDF(doc,client,token){
 async function abrir(id,novoModo='interna'){
  const os=source(id);if(!os)return;
  if(preparando)return;
- preparando=true;osAtual=id;modo=novoModo;paginasValidas=false;docAtual=null;g('fabioDocConferi').checked=false;
+ preparando=true;osAtual=id;refOS=os;modo=novoModo;paginasValidas=false;docAtual=null;g('fabioDocConferi').checked=false;
  g('fabioPdfDialog').hidden=false;
  g('fabioPdfTitulo').textContent='OS '+text(os.numero||os.numeroOS||id.slice(-6))+' • '+(modo==='cliente'?'PDF para cliente':'PDF ORIGINAL do JARVIS');
  g('fabioDocPaginas').replaceChildren();g('fabioPdfViewer').hidden=true;
@@ -1789,9 +1806,13 @@ async function abrir(id,novoModo='interna'){
 window.fabioAbrirPdfOS=(id)=>abrir(id);
 window.fabioAbrirConsultaOS=(id)=>abrir(id);
 window.fabioPrepararClienteSeguro=async id=>{
- const c=window.fabioConferirOrcamento?.(id);
- if(!c?.ok)throw Error(c?.mensagem||'Orçamento não confirmado.');
- return window.fabioGerarDocOficial(id,'cliente');
+ const registro=source(id),c=window.fabioConferirOrcamento?.(id);
+ if(!registro||!c?.ok)throw Error(c?.mensagem||'Orçamento não confirmado.');
+ const doc=await window.fabioGerarDocOficial(id,'cliente');
+ if(source(id)!==registro)throw Error('A OS mudou durante a preparação do lote.');
+ await validarConteudoClientePDF(doc);
+ if(source(id)!==registro)throw Error('A OS mudou durante a conferência.');
+ return doc;
 };
 g('fabioDocAlternar').addEventListener('click',()=>{
  if(osAtual&&!preparando)abrir(osAtual,modo==='interna'?'cliente':'interna');
@@ -1819,6 +1840,10 @@ g('fabioPdfAbrir').addEventListener('click',e=>{
 g('fabioPdfCompartilhar').addEventListener('click',e=>{
  e.stopImmediatePropagation();
  if(modo!=='cliente'||!paginasValidas||!g('fabioDocConferi').checked||!docAtual)return;
+ if(source(osAtual)!==refOS){
+  paginasValidas=false;docAtual=null;g('fabioDocConferi').checked=false;update();
+  display('A OS foi atualizada. Confira novamente o PDF antes de compartilhar.');return;
+ }
  const file=new File([docAtual.blob],'OS-'+text(source(osAtual)?.numero||osAtual.slice(-6))+'-CLIENTE.pdf',{type:'application/pdf'});
  if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){
   navigator.share({files:[file],title:'OS S.O.S. Valêncio',text:'Segue a ordem de serviço.'}).catch(err=>{
