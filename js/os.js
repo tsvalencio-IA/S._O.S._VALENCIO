@@ -1913,6 +1913,38 @@ window.toggleOSRecebidaOperacional=async function(id){
   await _registrarRecebimentoOS(id,marcar?valor:0,marcar,marcar?'marcado':'desmarcado');
 };
 
+window.autorizarExecucaoSemPrecoJarvis=async function(){
+  const role=String(J.role||'').toLowerCase();
+  if(!['admin','gestor','gerente','superadmin','dono','oficina_admin'].includes(role)){
+    window.toast?.('Autorização disponível somente para o gestor.','warn');return;
+  }
+  const id=String(document.getElementById('osId')?.value||'');
+  if(!id){window.toast?.('Salve a OS antes de autorizar sua execução.','warn');return;}
+  const helper=OSU().autorizarExecucaoItensOS;
+  if(typeof helper!=='function'){window.toast?.('Módulo de autorização não carregado.','err');return;}
+  const btn=document.getElementById('osAutorizarExecucaoZero');
+  if(btn?.disabled)return;
+  if(btn)btn.disabled=true;
+  try{
+    const res=await helper({db,osId:id,tenantId:J.tid,clientes:J.clientes,actorRole:role,
+      actorId:J.uid||J.fid||'',actorName:J.nome||'Gestor',toast:window.toast});
+    if(!res)return;
+    const snap=await db.collection('ordens_servico').doc(id).get({source:'server'});
+    if(snap.exists){
+      const atual={id,...snap.data()};
+      const idx=J.os.findIndex(o=>String(o.id)===id);
+      if(idx>=0)J.os[idx]=atual;
+      window.aplicarMarcadoresAprovacaoOS?.(atual);
+      const el=document.getElementById('osTimelineData');
+      if(el){el.value=JSON.stringify(atual.timeline||[]);window.renderTimelineOS?.();}
+    }
+    window.toast?.('Autorizados '+res.itens+' item(ns), sem alterar o status do veículo.','ok');
+  }catch(e){
+    console.error('[JARVIS autorização por item]',e);
+    window.toast?.('Autorização não realizada: '+(e.message||e),'err');
+  }finally{if(btn)btn.disabled=false;}
+};
+
 window.moverStatusOS = async function(id, novoStatus) {
     // Captura status antigo ANTES de atualizar (para comparar)
     const osAntes = J.os.find(x => x.id === id);
@@ -4940,7 +4972,9 @@ window.salvarOS = async function() {
 
   const oldOSParaAprovacao = osId ? (J.os.find(x => x.id === osId) || {}) : {};
   const statusPedeAprovacao = ['Aprovado', 'Andamento'].includes(payload.status);
-  const reabrindoParaEdicaoOS = !!(osId && statusReabreEdicaoOrcamentoOS(payload.status) && osTemAprovacaoAtivaOS(oldOSParaAprovacao));
+  const reabrindoParaEdicaoOS = !!(osId && statusReabreEdicaoOrcamentoOS(payload.status) &&
+    !statusReabreEdicaoOrcamentoOS(oldOSParaAprovacao.status) &&
+    osTemAprovacaoAtivaOS(oldOSParaAprovacao));
   let registroReaberturaAprovacaoOS = null;
 
   if (reabrindoParaEdicaoOS) {
@@ -4975,6 +5009,50 @@ window.salvarOS = async function() {
       payload.itensAprovados = oldOSParaAprovacao.itensAprovados || oldOSParaAprovacao.aprovacao?.itens?.map(i => i.key) || [];
       if (oldOSParaAprovacao.execucaoItens) payload.execucaoItens = oldOSParaAprovacao.execucaoItens;
       payload.aprovacaoAtiva = oldOSParaAprovacao.aprovacaoAtiva !== false;
+  }
+
+
+  // Preço atribuído após autorização de execução sem valor: evento interno
+  // item a item, com valores anteriores e novos, sem segunda autorização fictícia.
+  const eventosValorAposAutorizacaoOS=[];
+  const UPreco=OSU();
+  if(osId && oldOSParaAprovacao.autorizacoesSemValor &&
+      Object.keys(oldOSParaAprovacao.autorizacoesSemValor).length && !reabrindoParaEdicaoOS){
+    const cliente=(J.clientes||[]).find(c=>String(c.id)===String(payload.clienteId));
+    const baseAntes=UPreco.buildBudgetItems(oldOSParaAprovacao,cliente);
+    const baseDepois=UPreco.buildBudgetItems({...oldOSParaAprovacao,...payload},cliente);
+    const antesMap=new Map(baseAntes.map(i=>[i.key,i])),depoisMap=new Map(baseDepois.map(i=>[i.key,i]));
+    const chaves=UPreco.getApprovedKeys(oldOSParaAprovacao);
+    let diferenca=0;
+    for(const [key,aut] of Object.entries(oldOSParaAprovacao.autorizacoesSemValor)){
+      if(!chaves.has(key))continue;
+      const antes=antesMap.get(key),depois=depoisMap.get(key);
+      if(!antes||!depois)continue;
+      const identidade=(i)=>JSON.stringify([i.tipo,String(i.desc||'').trim(),String(i.codigo||'').trim(),Number(i.qtd||1)]);
+      if(identidade(antes)!==identidade(depois)||
+        (aut?.desc&&String(aut.desc).trim()!==String(antes.desc).trim()))continue;
+      const va=UPreco.parseNumberBR(antes.valorFinal),vn=UPreco.parseNumberBR(depois.valorFinal);
+      if(Math.abs(va-vn)<0.009)continue;
+      diferenca+=vn-va;
+      const agora=new Date().toISOString(),actor=J.nome||'Gestor';
+      eventosValorAposAutorizacaoOS.push({
+        dt:agora,user:actor,usuarioId:String(J.uid||J.fid||''),perfil:J.role||'gestor',
+        tipo:'valor_apos_autorizacao',itemKey:key,itemTipo:depois.tipo,itemDescricao:depois.desc,
+        valorAnterior:va,valorNovo:vn,interno:true,visivelCliente:false,
+        acao:(depois.tipo==='peca'?'Peça':'Serviço')+' "'+depois.desc+'": valor lançado/alterado após autorização de execução. '+
+          moeda(va)+' → '+moeda(vn)+' — '+actor
+      });
+    }
+    if(eventosValorAposAutorizacaoOS.length){
+      const totalAntigo=UPreco.parseNumberBR(oldOSParaAprovacao.totalAprovado??oldOSParaAprovacao.aprovacao?.totalAprovado??0);
+      const novoTotal=+(totalAntigo+diferenca).toFixed(2);
+      if(!Number.isFinite(novoTotal)||novoTotal<0)throw Error('Total autorizado inconsistente; salve a OS após conferir valores.');
+      const atuais=new Map(baseDepois.map(i=>[i.key,i]));
+      const aprovacaoAtual=payload.aprovacao||oldOSParaAprovacao.aprovacao||{};
+      payload.totalAprovado=novoTotal;
+      payload.aprovacao={...aprovacaoAtual,totalAprovado:novoTotal,
+        itens:(aprovacaoAtual.itens||[]).map(i=>atuais.get(i.key)||i)};
+    }
   }
 
   // --- INÍCIO: DEEP DIFF E GATILHOS (AUDITORIA E WHATSAPP) ---
@@ -5402,6 +5480,7 @@ window.salvarOS = async function() {
       });
   }
 
+  if(eventosValorAposAutorizacaoOS.length)tl.push(...eventosValorAposAutorizacaoOS);
   payload.timeline = tl;
   // --- FIM: DEEP DIFF ---
 
