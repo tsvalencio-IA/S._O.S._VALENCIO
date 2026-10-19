@@ -430,15 +430,21 @@ function atualizarFiltrosRelacionadosFabio(){
  if(veiculoSelecionado&&!veics.some(v=>v.id===veiculoSelecionado))veiculoSelecionado='';
  $('fabioVeiculoFiltro').disabled=!clienteSelecionado;
 }
-function registroFinanceiroRecebidoFabio(f){
+function registroFinanceiroAtivoFabio(f){
  if(!f||f.isComissao===true||f.isComissaoPagamento===true||f.cancelado===true||f.canceladoPorReemissaoOS===true)return false;
  const st=normal(f.status||'').trim(),tipo=normal(f.tipo||'').trim();
- if(['cancelado','cancelada','estornado','estornada','compensado'].includes(st)||tipo!=='entrada')return false;
+ return tipo==='entrada'&&!['cancelado','cancelada','estornado','estornada','compensado'].includes(st);
+}
+function registroFinanceiroRecebidoFabio(f){
+ if(!registroFinanceiroAtivoFabio(f))return false;
+ const st=normal(f.status||'').trim();
  return f.quitadoPeloCliente===true||['pago','liquidado','baixado','recebido','quitado'].includes(st)||!!f.dataPgto||!!f.pagoEm;
 }
 function osQuitadaFabio(o){
- if(recebeu(o))return true;
- return (recebimentosPorOS.get(String(o.id))||[]).some(registroFinanceiroRecebidoFabio);
+ if(recebeu(o)||o.pgtoQuitado===true)return true;
+ const lancamentos=recebimentosPorOS.get(String(o.id))||[];
+ // Se uma das parcelas do cliente está pendente, não declarar quitação total.
+ return lancamentos.length>0&&lancamentos.every(registroFinanceiroRecebidoFabio);
 }
 async function carregarRecebimentosFabio(forcar=false){
  if(financeiroCarregando||(!forcar&&financeiroConsultado))return;
@@ -447,7 +453,7 @@ async function carregarRecebimentosFabio(forcar=false){
   // Leitura pontual: não instala novo listener sobre o caixa, nem altera registros.
   const snap=await window.__fabioDB.collection('financeiro').where('tenantId','==',tid).get({source:'server'});
   const mapa=new Map();
-  snap.docs.forEach(d=>{const f={id:d.id,...d.data()};if(!f.osId||!registroFinanceiroRecebidoFabio(f))return;
+  snap.docs.forEach(d=>{const f={id:d.id,...d.data()};if(!f.osId||!registroFinanceiroAtivoFabio(f))return;
    const id=String(f.osId);if(!mapa.has(id))mapa.set(id,[]);mapa.get(id).push(f);
   });
   recebimentosPorOS.clear();mapa.forEach((v,k)=>recebimentosPorOS.set(k,v));
@@ -456,9 +462,8 @@ async function carregarRecebimentosFabio(forcar=false){
  finally{financeiroCarregando=false;render();}
 }
 function filaFabio(){
- const exibidos=window.__fabioFiltradosIds||[];
- const escolhidos=exibidos.filter(id=>osSelecionadas.has(id));
- return escolhidos.length?escolhidos:exibidos.slice();
+ const escolhidos=window.__fabioSelecionadasIds();
+ return escolhidos.length?escolhidos:(window.__fabioFiltradosIds||[]).slice();
 }
 function atualizarSelecaoFabio(){
  const total=osSelecionadas.size;
