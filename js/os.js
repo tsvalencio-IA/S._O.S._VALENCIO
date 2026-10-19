@@ -4378,6 +4378,79 @@ async function reconciliarComissoesOS(osId, payload, calculos) {
   if (operacoes) await batch.commit();
 }
 
+// Exclusões reais da OS: comparação multiconjunto para detectar também
+// a retirada de uma entre várias peças/serviços com nomes repetidos.
+// Apenas chamado durante SALVAR no Jarvis. Não modifica a OS nem outros módulos.
+function osRastrearExclusoesNoSalvar(antes, depois, ator) {
+  const eventos=[];
+  const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+  const txt=v=>String(v??'').trim();
+  const campos=[
+    ['media','evidencia_removida','mídia'],
+    ['pecas','peca_removida','peça'],
+    ['servicos','servico_removido','serviço'],
+    ['pecasReais','peca_real_removida','peça real'],
+    ['servicosReais','servico_real_removido','serviço terceirizado real']
+  ];
+  function igual(a,b,campo){
+    if(campo==='media'){
+      const link=m=>typeof m==='string'?m:(m?.url||m?.secure_url||'');
+      return !!link(a)&&link(a)===link(b);
+    }
+    const aa=a||{},bb=b||{};
+    for(const key of ['id','uuid','itemId','lancamentoId','origemAutoKey']){
+      if(aa[key]&&bb[key])return txt(aa[key])===txt(bb[key]);
+    }
+    const codA=norm(aa.codigo||aa.codigoExibicao||aa.cod||'');
+    const codB=norm(bb.codigo||bb.codigoExibicao||bb.cod||'');
+    if(codA&&codB)return codA===codB;
+    const descA=norm(aa.desc||aa.descricao||aa.nome||'');
+    const descB=norm(bb.desc||bb.descricao||bb.nome||'');
+    return !!descA&&descA===descB;
+  }
+  for(const [campo,tipo,classe] of campos){
+    if(!Object.prototype.hasOwnProperty.call(depois||{},campo))continue;
+    const originais=Array.isArray(antes?.[campo])?antes[campo]:[];
+    const finais=Array.isArray(depois?.[campo])?depois[campo]:[];
+    const usados=new Set();
+    for(const original of originais){
+      let encontrado=-1;
+      for(let i=0;i<finais.length;i++){
+        if(!usados.has(i)&&igual(original,finais[i],campo)){encontrado=i;break;}
+      }
+      if(encontrado!==-1){usados.add(encontrado);continue;}
+      const x=typeof original==='string'?{url:original}:original||{};
+      const url=txt(x.url||x.secure_url||'');
+      const video=/^video/i.test(txt(x.type||''))||/\.(mp4|mov|webm)(\?|$)/i.test(url);
+      const nome=txt(x.name||x.nome||x.desc||x.descricao||x.codigo||x.codigoExibicao||
+        (url?url.split('/').pop().split('?')[0]:'')||'sem identificação');
+      const itemTipo=campo==='media'?(video?'vídeo':'foto'):classe;
+      const codigo=txt(x.codigo||x.codigoExibicao||x.cod||'');
+      const qtd=Number(x.qtd??x.quantidade??0)||0;
+      const info=[nome,codigo&&('código '+codigo),qtd&&('qtd. '+qtd),
+        x.nf&&('NF '+x.nf),x.fornecedor&&('fornecedor '+x.fornecedor)].filter(Boolean).join(' · ');
+      const autorNome=txt(ator?.nome||'usuário não identificado');
+      const agora=new Date().toISOString();
+      eventos.push({
+        dt:agora,user:autorNome,tipo:tipo,tipoEvento:tipo,
+        acao:'Excluiu '+itemTipo+' da O.S.: '+info+' — excluído por '+autorNome+'.',
+        usuarioId:txt(ator?.id||''),usuarioNome:autorNome,usuarioPerfil:txt(ator?.perfil||''),
+        excluidoPor:autorNome,excluidoPorId:txt(ator?.id||''),excluidoEm:agora,
+        itemTipo,descricao:nome,codigo,quantidade:qtd,
+        estoqueId:txt(x.estoqueId||x.estoqueItemId||''),
+        fornecedor:txt(x.fornecedor||x.fornecedorNome||''),nf:txt(x.nf||x.nfNumero||''),
+        ...(campo==='media'?{midiaUrl:url,midiaTipo:video?'video':'imagem',
+          midiaNome:nome,uploadedAt:x.uploadedAt||null,importedAt:x.importedAt||null}:{}),
+        ...(campo==='servicos'||campo==='servicosReais'?{
+          mecanicoId:txt(x.mecId||x.mecanicoId||x.responsavelId||''),
+          mecanicoNome:txt(x.mecNome||x.mecanicoNome||x.responsavelNome||'')
+        }:{})
+      });
+    }
+  }
+  return eventos;
+}
+
 window.salvarOS = async function() {
   if(window._osMediaFilaEmAndamento){
     window.toast('Aguarde o envio da fila de fotos/vídeos terminar. Os arquivos serão salvos automaticamente.','warn');
@@ -4914,7 +4987,7 @@ window.salvarOS = async function() {
   const auditoriaGeralOS = [];
   const agoraAuditoriaOS = new Date().toISOString();
   const usuarioAuditoriaOS = {
-      id: String(J.uid || J.userId || J.usuarioId || ''),
+      id: String(J.uid || J.userId || J.usuarioId || J.fid || sessionStorage.getItem('j_fid') || ''),
       nome: funcUser,
       perfil: String(J.role || J.perfil || 'gestor')
   };
@@ -5123,17 +5196,8 @@ window.salvarOS = async function() {
           }
       });
       
-      oldPecas.forEach(oldP => {
-           const descOld = (oldP.desc || '').toLowerCase().trim();
-           const newP = newPecas.find(p => (p.desc || '').toLowerCase().trim() === descOld);
-           if (!newP) {
-               tl.push(eventoEstruturadoOS('peca_removida', `Removeu peça: ${oldP.desc}`, {
-                   pecaCodigo: oldP.codigo || oldP.codigoExibicao || '', pecaDescricao: oldP.desc || oldP.descricao || '',
-                   quantidade: numBR(oldP.qtd || 0), estoqueId: oldP.estoqueId || ''
-               }));
-               registouAlgo = true;
-           }
-      });
+      // Exclusões de peças são auditadas uma única vez, com ID/código/usuário,
+      // após reler os dados atuais do servidor, antes do commit da O.S.
 
       // O diff legado compara descrições. Complemento de auditoria:
       // uma segunda peça de mesmo nome precisa ser registrada individualmente.
@@ -5221,17 +5285,8 @@ window.salvarOS = async function() {
           }
       });
       
-      oldServicos.forEach(oldS => {
-           const descOld = (oldS.desc || '').toLowerCase().trim();
-           const newS = newServicos.find(s => (s.desc || '').toLowerCase().trim() === descOld);
-           if (!newS) {
-               tl.push(eventoEstruturadoOS('servico_removido', `Removeu serviço: ${oldS.desc}`, {
-                   servicoDescricao: oldS.desc || oldS.descricao || '', mecanicoId: oldS.mecId || oldS.mecanicoId || oldS.responsavelId || '',
-                   mecanicoNome: oldS.mecNome || oldS.mecanicoNome || oldS.responsavelNome || ''
-               }));
-               registouAlgo = true;
-           }
-      });
+      // Exclusões de serviços também são rastreadas pelo documento do servidor,
+      // evitando perda de ocorrências repetidas da mesma descrição.
 
       const cntServicosAntes = contarDescricoesOS(oldServicos);
       const cntServicosDepois = contarDescricoesOS(newServicos);
@@ -5257,12 +5312,8 @@ window.salvarOS = async function() {
           midiaUrl:url, midiaTipo:video ? 'video' : 'imagem', enviadoEm:m?.uploadedAt || null, importadoEm:m?.importedAt || null });
         registouAlgo = true;
       }
-      for (const [url, m] of antigas) {
-        if (atuais.has(url)) continue;
-        tl.push({ dt:new Date().toISOString(),user:funcUser,tipo:'evidencia_removida',
-          acao:`Removeu evidência: ${m?.name || url.split('/').pop().split('?')[0] || 'arquivo'}.`,midiaUrl:url });
-        registouAlgo = true;
-      }
+      // O evento de foto/vídeo excluído é gravado junto com a OS no commit,
+      // após conferir o anexo exato no documento atual do Firestore.
 
       // Fallback operacional: se nada entrou no histórico da OS e também não foi
       // alteração de campo auditável, mantém um registro mínimo de edição.
@@ -5766,18 +5817,55 @@ window.salvarOS = async function() {
     payload.pin = Math.floor(1000 + Math.random() * 9000).toString();
   }
   const payloadFirestore = limparUndefinedFirestoreOS(payload);
-  if (osId && Array.isArray(payloadFirestore.media)) {
-    // Preserva mídias inseridas por outros usuários após a abertura da ficha,
-    // sem desfazer remoções deliberadas de arquivos que já estavam na ficha.
-    try {
-      const servidor=await osRefSalvar.get({source:'server'});
-      const antes=new Set((Array.isArray(_oldOSPreservar?.media)?_oldOSPreservar.media:[]).map(m=>typeof m==='string'?m:m?.url).filter(Boolean));
-      const atual=new Set(payloadFirestore.media.map(m=>typeof m==='string'?m:m?.url).filter(Boolean));
-      for(const item of (Array.isArray(servidor.data()?.media)?servidor.data().media:[])){
-        const url=typeof item==='string'?item:item?.url;
-        if(url&&!antes.has(url)&&!atual.has(url)){payloadFirestore.media.push(item);atual.add(url);}
+  if (osId) {
+    // Não permitir exclusões sem auditoria: consultar a OS atual na nuvem.
+    let snapshotExclusoesOS;
+    try{snapshotExclusoesOS=await osRefSalvar.get({source:'server'});}
+    catch(erro){
+      window.toast?.('Falha ao conferir auditoria de exclusões. O.S. não salva; tente novamente.','err');
+      console.error('[OS] auditoria obrigatória indisponível',erro);
+      return;
+    }
+    if(!snapshotExclusoesOS.exists){
+      window.toast?.('O.S. não encontrada no banco. Gravação interrompida.','err');
+      return;
+    }
+    const servidorOS=snapshotExclusoesOS.data()||{};
+    if(servidorOS.tenantId&&String(servidorOS.tenantId)!==String(J.tid)){
+      window.toast?.('O.S. de outra oficina. Gravação bloqueada.','err');
+      return;
+    }
+    if (Array.isArray(payloadFirestore.media)) {
+      // Preservar anexos incluídos em paralelo por outros usuários; remover
+      // apenas os que estavam disponíveis quando o gestor abriu esta OS.
+      const urlMidiaOS=m=>typeof m==='string'?m:(m?.url||m?.secure_url||'');
+      const midiasIniciais=Array.isArray(_oldOSPreservar?.media)?_oldOSPreservar.media:(_oldOSPreservar?.fotos||[]);
+      const antes=new Set(midiasIniciais.map(urlMidiaOS).filter(Boolean));
+      const atuais=new Set(payloadFirestore.media.map(urlMidiaOS).filter(Boolean));
+      for(const m of (Array.isArray(servidorOS.media)?servidorOS.media:[])){
+        const url=urlMidiaOS(m);
+        if(url&&!antes.has(url)&&!atuais.has(url)){
+          payloadFirestore.media.push(m);
+          atuais.add(url);
+        }
       }
-    }catch(e){console.warn('[OS] Não foi possível verificar mídia concorrente:',e);}
+    }
+    // Auditoria integrada ao MESMO salvamento da OS, não a um toast provisório.
+    const exclusoes=osRastrearExclusoesNoSalvar(servidorOS,payloadFirestore,{
+      id:usuarioAuditoriaOS.id,nome:usuarioAuditoriaOS.nome,perfil:usuarioAuditoriaOS.perfil
+    });
+    const baseEventos=Array.isArray(servidorOS.timeline)?servidorOS.timeline:[];
+    const planejados=Array.isArray(payloadFirestore.timeline)?payloadFirestore.timeline:[];
+    const completos=[...baseEventos];
+    const vistos=new Set(baseEventos.map(e=>JSON.stringify(e)));
+    for(const evento of [...planejados,...exclusoes]){
+      const chave=JSON.stringify(evento);
+      if(!vistos.has(chave)){completos.push(evento);vistos.add(chave);}
+    }
+    payloadFirestore.timeline=completos;
+    // Auditoria geral é complementar; a própria OS já registra cada exclusão.
+    exclusoes.forEach(evento=>auditoriaGeralOS.push(evento.acao+
+      (evento.midiaUrl?' | '+evento.midiaUrl:'')));
   }
   if (osId) batchSalvarOS.update(osRefSalvar, payloadFirestore);
   else batchSalvarOS.set(osRefSalvar, payloadFirestore);
