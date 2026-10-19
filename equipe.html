@@ -1020,6 +1020,9 @@ function abrirModal(id){
   modal.classList.add('open');
 }
 function fecharModal(id){
+  if(id==='modalOS'){
+    if(typeof _equipePararAvisosInternos==='function')_equipePararAvisosInternos();
+  }
   $(id)?.classList.remove('open');
   // Modal fechado manualmente não deve reaparecer ao voltar.
   for(let i=_equipeHistoricoInterno.length-1;i>=0;i--){
@@ -2076,6 +2079,22 @@ function _atualizarStatusVisualEquipe(status){
   if($('osStatusVisual')) $('osStatusVisual').value=_statusVisualEquipe(status||'Aguardando');
 }
 function _escapeEquipe(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+let _equipeUnsubAvisoOS=null;
+let _equipeAvisoId='';
+function _equipePararAvisosInternos(){
+  try{_equipeUnsubAvisoOS?.();}catch(e){}
+  _equipeUnsubAvisoOS=null;_equipeAvisoId='';
+}
+function _equipeAcompanharAvisosInternos(osId){
+  if(!osId||String(osId)===_equipeAvisoId)return;
+  _equipePararAvisosInternos();
+  _equipeAvisoId=String(osId);
+  _equipeUnsubAvisoOS=db.collection('ordens_servico').doc(_equipeAvisoId).onSnapshot(snap=>{
+    if(!snap.exists||String(document.getElementById('osId')?.value||'')!==_equipeAvisoId)return;
+    if(String(snap.data()?.tenantId||'')!==String(J.tid))return;
+    renderObservacoesEquipeOS({observacoesEquipe:snap.data().observacoesEquipe||[]});
+  },err=>console.warn('[Equipe avisos internos]',err?.message||err));
+}
 function renderObservacoesEquipeOS(os){
   const box=$('osObsEquipeHistorico'); if(!box)return;
   const lista=Array.isArray(os?.observacoesEquipe)?os.observacoesEquipe.slice(-12).reverse():[];
@@ -2135,6 +2154,7 @@ async function salvarCadastroRapidoVeiculoEquipe(){
 }
 
 function prepOS(mode,id=null){
+  _equipePararAvisosInternos();
   window._equipeOSAtual = null;
   ['osId','osDesc','osDiag','osKm','osPrisma'].forEach(f=>{if($(f))$(f).value='';});
   $('osMO').value='0'; $('osTipo').value='carro'; _atualizarStatusVisualEquipe('Aguardando');
@@ -2183,6 +2203,7 @@ function prepOS(mode,id=null){
     });
     aplicarMarcadoresAprovacaoEquipe(os);
     renderObservacoesEquipeOS(os);
+    _equipeAcompanharAvisosInternos(os.id);
   }
 }
 
