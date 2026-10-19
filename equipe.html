@@ -2417,7 +2417,7 @@ async function salvarExecucaoAprovadosEquipe(osId) {
   if(!osLocal||!J.tid||!J.fid||!String(J.nome||'').trim()||!autorizado){
     toast('O.S. ou profissional não autorizado para registrar execução.','warn');return;
   }
-  const chavesAntes=U.getApprovedKeys?.(osLocal)||new Set();
+  const chavesAntes=equipeTemOrcamentoAprovado(osLocal)?(U.getApprovedKeys?.(osLocal)||new Set()):new Set();
   const clienteLocal=(dbClientes||[]).find(c=>String(c.id)===String(osLocal.clienteId));
   const todosLocais=new Map(equipeItensOperacionaisOS(osLocal,clienteLocal).map(it=>[it.key,it]));
   const alterados=[],validos=new Set(['pendente','em_execucao','executado','trocada','executado_obs','nao_executado','cancelado']);
@@ -2435,6 +2435,9 @@ async function salvarExecucaoAprovadosEquipe(osId) {
       toast('Informe a observação deste item para continuar.','warn');return;
     }
     if(estado!==estadoAntes||observacao!==observacaoAntes){
+      if(!chavesAntes.has(chave)){
+        toast('Este serviço ou peça ainda não foi autorizado pelo gestor ou cliente.','warn');return;
+      }
       alterados.push({chave,tipo,estado,observacao,estadoAntes,observacaoAntes,descInicial:todosLocais.get(chave).desc});
     }
   }
@@ -2451,7 +2454,7 @@ async function salvarExecucaoAprovadosEquipe(osId) {
       if(String(os.tenantId||'')!==String(J.tid))throw Error('Oficina não autorizada.');
       if(!(['gerente','gestor','admin','superadmin','dono'].includes(String(J.role||'').toLowerCase())||
             osAtribuidaAoUsuarioEquipe(os)))throw Error('O profissional não está vinculado à OS.');
-      const chaves=U.getApprovedKeys?.(os)||new Set();
+      const chaves=equipeTemOrcamentoAprovado(os)?(U.getApprovedKeys?.(os)||new Set()):new Set();
       if(chaves.size!==chavesAntes.size||[...chavesAntes].some(k=>!chaves.has(k)))
         throw Error('A aprovação foi alterada. Reabra a O.S.');
       const cli=dbClientes.find(c=>c.id===os.clienteId);
@@ -2459,6 +2462,8 @@ async function salvarExecucaoAprovadosEquipe(osId) {
       const exec={...(os.execucaoItens||{})},eventos=[],agora=new Date().toISOString();
       for(const alteracao of alterados){
         const item=publicos.get(alteracao.chave);
+        if(!chaves.has(alteracao.chave))
+          throw Error('Item sem autorização de execução. Solicite aprovação no JARVIS ou pelo cliente.');
         if(!item||item.tipo!==alteracao.tipo||item.desc!==alteracao.descInicial)
           throw Error('Item alterado por outro profissional. Reabra a OS: '+alteracao.chave);
         const anterior=exec[alteracao.chave]||{};
@@ -2579,7 +2584,7 @@ function aplicarMarcadoresAprovacaoEquipe(os) {
   document.querySelectorAll('#modalOS .equipe-exec-salvar').forEach(el=>el.remove());
   document.getElementById('resumoAprovacaoEquipe')?.remove();
   document.querySelectorAll('#containerServicos .aprovacao-item-badge,#containerPecas .aprovacao-item-badge').forEach(el => el.remove());
-  const chaveAprovadas=U.getApprovedKeys?.(os)||new Set();
+  const chaveAprovadas=equipeTemOrcamentoAprovado(os)?(U.getApprovedKeys?.(os)||new Set()):new Set();
   const aprovadaAtiva=equipeTemOrcamentoAprovado(os);
   if(!(['gerente','gestor','admin','superadmin','dono'].includes(String(J.role||'').toLowerCase())||
        osAtribuidaAoUsuarioEquipe(os)))return;
@@ -2619,10 +2624,10 @@ function aplicarMarcadoresAprovacaoEquipe(os) {
             ? `<select class="j-select exec-mec" ${podeAlterarMec ? '' : 'disabled'} style="font-size:.70rem;">${opcoesMecanicoServicoEquipe(mecIdItem, os)}</select>`
             : '<span></span>';
           return `<div class="execucao-aprovado-row" data-key="${escExecEquipe(it.key)}" data-tipo="${escExecEquipe(it.tipo)}" data-mec-id="${escExecEquipe(mecIdItem)}" data-status-inicial="${escExecEquipe(e.status||'pendente')}" data-obs-inicial="${escExecEquipe(e.obs||'')}" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:7px;align-items:center;background:rgba(0,0,0,.16);border:1px solid rgba(255,255,255,.10);border-radius:3px;padding:8px;">
-            <div style="font-size:.75rem;color:var(--text);"><b>${escExecEquipe(it.labelTipo || it.tipo)}</b> ${it.codigo ? '[' + escExecEquipe(it.codigo) + '] ' : ''}${escExecEquipe(it.desc || '-')}${!aprovadaAtiva ? ' <small style="color:var(--warn)">(SEM APROVAÇÃO)</small>' : !keys.has(it.key)? ' <small style="color:var(--warn)">(PENDENTE DE APROVAÇÃO)</small>' : ''}${e.atualizadoPor ? `<br><small style="color:var(--muted2);">Última alteração: ${escExecEquipe(e.atualizadoPor)}${e.atualizadoEm ? ' · '+escExecEquipe(new Date(e.atualizadoEm).toLocaleString('pt-BR')) : ''}</small>` : ''}</div>
+            <div style="font-size:.75rem;color:var(--text);"><b>${escExecEquipe(it.labelTipo || it.tipo)}</b> ${it.codigo ? '[' + escExecEquipe(it.codigo) + '] ' : ''}${escExecEquipe(it.desc || '-')}${!keys.has(it.key)?' <small style="color:var(--warn)">(AGUARDANDO AUTORIZAÇÃO DE EXECUÇÃO)</small>':' <small style="color:var(--success)">(EXECUÇÃO AUTORIZADA)</small>'}${e.atualizadoPor ? `<br><small style="color:var(--muted2);">Última alteração: ${escExecEquipe(e.atualizadoPor)}${e.atualizadoEm ? ' · '+escExecEquipe(new Date(e.atualizadoEm).toLocaleString('pt-BR')) : ''}</small>` : ''}</div>
             ${seletorMec}
-            <select class="j-select exec-status" style="font-size:.72rem;">${statusOptionsExecEquipe(it.tipo, e.status || 'pendente')}</select>
-            <input class="j-input exec-obs" value="${escExecEquipe(e.obs || '')}" placeholder="Observação interna: peça não encontrada, aguardando, executado...">
+            <select class="j-select exec-status" ${keys.has(it.key)?'':'disabled aria-label="Aguardando autorização de execução"'} style="font-size:.72rem;">${statusOptionsExecEquipe(it.tipo, e.status || 'pendente')}</select>
+            <input class="j-input exec-obs" ${keys.has(it.key)?'':'disabled aria-label="Aguardando autorização de execução"'} value="${escExecEquipe(e.obs || '')}" placeholder="${keys.has(it.key)?'Observação interna: peça não encontrada, aguardando, executado...':'Aguardando autorização do gestor ou cliente'}">
           </div>`;
         }).join('')}
       </div>
