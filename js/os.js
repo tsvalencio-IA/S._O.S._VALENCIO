@@ -5762,6 +5762,19 @@ window.salvarOS = async function() {
     payload.pin = Math.floor(1000 + Math.random() * 9000).toString();
   }
   const payloadFirestore = limparUndefinedFirestoreOS(payload);
+  if (osId && Array.isArray(payloadFirestore.media)) {
+    // Preserva mídias inseridas por outros usuários após a abertura da ficha,
+    // sem desfazer remoções deliberadas de arquivos que já estavam na ficha.
+    try {
+      const servidor=await osRefSalvar.get({source:'server'});
+      const antes=new Set((Array.isArray(_oldOSPreservar?.media)?_oldOSPreservar.media:[]).map(m=>typeof m==='string'?m:m?.url).filter(Boolean));
+      const atual=new Set(payloadFirestore.media.map(m=>typeof m==='string'?m:m?.url).filter(Boolean));
+      for(const item of (Array.isArray(servidor.data()?.media)?servidor.data().media:[])){
+        const url=typeof item==='string'?item:item?.url;
+        if(url&&!antes.has(url)&&!atual.has(url)){payloadFirestore.media.push(item);atual.add(url);}
+      }
+    }catch(e){console.warn('[OS] Não foi possível verificar mídia concorrente:',e);}
+  }
   if (osId) batchSalvarOS.update(osRefSalvar, payloadFirestore);
   else batchSalvarOS.set(osRefSalvar, payloadFirestore);
   operacoesBatchSalvarOS += 1;
@@ -5933,7 +5946,10 @@ window.comprimirImagemOS = async function(file) {
   });
 };
 
+window._osCloudinaryCache = new WeakMap();
 window.uploadCloudinaryOSFile = async function(file) {
+  const cached=window._osCloudinaryCache.get(file);
+  if(cached)return cached;
   const finalFile = await window.comprimirImagemOS(file);
   const fd = new FormData();
   fd.append('file', finalFile);
@@ -5941,7 +5957,7 @@ window.uploadCloudinaryOSFile = async function(file) {
   const res = await fetch(`https://api.cloudinary.com/v1_1/${J.cloudName}/auto/upload`, { method: 'POST', body: fd });
   const data = await res.json();
   if (!data || !data.secure_url) throw new Error(data?.error?.message || 'Falha no upload.');
-  return {
+  const result = {
     url: data.secure_url,
     type: data.resource_type || (/^video\//.test(file.type || '') ? 'video' : 'image'),
     name: file.name || '',
@@ -5949,6 +5965,8 @@ window.uploadCloudinaryOSFile = async function(file) {
     uploadedAt: data.created_at && !Number.isNaN(Date.parse(data.created_at)) ? new Date(data.created_at).toISOString() : new Date().toISOString(),
     uploadHorarioOrigem: data.created_at ? 'cloudinary' : 'dispositivo'
   };
+  window._osCloudinaryCache.set(file,result);
+  return result;
 };
 
 window.uploadOsMediaComLimite = async function(files, limit, onProgress) {
@@ -6026,52 +6044,58 @@ window.limparOsMediaPreview = function() {
   const prog = $('osMediaProgress'); if (prog) { prog.style.display = 'none'; prog.innerText = ''; }
 };
 
-// Sobe todos os arquivos do preview em lote, concatena com os já gravados,
-// atualiza o hidden array e re-renderiza a galeria. Grava no Firestore
-// somente quando o usuário clicar "SALVAR O.S." (via salvarOS).
+// Enviar fila confirma a gravação dos anexos na O.S. imediatamente, sem Salvar.
 window.uploadOsMediaBatch = async function() {
-  // Se o input ainda tem seleção não absorvida, incorpora agora
-  const fInput = $('osFileInput');
-  if (fInput && fInput.files && fInput.files.length) {
-    window._osBatchFiles = (window._osBatchFiles || []).concat(Array.from(fInput.files));
-    try { fInput.value = ''; } catch(e){}
+  const fInput=$('osFileInput');
+  if(fInput?.files?.length){
+    window._osBatchFiles=(window._osBatchFiles||[]).concat(Array.from(fInput.files));
+    try{fInput.value='';}catch(e){}
     window.renderOsMediaPreview();
   }
-
-  if (!window._osBatchFiles || !window._osBatchFiles.length) {
-    window.toast('⚠ Selecione ao menos um arquivo.', 'warn');
-    return;
+  if(!window._osBatchFiles?.length){window.toast('⚠ Selecione ao menos um arquivo.','warn');return;}
+  if(!window.sosMediaOsPersist){window.toast('Módulo de gravação de anexos indisponível. Nada foi enviado.','err');return;}
+  const btn=$('btnUploadMedia'),prog=$('osMediaProgress'),arquivos=window._osBatchFiles.slice();
+  if(btn){btn.disabled=true;btn.innerText='ENVIANDO E SALVANDO...';}
+  if(prog){prog.style.display='inline';prog.innerText='Preparando O.S....';}
+  try{
+    let osId=$v('osId');
+    if(!osId){
+      const criada=await window.sosMediaOsPersist.garantirOS({
+        db,tid:J.tid,clienteId:$v('osCliente'),veiculoId:$v('osVeiculo'),
+        campos:{tipoVeiculo:$v('osTipo'),data:$v('osData'),km:$v('osKm')},
+        ator:J.nome||'Gestor'
+      });
+      osId=criada.id;
+      $('osId').value=osId;
+    }
+    if(prog)prog.innerText='0/'+arquivos.length+' • enviando...';
+    const resultados=await window.uploadOsMediaComLimite(arquivos,3,(done,all)=>{
+      if(prog)prog.innerText=done+'/'+all+' • enviando...';
+    });
+    const novas=resultados.filter(r=>r?.ok&&r.item).map(r=>r.item);
+    const falhas=arquivos.length-novas.length;
+    if(!novas.length){
+      window.toast('✕ Nenhum arquivo enviado. A fila foi mantida para tentar novamente.','err');
+      return;
+    }
+    if(prog)prog.innerText='Gravando '+novas.length+' arquivo(s) na O.S....';
+    const persistido=await window.sosMediaOsPersist.gravar({
+      db,tid:J.tid,osId,itens:novas,ator:J.nome||'Gestor'
+    });
+    const atuais=JSON.parse($('osMediaArray')?.value||'[]');
+    $('osMediaArray').value=JSON.stringify(window.sosMediaOsPersist.uniq([...atuais,...persistido.media]));
+    window.renderMediaOS();
+    window._osBatchFiles=arquivos.filter((_,i)=>!resultados[i]?.ok);
+    window.renderOsMediaPreview();
+    if(!falhas)window.toast('✓ '+novas.length+' arquivo(s) salvo(s) diretamente na O.S.','ok');
+    else window.toast('✓ '+novas.length+' salvo(s) na O.S.; '+falhas+' pendente(s) para tentar novamente.','warn');
+  }catch(e){
+    console.error('[OS upload persistente]',e);
+    window.toast('✕ Anexos não confirmados na O.S.: '+(e?.message||e)+'. Fila preservada.','err');
+  }finally{
+    if(btn){btn.disabled=false;btn.innerText='ENVIAR FILA';}
+    if(prog){prog.style.display='none';prog.innerText='';}
   }
-
-  const btn = $('btnUploadMedia');
-  const prog = $('osMediaProgress');
-  if (btn) { btn.disabled = true; btn.innerText = 'ENVIANDO...'; }
-  if (prog) { prog.style.display = 'inline'; prog.innerText = '0/' + window._osBatchFiles.length; }
-
-  const total = window._osBatchFiles.length;
-  const resultados = await window.uploadOsMediaComLimite(window._osBatchFiles, 2, (done, all) => {
-    if (prog) prog.innerText = done + '/' + all;
-  });
-  const novasUrls = resultados.filter(r => r && r.ok && r.item).map(r => r.item);
-  const sucesso = novasUrls.length;
-  const falhas = total - sucesso;
-
-  // Concatena com o que já estava gravado no hidden (em caso de edição de O.S.)
-  const jaSalvo = JSON.parse($('osMediaArray').value || '[]');
-  const final = jaSalvo.concat(novasUrls);
-  $('osMediaArray').value = JSON.stringify(final);
-  window.renderMediaOS();
-
-  // Limpa o preview local (as prévias já viraram itens reais da galeria)
-  window._osBatchFiles = [];
-  window.renderOsMediaPreview();
-
-  if (btn) { btn.disabled = false; btn.innerText = 'ENVIAR FILA'; }
-  if (prog) { prog.style.display = 'none'; prog.innerText = ''; }
-
-  if (sucesso && !falhas) window.toast(`✓ ${sucesso} arquivo(s) enviado(s). Salve a O.S. para persistir.`);
-  else if (sucesso && falhas) window.toast(`⚠ ${sucesso} ok, ${falhas} falhou. Salve a O.S. para persistir o que deu certo.`, 'warn');
-  else window.toast('✕ Nenhum arquivo enviado.', 'err');
 };
 
 window._osGaleriaFotoIndex = 0;
