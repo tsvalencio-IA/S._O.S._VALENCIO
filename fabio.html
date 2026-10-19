@@ -371,6 +371,10 @@ html,body{overflow-x:hidden}
 .fabio-busca-acoes button{min-height:59px;font-weight:900;min-width:0;white-space:normal}
 #fabioPesquisar{background:#098058;border:2px solid #4ad5a6;font-size:1.1rem}
 #fabioConsulta .consulta-topo button{min-height:50px}
+#fabioConsulta .consulta-aviso-orcamento{border:2px solid #c94747;background:#fff1ec;color:#802121;border-radius:9px;padding:12px;margin:12px 0;font-weight:800;line-height:1.5}
+#fabioConsulta .consulta-orcamento-subtotais{margin:12px 0 4px;padding:12px;background:#eff5fa;border:1px solid #cedce7;color:#24354a;border-radius:8px}
+#fabioConsulta .consulta-orcamento-subtotais p{margin:4px 0}
+#fabioConsulta .consulta-topo #fabioConsultaPdfOficial{border-color:#5dadd8}
 #fabioClienteEnviar:not([hidden]){background:#087a4f;border:2px solid #35d29b;font-weight:900}
 #fabioClienteEstado{flex-basis:100%;color:#bfdef3;overflow-wrap:anywhere}
 #fabioConsulta.fabio-cliente .consulta-tabela-rolagem{overflow-x:hidden}
@@ -433,6 +437,7 @@ html,body{overflow-x:hidden}
   <h2 id="fabioConsultaTitulo">ORDEM DE SERVIÇO</h2>
   <button id="fabioConsultaVoltar" type="button">✕ Fechar / voltar</button>
   <button id="fabioConsultaImprimir" type="button">Imprimir</button>
+  <button id="fabioConsultaPdfOficial" type="button" title="Conferir o PDF original somente para uso interno">📄 CONFERIR PDF ORIGINAL</button>
   <button id="fabioConsultaCompartilhar" type="button" class="principal">📄 PRÉVIA PARA CLIENTE</button>
   <button id="fabioClienteEnviar" type="button" hidden>📤 PREPARAR PDF</button>
   <div id="fabioClienteEstado" role="status" aria-live="polite"></div>
@@ -1293,12 +1298,45 @@ window.addEventListener('afterprint',()=>{if(aberto)document.body.style.overflow
 const get=id=>document.getElementById(id);
 const folha=get('fabioConsultaFolha'),dialog=get('fabioConsulta');
 let idAtual='',cliente=false,arquivo=null,processando=false,refArquivo=null;
+function conferirOrcamentoFabio(id){
+ const os=fonte(id);
+ const info=window.__fabioDadosFonte?.();
+ const utils=window.JarvisOSUtils;
+ if(!os||!info||!utils?.buildBudgetItems||!utils?.parseNumberBR)
+  return {ok:false,mensagem:'Não foi possível conferir os preços contra os dados da OS. Envio bloqueado.'};
+ const clienteOS=(info.clientes||[]).find(c=>String(c.id)===String(os.clienteId))||{};
+ const all=utils.buildBudgetItems(os,clienteOS);
+ const aprovacao=utils.hasApproval?.(os)===true;
+ const aprovados=aprovacao?utils.getApprovedKeys(os):null;
+ const itens=aprovacao?all.filter(it=>aprovados.has(it.key)):all;
+ const dinheiro=x=>utils.parseNumberBR(x);
+ const soma=(arr,key)=>+(arr.reduce((n,it)=>n+dinheiro(it[key]||0),0)).toFixed(2);
+ const servicos=itens.filter(it=>it.tipo==='servico'),pecas=itens.filter(it=>it.tipo==='peca');
+ const bruto=soma(itens,'valorBruto'),desconto=soma(itens,'descontoValor');
+ const maoObra=soma(servicos,'valorFinal'),totalPecas=soma(pecas,'valorFinal');
+ const loc=os.deslocamentoGuincho||os.guincho||{};
+ const guincho=(loc.ativo===true||loc.cobrar===true||dinheiro(os.totalGuincho||0)>0)
+  ?dinheiro(os.totalGuincho??loc.total??0):0;
+ const calculado=+(maoObra+totalPecas+guincho).toFixed(2);
+ const referenciaBruta=aprovacao?os.totalAprovado:os.total;
+ const temReferencia=referenciaBruta!==undefined&&referenciaBruta!==null&&String(referenciaBruta).trim()!=='';
+ const referencia=temReferencia?dinheiro(referenciaBruta):null;
+ const divergencia=temReferencia&&Math.abs(calculado-referencia)>0.02;
+ const zerosSemPreco=itens.filter(it=>it.tipo==='peca'&&dinheiro(it.valorUnit)===0
+  &&!(it.valorBruto>0)).length;
+ const mensagem=divergencia
+  ?'ATENÇÃO: soma dos itens e guincho ('+utils.moeda(calculado)+') diferente do total registrado ('+utils.moeda(referencia)+'). Confira o orçamento original no JARVIS. Envio pelo Fábio bloqueado; nenhum preço será inventado.'
+  :'';
+ return {ok:!divergencia,mensagem,aprovacao,itens,servicos,pecas,bruto,desconto,maoObra,totalPecas,guincho,calculado,referencia,temReferencia,zerosSemPreco};
+}
+window.fabioConferirOrcamento=id=>conferirOrcamentoFabio(id);
 const baseAbrir=window.fabioAbrirConsultaOS;
 const fonte=id=>window.__fabioOsFonte?.().find(x=>String(x.id)===String(id));
 const nome=v=>v===undefined||v===null?'':String(v);
 function ui(){
  dialog.classList.toggle('fabio-cliente',cliente);
  get('fabioConsultaCompartilhar').textContent=cliente?'← VOLTAR À CONFERÊNCIA INTERNA':'📄 CONFERIR PDF PARA CLIENTE';
+ get('fabioConsultaPdfOficial').hidden=cliente;
  get('fabioClienteEnviar').hidden=!cliente;
  get('fabioClienteEnviar').disabled=processando;
  get('fabioClienteEnviar').textContent=processando?'GERANDO PDF…':arquivo?'↗ ENVIAR PDF CONFERIDO':'📤 PREPARAR PDF PARA ENVIO';
@@ -1331,6 +1369,8 @@ function incluirMecanicos(){
  });
 }
 function gerarClienteEmTela(){
+ const conferencia=conferirOrcamentoFabio(idAtual);
+ if(!conferencia.ok)throw Error(conferencia.mensagem||'Não foi possível conciliar o orçamento.');
  // Fábio: construir documento para cliente por inclusão positiva, nunca por subtração da OS interna.
  const fonteInterna=folha,limpo=document.createElement('article');
  limpo.className='consulta-folha';
@@ -1384,7 +1424,13 @@ function gerarClienteEmTela(){
   const trCab=colocar(colocar(tabela,'thead'),'tr');
   col.forEach(v=>colocar(trCab,'th','',v.publico));
   const tbody=colocar(tabela,'tbody');
-  tab.querySelectorAll('tbody tr').forEach(trOrig=>{
+  const entradas=t==='SERVIÇOS / MÃO DE OBRA'
+    ?window.JarvisOSUtils.buildBudgetItems(fonte(idAtual),(window.__fabioDadosFonte()?.clientes||[]).find(c=>String(c.id)===String(fonte(idAtual).clienteId))||{}).filter(it=>it.tipo==='servico')
+    :window.JarvisOSUtils.buildBudgetItems(fonte(idAtual),(window.__fabioDadosFonte()?.clientes||[]).find(c=>String(c.id)===String(fonte(idAtual).clienteId))||{}).filter(it=>it.tipo==='peca');
+  const linhas=[...tab.querySelectorAll('tbody tr')];
+  if(linhas.length!==entradas.length)throw Error('Quantidade de itens divergente da OS original. Envio bloqueado.');
+  linhas.forEach((trOrig,indice)=>{
+   if(conferencia.aprovacao&&!conferencia.itens.some(it=>it.key===entradas[indice].key))return;
    const cells=[...trOrig.children],tr=colocar(tbody,'tr');
    col.forEach(({i,publico})=>{
     if(!cells[i])throw Error('Peça/serviço com coluna ausente.');
@@ -1401,17 +1447,18 @@ function gerarClienteEmTela(){
   ['Descrição','Descrição'],['Qtd.','Qtd.'],['Valor unit.','Valor unit.'],
   ['Valor original','Valor original'],['Desconto','Desconto'],['Valor cobrado / Aplicação','Valor cobrado']
  ]);
- const totOrig=original('RESUMO DE VALORES');if(!totOrig)throw Error('Total da OS ausente.');
+ const util=window.JarvisOSUtils;
  const totais=colocar(sec('RESUMO DE VALORES'),'div','consulta-totais');
- const permitidoTotal=new Set(['total do orçamento','total registrado na o.s.','total aprovado']);
- let nTotais=0;
- totOrig.querySelectorAll('.consulta-total').forEach(l=>{
-  const nome=l.querySelector('span')?.textContent.trim()||'';
-  if(!permitidoTotal.has(nome.toLocaleLowerCase('pt-BR')))return;
-  const row=colocar(totais,'div','consulta-total');
-  colocar(row,'span','',nome);colocar(row,'strong','',l.querySelector('strong')?.textContent||'');nTotais++;
- });
- if(!nTotais)throw Error('Totais não encontrados.');
+ const linhaTotal=(rotulo,valor,destaque=false)=>{
+  const linha=colocar(totais,'div','consulta-total'+(destaque?' forte':''));
+  colocar(linha,'span','',rotulo);colocar(linha,'strong','',util.moeda(valor));
+ };
+ linhaTotal('Valor original de peças e serviços',conferencia.bruto);
+ linhaTotal('Desconto total concedido',-conferencia.desconto);
+ linhaTotal('Total de peças cobrado',conferencia.totalPecas);
+ linhaTotal('Total de mão de obra cobrado',conferencia.maoObra);
+ linhaTotal('Deslocamento / guincho',conferencia.guincho);
+ linhaTotal('Valor do contrato',conferencia.calculado,true);
  const fotoOrig=origemSecoes.find(e=>(e.querySelector('.consulta-titulo')?.textContent||'').startsWith('EVIDÊNCIAS DIGITAIS'));
  if(!fotoOrig)throw Error('Evidências indisponíveis.');
  const fotos=[...fotoOrig.querySelectorAll('.consulta-foto')],area=sec('EVIDÊNCIAS DIGITAIS — '+fotos.length+' FOTO(S)');
@@ -1449,9 +1496,20 @@ function abrirInterno(id){
  idAtual=id;cliente=false;arquivo=null;refArquivo=null;
  get('fabioClienteEstado').textContent='';
  baseAbrir(id);
- incluirMecanicos();ui();
+ incluirMecanicos();
+ const resultado=conferirOrcamentoFabio(id);
+ folha.querySelectorAll('.consulta-aviso-orcamento').forEach(el=>el.remove());
+ if(!resultado.ok){
+  const alerta=document.createElement('div');alerta.className='consulta-aviso-orcamento';
+  alerta.textContent=resultado.mensagem;
+  folha.prepend(alerta);
+ }
+ ui();
 }
 window.fabioAbrirConsultaOS=abrirInterno;
+get('fabioConsultaPdfOficial').addEventListener('click',()=>{
+ if(idAtual)window.fabioAbrirPdfOS?.(idAtual);
+});
 let mudouDuranteGeracao=false;
 const atualizarConsultaOriginal=window.fabioAtualizarOSAberta;
 window.fabioAtualizarOSAberta=function(){
@@ -1491,6 +1549,8 @@ function carregaLib(src,teste){
 }
 async function criarCliente(id){
  if(processando)throw Error('Outra geração de PDF em andamento');
+ const conc=conferirOrcamentoFabio(id);
+ if(!conc.ok)throw Error(conc.mensagem||'Orçamento não conciliado, envio bloqueado.');
  mudouDuranteGeracao=false;processando=true;ui();
  try{
   if(!cliente||idAtual!==id){
@@ -1543,7 +1603,7 @@ get('fabioClienteEnviar').addEventListener('click',async()=>{
   }catch(e){arquivo=null;get('fabioClienteEstado').textContent='Exportação bloqueada: '+(e.message||e)+'. Nada foi enviado.';}
   ui();return;
  }
- if(refArquivo!==fonte(idAtual)||!cliente){arquivo=null;refArquivo=null;get('fabioClienteEstado').textContent='A OS mudou após a conferência. Gere novamente antes de enviar.';ui();return;}
+ if(refArquivo!==fonte(idAtual)||!cliente||!conferirOrcamentoFabio(idAtual).ok){arquivo=null;refArquivo=null;get('fabioClienteEstado').textContent='A OS mudou ou os valores não conferem. Gere e confira novamente antes de enviar.';ui();return;}
  const file=new File([arquivo.blob],arquivo.fileName,{type:'application/pdf'});
  if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){
   navigator.share({files:[file],title:'OS '+arquivo.numero,text:'Segue a ordem de serviço S.O.S. Valêncio.'})
