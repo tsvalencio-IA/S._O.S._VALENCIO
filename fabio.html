@@ -1356,7 +1356,7 @@ function gerarClienteEmTela(){
  colocar(cab,'div','tipo','ORÇAMENTO / ORDEM DE SERVIÇO');
  const dadosOrig=original('DADOS DA ORDEM DE SERVIÇO');
  if(!dadosOrig)throw Error('Dados da OS ausentes.');
- const permitido=new Set(['cliente','cpf/cnpj','telefone','o.s.','veículo','placa','ano','km','status']);
+ const permitido=new Set(['cliente','cpf/cnpj','telefone','o.s.','veículo','placa','prefixo da viatura','patrimônio','ano','km','chassi','combustível','cor','status','o.s. aberta em','status atual']);
  const tb=colocar(sec('DADOS DA ORDEM DE SERVIÇO'),'table','consulta-dados'),bd=colocar(tb,'tbody');
  let linhas=0;
  dadosOrig.querySelectorAll('tbody tr').forEach(tr=>{
