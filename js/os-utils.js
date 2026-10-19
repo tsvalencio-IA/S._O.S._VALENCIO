@@ -1322,6 +1322,121 @@
     return payload;
   };
 
+  // Aprovação complementar: não substitui nem reabre a aprovação original.
+  // Apenas itens explicitamente marcados pendentes após a aprovação entram aqui.
+  U.listarComplementosPendentesOS = function(os,cliente) {
+    if(!os||!U.hasApproval(os)||os.aprovacaoAtiva===false)return [];
+    const aprovados=U.getApprovedKeys(os);
+    const pendencias=new Set((Array.isArray(os.pendenciasAprovacao)?os.pendenciasAprovacao:[]).filter(k=>typeof k==='string'));
+    return U.buildBudgetItems(os,cliente).filter(item=>pendencias.has(item.key)&&!aprovados.has(item.key));
+  };
+
+  U.aprovarComplementosOS = async function(options) {
+    const db=options?.db||window.db,osId=String(options?.osId||'');
+    const cliente=options?.cliente||null;
+    if(!db||!osId)throw Error('O.S. não identificada para aprovação complementar.');
+    const ref=db.collection('ordens_servico').doc(osId);
+    const atualSnap=await ref.get({source:'server'});
+    if(!atualSnap.exists)throw Error('O.S. não encontrada.');
+    const os={id:osId,...atualSnap.data()};
+    const tipo=String(options?.actorType||'');
+    if(tipo.startsWith('cliente')&&(!cliente?.id||String(os.clienteId)!==String(cliente.id)))
+      throw Error('Este orçamento não pertence ao cliente autenticado.');
+    if(options?.tenantId&&String(os.tenantId)!==String(options.tenantId))
+      throw Error('O.S. de outra oficina. Operação cancelada.');
+    const itens=U.listarComplementosPendentesOS(os,cliente||U.getCliente(os,options?.clientes));
+    if(!itens.length)throw Error('Não existem novos itens aguardando aprovação complementar.');
+
+    const selected=await new Promise(resolve=>{
+      const dialog=document.createElement('div');
+      dialog.style.cssText='position:fixed;inset:0;z-index:15000;display:flex;align-items:center;justify-content:center;padding:12px;background:#000c;overflow:auto';
+      const rows=itens.map(item=>{
+        const label=U.escapeHtml(item.desc||item.codigo||item.key);
+        return '<label style="display:flex;align-items:flex-start;gap:12px;padding:12px;border-bottom:1px solid #496176;cursor:pointer;">'+
+          '<input type="checkbox" class="complemento-os-check" value="'+U.escapeHtml(item.key)+'" style="width:20px;height:20px;flex:none;">'+
+          '<span style="flex:1;min-width:0;overflow-wrap:anywhere;">'+
+          '<b>'+U.escapeHtml(item.tipo==='peca'?'PEÇA':'SERVIÇO')+'</b> · '+label+
+          '<small style="display:block;">'+(item.tipo==='peca'?'Qtd. '+U.escapeHtml(item.qtd)+' · ':'')+
+          U.moeda(item.valorFinal||0)+'</small></span></label>';
+      }).join('');
+      dialog.innerHTML='<div role="dialog" aria-modal="true" aria-label="Aprovação complementar" style="width:min(740px,100%);max-height:92vh;overflow:auto;color:#edf5ff;background:#14243a;border:1px solid #55768a;border-radius:12px;padding:18px;">'+
+        '<h3 style="margin:0 0 10px;">Aprovar somente novos lançamentos</h3>'+
+        '<p style="font-size:.88rem;line-height:1.5;">A aprovação original e os valores anteriores serão preservados. Selecione os novos itens que autoriza. Os não selecionados continuarão pendentes.</p>'+
+        rows+
+        '<p id="complemento-os-total" style="font-weight:700;">Nenhum item selecionado</p>'+
+        '<div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">'+
+        '<button type="button" data-cancelar style="padding:12px;">Cancelar</button>'+
+        '<button type="button" data-confirmar style="padding:12px;background:#137c60;color:white;border:0;border-radius:6px;" disabled>Aprovar itens selecionados</button>'+
+        '</div></div>';
+      document.body.appendChild(dialog);
+      const checks=[...dialog.querySelectorAll('.complemento-os-check')];
+      const ok=dialog.querySelector('[data-confirmar]'),cancel=dialog.querySelector('[data-cancelar]');
+      const refresh=()=>{
+        const keys=new Set(checks.filter(c=>c.checked).map(c=>c.value));
+        const total=itens.filter(i=>keys.has(i.key)).reduce((n,i)=>n+U.parseNumberBR(i.valorFinal||0),0);
+        dialog.querySelector('#complemento-os-total').textContent=
+          keys.size+' selecionado(s) · Total adicional: '+U.moeda(total);
+        ok.disabled=!keys.size;
+      };
+      checks.forEach(c=>c.addEventListener('change',refresh));
+      cancel.addEventListener('click',()=>{dialog.remove();resolve(null);});
+      ok.addEventListener('click',()=>{
+        const keys=checks.filter(c=>c.checked).map(c=>c.value);
+        dialog.remove();resolve(keys);
+      });
+      refresh();
+    });
+    if(!selected?.length)return null;
+    const antes=new Map(itens.map(item=>[item.key,JSON.stringify([
+      item.key,item.tipo,item.desc,item.codigo,item.qtd,item.valorUnit,item.valorFinal,item.descontoValor
+    ])]));
+    const funcionario=String(options.actorName||'Responsável pela aprovação');
+    const revisao=await db.runTransaction(async trx=>{
+      const snap=await trx.get(ref);
+      if(!snap.exists)throw Error('O.S. não encontrada.');
+      const corrente={id:osId,...snap.data()};
+      if(options?.tenantId&&String(corrente.tenantId)!==String(options.tenantId))
+        throw Error('O.S. de outra oficina.');
+      if(tipo.startsWith('cliente')&&String(corrente.clienteId)!==String(cliente?.id))
+        throw Error('Cliente diferente do titular desta O.S.');
+      if(!U.hasApproval(corrente)||corrente.aprovacaoAtiva===false)
+        throw Error('A aprovação original foi alterada. Reabra a O.S.');
+      const cliAtual=cliente||U.getCliente(corrente,options?.clientes);
+      const pendentes=new Map(U.listarComplementosPendentesOS(corrente,cliAtual).map(i=>[i.key,i]));
+      const novos=selected.map(k=>{
+        const i=pendentes.get(k);
+        if(!i||JSON.stringify([i.key,i.tipo,i.desc,i.codigo,i.qtd,i.valorUnit,i.valorFinal,i.descontoValor])!==antes.get(k))
+          throw Error('Um item foi alterado desde a conferência. Reabra a aprovação.');
+        return i;
+      });
+      const anteriores=U.getApprovedKeys(corrente);
+      const novosKeys=[...new Set([...anteriores,...selected])];
+      const adicional=+novos.reduce((n,i)=>n+U.parseNumberBR(i.valorFinal||0),0).toFixed(2);
+      const antigo=U.parseNumberBR(corrente.totalAprovado??corrente.aprovacao?.totalAprovado??0);
+      const agora=new Date().toISOString();
+      const evento={dt:agora,user:funcionario,tipo:'aprovacao_complementar',
+        itens:selected,valorAdicional:adicional,visivelCliente:true,
+        acao:funcionario+' APROVOU '+selected.length+' novo(s) item(ns) na O.S. · Valor adicional '+U.moeda(adicional)};
+      const aprovadoAntes=Array.isArray(corrente.aprovacao?.itens)?corrente.aprovacao.itens:[];
+      trx.update(ref,{
+        aprovacao:{...corrente.aprovacao,itens:[...aprovadoAntes,...novos],
+          totalAprovado:+(antigo+adicional).toFixed(2)},
+        itensAprovados:novosKeys,
+        totalAprovado:+(antigo+adicional).toFixed(2),
+        pendenciasAprovacao:(Array.isArray(corrente.pendenciasAprovacao)?corrente.pendenciasAprovacao:[]).filter(k=>!selected.includes(k)),
+        aprovacaoComplementosHistorico:firebase.firestore.FieldValue.arrayUnion({
+          dt:agora,autor:funcionario,autorTipo:tipo,itens:novos.map(i=>({
+            key:i.key,tipo:i.tipo,desc:i.desc,qtd:i.qtd,valorFinal:i.valorFinal
+          })),totalAdicional:adicional
+        }),
+        timeline:firebase.firestore.FieldValue.arrayUnion(evento),
+        updatedAt:agora
+      });
+      return {keys:selected,totalAdicional:adicional,totalAprovado:+(antigo+adicional).toFixed(2)};
+    });
+    return revisao;
+  };
+
   U.autoDescribeFields = function(root) {
     root = root || document;
     root.querySelectorAll('input, select, textarea, button').forEach(el => {
