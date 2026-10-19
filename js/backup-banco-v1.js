@@ -19,6 +19,7 @@ const IMMUTABLE=new Set(['mensagens','lixeira_auditoria','auditLogs','ordens_ser
  'ordens_servico/*/publicTimeline','cotacoes_publicas/*/respostas']);
 const PROTECTED=new Set(['oficinas','notificacoes_live']);
 const ROOTS=new Set([...COLLECTIONS,'oficinas']);
+let lastDownloadURL=null;
 const LIMIT=150000, FILE_LIMIT=160*1024*1024, PAGE=200, VERSION=1, KDF_ITERATIONS=310000;
 const tenant=String(sessionStorage.getItem('j_tid')||'').trim();
 const role=String(sessionStorage.getItem('j_role')||'').toLowerCase();
@@ -36,11 +37,14 @@ function access(){
  if(!window.crypto?.subtle||!window.TextEncoder)throw Error('Este recurso exige uma conexão HTTPS e navegador com criptografia WebCrypto.');
  if(!window.initFirebase||!window.firebase?.firestore)throw Error('Firebase não foi carregado corretamente.');
 }
+function refreshRestoreButton(){
+ $('btnRestaurar').disabled=busy||!plan||!plan.alteracoes||$('confirmar').value.trim()!==('RESTAURAR '+plan.alteracoes);
+}
 function disable(flag){
  busy=flag;
  $('btnExportar').disabled=flag||!db;
  $('btnAnalisar').disabled=flag||!db;
- $('btnRestaurar').disabled=flag||!plan||!plan.alteracoes||$('confirmar').value.trim()!==('RESTAURAR '+plan.alteracoes);
+ refreshRestoreButton();
  $('btnCancelar').disabled=flag;
 }
 function report(data){
@@ -115,7 +119,7 @@ function decode(value,depth=0){
   }
   if(kind==='bytes')return firebase.firestore.Blob.fromBase64String(value.b64);
   if(kind==='reference'){
-   if(!validPath(value.path))throw Error('Referência Firestore inválida: '+value.path);
+   if(!validReference(value.path))throw Error('Referência Firestore inválida: '+value.path);
    return db.doc(value.path);
   }
   if(kind==='number'){
@@ -140,6 +144,11 @@ function stable(value){
  return value;
 }
 const fingerprint=encoded=>JSON.stringify(stable(encoded));
+function validReference(path){
+ if(typeof path!=='string'||path.length>950||path.includes('//'))return false;
+ const pieces=path.split('/');
+ return pieces.length>=2&&pieces.length%2===0&&!pieces.some(x=>!x||x==='.'||x==='..'||/[?#\\]/.test(x));
+}
 function validPath(path){
  if(typeof path!=='string'||path.length>950||path.includes('//'))return false;
  const p=path.split('/');
@@ -226,11 +235,16 @@ async function exportDB(){
  const encrypted=await encrypt(backup,password);
  progress(96,'Preparando download seguro…');
  const blob=new Blob([JSON.stringify(encrypted)],{type:'application/json'});
- const url=URL.createObjectURL(blob);
+ if(blob.size>FILE_LIMIT)throw Error('Backup gerado acima de 160 MB. Não é seguro criar um arquivo que o importador atual não consegue abrir.');
+ if(lastDownloadURL)URL.revokeObjectURL(lastDownloadURL);
+ const url=URL.createObjectURL(blob);lastDownloadURL=url;
+ const holder=$('downloadHolder');holder.replaceChildren();
  const a=document.createElement('a');
  a.download='SOS_VALENCIO_BACKUP_'+new Date().toISOString().replace(/[:.]/g,'-')+'.sosbackup';
- a.href=url;document.body.appendChild(a);a.click();a.remove();
- setTimeout(()=>URL.revokeObjectURL(url),60000);
+ a.href=url;a.textContent='⬇ BAIXAR BACKUP GERADO';
+ a.style.cssText='display:block;margin-top:14px;padding:13px;text-align:center;background:#17566f;border:1px solid #28c69e;color:white;border-radius:10px;font-weight:800;text-decoration:none';
+ holder.appendChild(a);
+ a.click();
  $('senhaExportar').value='';$('senhaExportar2').value='';
  progress(100,'Backup criptografado preparado para download: '+numFmt(docs.length)+' documentos • '+numFmt(blob.size)+' bytes.');
  report({resultado:'Arquivo de backup gerado; confirme que o navegador concluiu o download.',oficina:tenant,
@@ -369,7 +383,7 @@ function setup(){
  $('btnExportar').addEventListener('click',()=>operation(exportDB));
  $('btnAnalisar').addEventListener('click',()=>operation(preview));
  $('btnRestaurar').addEventListener('click',()=>operation(restore));
- $('confirmar').addEventListener('input',()=>disable(false));
+ $('confirmar').addEventListener('input',refreshRestoreButton);
  $('btnCancelar').addEventListener('click',()=>{plan=null;source=null;$('confirmar').value='';$('previsao').hidden=true;disable(false);setStatus('Importação cancelada. Nenhum documento foi alterado.');});
  $('arquivo').addEventListener('change',()=>{plan=null;source=null;$('previsao').hidden=true;disable(false);});
 }
