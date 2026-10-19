@@ -177,6 +177,19 @@ sessionStorage.clear();
 
 const db = window.initFirebase();
 
+// Retorno ao Fábio somente para sessões de gestores autorizados.
+// URLs externas e outras páginas não são aceitas como destino do login.
+const _destinoSolicitadoLogin = new URLSearchParams(window.location.search).get('destino') === 'fabio.html' ? 'fabio.html' : '';
+function _destinoFinalLogin(destinoPadrao, sessao) {
+  const cargo = _normalizarCargoLogin(sessao?.j_cargo);
+  const role = String(sessao?.j_role || '').toLowerCase();
+  const tenant = String(sessao?.j_tid || '');
+  const autorizadoFabio = tenant && tenant !== 'MASTER_ADMIN' && (['admin', 'gestor'].includes(role) || cargo === 'gestor');
+  if (_destinoSolicitadoLogin === 'fabio.html' && autorizadoFabio) return 'fabio.html';
+  if (sessao?.j_actor_type === 'equipe' && cargo === 'gestor') return 'fabio.html';
+  return destinoPadrao;
+}
+
 window.addEventListener('load', () => {
   try {
     const brand = JSON.parse(localStorage.getItem('j_saved_brand') || 'null');
@@ -202,7 +215,7 @@ window.addEventListener('load', () => {
       });
 
       setTimeout(() => {
-        window.location.href = saved.session?.j_actor_type === 'equipe' && _normalizarCargoLogin(saved.session?.j_cargo) === 'gestor' ? 'fabio.html' : saved.destino;
+        window.location.href = _destinoFinalLogin(saved.destino, saved.session || {});
       }, 1200);
     }
   }
@@ -433,7 +446,7 @@ async function autenticar() {
       Object.entries(sessao).forEach(([k, v]) => sessionStorage.setItem(k, v));
       _salvarCredenciais(usr, pwd, 'jarvis.html', doc.id, sessao, brand);
 
-      window.location.href = 'jarvis.html';
+      window.location.href = _destinoFinalLogin('jarvis.html', sessao);
       return;
     }
 
@@ -486,7 +499,7 @@ async function autenticar() {
       Object.entries(sessao).forEach(([k, v]) => sessionStorage.setItem(k, v));
       _salvarCredenciais(usr, pwd, destinoFuncionario, tenantIdEquipe, sessao, brand);
 
-      window.location.href = destinoFuncionario;
+      window.location.href = _destinoFinalLogin(destinoFuncionario, sessao);
       return;
     }
 
