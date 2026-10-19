@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#08172c">
+<title>Backup do Banco • JARVIS</title>
+<link rel="icon" href="favicon.ico">
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#08172c;color:#edf5ff}
+*{box-sizing:border-box}
+body{margin:0;min-height:100dvh}
+header{background:#0e203b;border-bottom:1px solid #31516b;padding:18px max(14px,calc((100vw - 1050px)/2));display:flex;align-items:center;gap:15px;flex-wrap:wrap}
+header a{color:#a3ddf3;text-decoration:none;font-weight:800}
+h1{font-size:clamp(1.25rem,3vw,1.7rem);margin:0}
+header small{color:#a6c5db;display:block}
+main{max-width:1080px;padding:20px 14px 60px;margin:auto}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+article{border:1px solid #294963;background:#10243c;border-radius:15px;padding:22px;min-width:0}
+h2{font-size:1.18rem;margin:0 0 8px}
+p{line-height:1.55;color:#d0deea;margin:8px 0 14px}
+label{display:block;font-size:.92rem;font-weight:750;margin:14px 0 6px}
+input,button{font:inherit;border-radius:10px}
+input[type=password],input[type=text],input[type=file]{border:1px solid #44617e;background:#07172b;color:#fff;padding:13px;width:100%;min-width:0}
+input[type=file]{font-size:.88rem}
+button{min-height:47px;border:1px solid #4091b6;background:#11628b;color:white;padding:12px 16px;font-weight:850;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.primary{background:#067955;border-color:#19bb8f}
+button.danger{background:#842a32;border-color:#e16b76}
+button.secondary{background:#1a3551}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #91e9ff;outline-offset:2px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}
+.actions button{flex:1 1 180px}
+#status{border:1px solid #29546b;padding:12px 15px;background:#10253c;border-radius:12px;margin:16px 0;overflow-wrap:anywhere}
+#status[hidden],#previsao[hidden],#resultado[hidden]{display:none}
+strong,b{overflow-wrap:anywhere}
+.note{font-size:.84rem;color:#b8cbe0}
+.warn{color:#ffd5a7}
+.error{color:#ffbabc}
+.good{color:#b0f8d7}
+#previsao{margin-top:18px}
+table{border-collapse:collapse;width:100%;font-size:.83rem}
+td,th{text-align:left;border-bottom:1px solid #294963;padding:10px 7px;overflow-wrap:anywhere}
+td:not(:first-child),th:not(:first-child){text-align:right}
+.tablewrap{overflow-x:auto;max-width:100%}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.stat{padding:14px 10px;border:1px solid #375773;border-radius:10px;text-align:center;background:#0b1a2d}
+.stat strong{display:block;font-size:clamp(1.2rem,3vw,1.7rem)}
+.stat span{font-size:.8rem;color:#bad4e9}
+.progress{height:12px;width:100%;border-radius:10px;background:#31475d;overflow:hidden;margin:8px 0 14px}
+.progress>div{height:100%;background:#13ba9a;width:0;transition:width .15s}
+#resultado{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.85rem;background:#061626;border:1px solid #39566b;padding:15px;border-radius:10px;margin-top:14px;max-height:320px;overflow-y:auto}
+#colecoes{font-size:.83rem;line-height:1.6;overflow-wrap:anywhere}
+@media(max-width:720px){.grid{grid-template-columns:1fr}article{padding:15px}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:350px){header{padding:14px}main{padding:12px 8px}button{padding:10px}}
+</style>
+<script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore-compat.js"></script>
+<script src="js/config.js"></script>
+<script src="js/backup-banco-v1.js" defer></script>
+</head>
+<body>
+<header><a href="jarvis.html" aria-label="Voltar ao Jarvis">← JARVIS</a><div><small>S.O.S. VALÊNCIO · ADMINISTRAÇÃO</small><h1>Backup do banco de dados</h1></div></header>
+<main>
+<div id="status" role="status" aria-live="polite">Verificando acesso e conexão…</div>
+<div class="grid">
+<article>
+<h2>Exportar banco de dados</h2>
+<p>Salva os registros da sua oficina em arquivo <b>criptografado</b>. Preserva IDs, vínculos, datas e informações armazenadas no Firestore, inclusive subcoleções conhecidas das O.S.</p>
+<label for="senhaExportar">Senha para proteger o backup</label>
+<input id="senhaExportar" type="password" autocomplete="new-password" minlength="12" placeholder="Mínimo de 12 caracteres">
+<label for="senhaExportar2">Confirmar senha</label>
+<input id="senhaExportar2" type="password" autocomplete="new-password" minlength="12" placeholder="Repetir a senha">
+<div class="actions"><button id="btnExportar" type="button" class="primary" disabled>Exportar backup seguro</button></div>
+<p class="note">O arquivo contém dados pessoais e financeiros. A senha não é armazenada. Sem ela, não é possível restaurar o arquivo.</p>
+</article>
+<article>
+<h2>Importar e restaurar</h2>
+<p>Primeiro analisa o backup <b>sem gravar nada</b>. Os registros encontrados são comparados pelos mesmos IDs; documentos não incluídos no backup não serão excluídos.</p>
+<label for="arquivo">Arquivo de backup</label>
+<input id="arquivo" type="file" accept=".sosbackup,.json,application/json">
+<label for="senhaImportar">Senha do backup</label>
+<input id="senhaImportar" type="password" autocomplete="off" placeholder="Senha utilizada na exportação">
+<div class="actions"><button id="btnAnalisar" type="button" class="secondary" disabled>Conferir antes de importar</button></div>
+<p class="note">Importação com atualização de campos e preservação dos campos não presentes. Auditorias imutáveis e documentos protegidos seguem as regras do banco.</p>
+</article>
+</div>
+<article style="margin-top:16px">
+<h2>O que será incluído</h2>
+<p class="note">O navegador não pode enumerar automaticamente todas as coleções do Firebase. Esta versão verifica as coleções utilizadas e identificadas no SAAS. As falhas são exibidas; um backup com leitura incompleta não é considerado concluído. Arquivos hospedados no Cloudinary/Firebase Storage e usuários do Firebase Authentication não são copiados por este recurso.</p>
+<div id="colecoes">Carregando inventário…</div>
+<div id="andamento" class="progress" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><div id="barra"></div></div>
+</article>
+<section id="previsao" hidden>
+<article style="margin-top:16px">
+<h2>Prévia da restauração</h2>
+<p id="origem"></p>
+<div id="resumo" class="stats"></div>
+<div class="tablewrap"><table><thead><tr><th>Coleção</th><th>Novos</th><th>Atualizar</th><th>Iguais</th><th>Protegidos</th></tr></thead><tbody id="comparacao"></tbody></table></div>
+<p id="avisos" class="warn" style="white-space:pre-wrap"></p>
+<label for="confirmar">Para executar, digite exatamente <strong id="fraseConfirmar">RESTAURAR</strong></label>
+<input id="confirmar" type="text" autocomplete="off" spellcheck="false" placeholder="Confirmação obrigatória">
+<div class="actions"><button id="btnRestaurar" type="button" class="danger" disabled>Confirmar restauração</button><button id="btnCancelar" type="button" class="secondary">Cancelar</button></div>
+<p class="note">A restauração não exclui documentos ausentes. Caso seja interrompida, o relatório indicará exatamente o que foi gravado; não existe reversão automática.</p>
+</article>
+</section>
+<pre id="resultado" hidden aria-live="polite"></pre>
+</main>
+</body>
+</html>
