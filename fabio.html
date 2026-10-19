@@ -361,6 +361,29 @@ html,body{overflow-x:hidden}
 }
 @media screen and (max-width:340px){#fabioConsulta .consulta-topo{grid-template-columns:1fr}#fabioConsulta .consulta-topo button,#fabioConsulta .consulta-topo .principal{grid-column:1}}
 </style>
+<style id="fabio-correcoes-confirmadas-v1">
+.fabio-recolhivel{border:2px solid #4c9bcb;border-radius:14px;background:#102946;max-width:100%;min-width:0;margin:10px 0;overflow:hidden}
+.fabio-recolhivel>summary{min-height:58px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px;font-weight:850;color:#e8f7ff;list-style:none}
+.fabio-recolhivel>summary::-webkit-details-marker{display:none}
+.fabio-recolhivel>summary span{font-size:.71rem;color:#a8deff;text-align:right}
+.fabio-recolhivel-conteudo{padding:8px 10px 13px}
+.fabio-busca-acoes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.fabio-busca-acoes button{min-height:59px;font-weight:900;min-width:0;white-space:normal}
+#fabioPesquisar{background:#098058;border:2px solid #4ad5a6;font-size:1.1rem}
+#fabioConsulta .consulta-topo button{min-height:50px}
+#fabioClienteEnviar:not([hidden]){background:#087a4f;border:2px solid #35d29b;font-weight:900}
+#fabioClienteEstado{flex-basis:100%;color:#bfdef3;overflow-wrap:anywhere}
+#fabioConsulta.fabio-cliente .consulta-tabela-rolagem{overflow-x:hidden}
+@media(max-width:650px){
+.fabio-recolhivel>summary{font-size:.88rem}
+.fabio-busca-acoes{grid-template-columns:1fr}
+#fabioConsulta .consulta-topo{grid-template-columns:repeat(2,minmax(0,1fr))}
+#fabioConsulta .consulta-topo h2,#fabioConsulta .consulta-topo .principal,#fabioClienteEnviar,#fabioClienteEstado{grid-column:1/-1}
+#fabioConsulta .consulta-itens tbody tr{grid-template-columns:minmax(0,1fr)}
+#fabioConsulta .consulta-itens td{grid-column:1/-1!important;border-left:0!important;white-space:normal!important}
+}
+@media print{#fabioConsulta .consulta-topo,#fabioConsulta .consulta-navegacao{display:none!important}}
+</style>
 </head>
 <body>
 <header><div><small>S.O.S. VALÊNCIO • VISÃO RÁPIDA DO GESTOR</small><h1>Minha oficina</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button id="fabioVoltarPrincipal" type="button">← Voltar</button><button id="sair" type="button">Sair</button></div></header>
@@ -372,8 +395,10 @@ html,body{overflow-x:hidden}
 <button class="indicador" data-filter="entregues"><b id="nEntregues">—</b><span>Entregues</span></button>
 <button class="indicador" data-filter="quitados"><b id="nQuitados">—</b><span>Quitados / recebidos</span></button>
 </div>
-<div class="toolbar-busca"><label for="busca">🔎 PESQUISAR O.S. — É SÓ DIGITAR</label>
-<div class="toolbar"><input id="busca" aria-label="Buscar veículo, placa, cliente ou ordem" placeholder="Pesquisar: cliente, placa, veículo, número da O.S." autocomplete="off"><button id="limpar" type="button">Limpar filtros / Ver todos</button></div></div>
+<details class="fabio-recolhivel" id="fabioPesquisa" open><summary>🔎 PESQUISAR O.S. <span>MAXIMIZAR / MINIMIZAR</span></summary><div class="fabio-recolhivel-conteudo">
+<div class="toolbar-busca"><label for="busca">PLACA, CLIENTE, VEÍCULO OU O.S.</label>
+<div class="toolbar"><input id="busca" aria-label="Buscar veículo, placa, cliente ou ordem" placeholder="Ex.: FJU4J18 ou Brito" autocomplete="off"></div></div>
+<details class="fabio-recolhivel" id="fabioFiltrosAvancados"><summary>👤 CLIENTE E VEÍCULO (OPCIONAL) <span>MAXIMIZAR / MINIMIZAR</span></summary><div class="fabio-recolhivel-conteudo">
 <div class="filtro-cliente-veiculo" aria-label="Filtrar por cliente e veículo">
   <label class="filtro-campo" for="fabioBuscarCliente">👤 CLIENTE — DIGITE O NOME (AUTOMÁTICO)
     <input id="fabioBuscarCliente" type="search" placeholder="Ex.: Brito" autocomplete="off">
@@ -387,19 +412,18 @@ html,body{overflow-x:hidden}
   <div class="filtro-campo" style="align-content:end">
     <button id="fabioAtualizarQuitados" type="button">↻ CONFERIR QUITADOS NO FINANCEIRO</button>
   </div>
-</div>
+</div></div></details><div class="fabio-busca-acoes"><button id="fabioPesquisar" type="button">🔎 PESQUISAR</button><button id="limpar" type="button">✕ LIMPAR / VER TODAS</button></div></div></details>
+<details class="fabio-recolhivel" id="fabioSelecionarGrupo"><summary>☑ SELECIONAR E ENVIAR O.S. <span>MAXIMIZAR / MINIMIZAR</span></summary><div class="fabio-recolhivel-conteudo">
 <div class="filtro-acoes" aria-label="Selecionar e navegar pelas ordens">
  <span id="fabioSelecaoContagem" aria-live="polite">0 O.S. selecionadas</span>
  <button id="fabioSelecionarVisiveis" type="button">☑ SELECIONAR OS EXIBIDAS</button>
  <button id="fabioLimparSelecao" type="button">✕ LIMPAR SELEÇÃO</button>
  <button id="fabioNavegarSelecionadas" type="button" disabled>📄 VER PDFs SELECIONADOS ◀ ▶</button>
  <button id="fabioEnviarMultiplas" type="button" disabled>↗ ENVIAR VÁRIOS PDFs</button>
-</div>
+</div></div></details>
 <p id="filtroTexto" class="muted" aria-live="polite">Todas as O.S. • Toque nos números para filtrar</p>
 <div id="statusConexao" role="status">Conectando ao sistema…</div>
 <div id="erro" role="alert"></div>
-<details id="fabioAtalhoIphone"><summary>Como adicionar o painel à Tela de Início do iPhone</summary>
-<p>Abra este endereço no <strong>Safari</strong> do iPhone, toque em <strong>Compartilhar</strong> (quadrado com seta para cima), escolha <strong>Adicionar à Tela de Início</strong> e confirme em <strong>Adicionar</strong>. Ao abrir o atalho, faça login se for solicitado.</p></details>
 <section id="lista" aria-label="Ordens de serviço" aria-live="polite"></section>
 </main>
 
@@ -409,7 +433,9 @@ html,body{overflow-x:hidden}
   <h2 id="fabioConsultaTitulo">ORDEM DE SERVIÇO</h2>
   <button id="fabioConsultaVoltar" type="button">✕ Fechar / voltar</button>
   <button id="fabioConsultaImprimir" type="button">Imprimir</button>
-  <button id="fabioConsultaCompartilhar" type="button" class="principal">PDF / WhatsApp</button>
+  <button id="fabioConsultaCompartilhar" type="button" class="principal">📄 PRÉVIA PARA CLIENTE</button>
+  <button id="fabioClienteEnviar" type="button" hidden>📤 PREPARAR PDF</button>
+  <div id="fabioClienteEstado" role="status" aria-live="polite"></div>
  </div>
  <div class="consulta-navegacao"><button id="fabioConsultaAnterior" type="button">← OS anterior</button><span id="fabioConsultaPosicao">1 de 1</span><button id="fabioConsultaProxima" type="button">Próxima OS →</button></div>
  <div class="consulta-rolagem"><article id="fabioConsultaFolha" class="consulta-folha" aria-live="polite"></article></div>
@@ -521,7 +547,7 @@ function atualizarSelecaoFabio(){
 window.fabioAbrirSelecionadas=function(){
  const ids=filaFabio();if(!ids.length)return;
  window.__fabioFilaNavegacao=ids;
- window.fabioAbrirPdfOS?.(ids[0]);
+ window.fabioAbrirConsultaOS?.(ids[0]);
 };
 
 const funcionarios=new Map(),comissoesPorOS=new Map();
@@ -692,14 +718,14 @@ function render(){
    add(pagamento,'span','etiqueta '+(osQuitadaFabio(o)?'green':'yellow'),osQuitadaFabio(o)?'RECEBIDO / QUITADO':recebeu(o)?'RECEBIMENTO MARCADO':'RECEBIMENTO NÃO CONFIRMADO');
    if(valorStatus(o)==='aprovado')add(pagamento,'span','etiqueta green','APROVADA');
    else if(aguardando(o))add(pagamento,'span','etiqueta yellow','AGUARDANDO APROVAÇÃO');
-   add(card,'div','card-abrir','📄 TOQUE PARA ABRIR O PDF ORIGINAL →');
-   const detalhar=add(card,'button','card-consulta-btn','🔎 CONSULTA DETALHADA NA TELA');
+   add(card,'div','card-abrir','📄 CONFERIR O.S. ANTES DE ENVIAR →');
+   const detalhar=add(card,'button','card-consulta-btn','🔎 EXECUÇÃO DE CADA MECÂNICO');
    detalhar.type='button';
    detalhar.addEventListener('click',e=>{e.stopPropagation();window.fabioAbrirConsultaOS?.(o.id);});
    card.tabIndex=0;card.setAttribute('role','button');
    card.setAttribute('aria-label','Abrir PDF oficial da ordem de serviço '+texto(o.numero||o.id)+' do veículo '+d.placa);
-   card.addEventListener('click',()=>window.fabioAbrirPdfOS?.(o.id));
-   card.addEventListener('keydown',e=>{if(e.target!==card)return;if(e.key==='Enter'||e.key===' '){e.preventDefault();window.fabioAbrirPdfOS?.(o.id);}});
+   card.addEventListener('click',()=>window.fabioAbrirConsultaOS?.(o.id));
+   card.addEventListener('keydown',e=>{if(e.target!==card)return;if(e.key==='Enter'||e.key===' '){e.preventDefault();window.fabioAbrirConsultaOS?.(o.id);}});
  }
 }
 document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click',()=>{
@@ -708,10 +734,11 @@ document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click'
  if(filtro==='quitados')carregarRecebimentosFabio();
  render();
 }));
-$('busca').addEventListener('input',e=>{
- busca=normal(e.target.value.trim());
- if(busca){filtro='todos';document.querySelectorAll('.indicador').forEach(x=>x.classList.remove('active'));}
- render();
+// Apenas clique explícito executa filtro: nenhuma busca a cada tecla.
+$('fabioPesquisar').addEventListener('click',()=>{
+ busca=normal($('busca').value.trim());buscaCliente=$('fabioBuscarCliente').value.trim();
+ clienteSelecionado=$('fabioClienteFiltro').value;veiculoSelecionado=$('fabioVeiculoFiltro').value;
+ filtro='todos';document.querySelectorAll('.indicador').forEach(x=>x.classList.remove('active'));render();
 });
 $('limpar').addEventListener('click',()=>{
  $('busca').value='';busca='';$('fabioBuscarCliente').value='';buscaCliente='';
@@ -719,13 +746,21 @@ $('limpar').addEventListener('click',()=>{
  document.querySelectorAll('.indicador').forEach(x=>x.classList.remove('active'));render();
 });
 $('fabioVoltarPrincipal').addEventListener('click',()=>window.location.assign('selecionar-perfil.html'));
-$('fabioBuscarCliente').addEventListener('input',e=>{
- buscaCliente=e.target.value;
- if(buscaCliente.trim()){filtro='todos';document.querySelectorAll('.indicador').forEach(x=>x.classList.remove('active'));}
- render();
+// Digitar somente prepara os campos locais; não renderiza OS nem lê Firestore.
+$('fabioBuscarCliente').addEventListener('input',()=>{
+ const t=normal($('fabioBuscarCliente').value),el=$('fabioClienteFiltro'),v=el.value;
+ el.replaceChildren(new Option('Todos os clientes',''));
+ [...clientes.values()].filter(c=>!t||normal([c.nome,c.razaoSocial,c.nomeFantasia].join(' ')).includes(t))
+  .forEach(c=>el.appendChild(new Option(texto(primeiro(c.nome,c.razaoSocial,c.id)),String(c.id))));
+ el.value=[...el.options].some(o=>o.value===v)?v:'';
 });
-$('fabioClienteFiltro').addEventListener('change',e=>{clienteSelecionado=e.target.value;veiculoSelecionado='';osSelecionadas.clear();render();});
-$('fabioVeiculoFiltro').addEventListener('change',e=>{veiculoSelecionado=e.target.value;render();});
+$('fabioClienteFiltro').addEventListener('change',()=>{
+ const id=$('fabioClienteFiltro').value,el=$('fabioVeiculoFiltro');
+ el.replaceChildren(new Option('Todos os veículos',''));
+ [...veiculos.values()].filter(v=>id&&String(v.clienteId)===id)
+  .forEach(v=>el.appendChild(new Option([v.placa,v.marca,v.modelo].filter(Boolean).join(' • '),String(v.id))));
+ el.disabled=!id;
+});
 $('fabioAtualizarQuitados').addEventListener('click',()=>carregarRecebimentosFabio(true));
 $('fabioSelecionarVisiveis').addEventListener('click',()=>{(window.__fabioFiltradosIds||[]).forEach(id=>osSelecionadas.add(id));render();});
 $('fabioLimparSelecao').addEventListener('click',()=>{osSelecionadas.clear();render();});
@@ -843,7 +878,7 @@ function mostrarArquivo(doc){
  linkBlob=URL.createObjectURL(doc.blob);
  $('fabioPdfViewer').src=linkBlob+'#toolbar=1&navpanes=0';
  $('fabioPdfTitulo').textContent='O.S. '+doc.numero+' • PDF original com fotos';
- $('fabioPdfCompartilhar').disabled=false;
+ $('fabioPdfCompartilhar').disabled=true;
  $('fabioPdfBaixar').disabled=false;
  estado('PDF oficial pronto. Use Anterior / Próximo para percorrer as OS, ou Enviar PDF para compartilhar.');
  atualizarNavegacaoPdfFabio();
@@ -959,6 +994,8 @@ $('fabioPdfAbrir').addEventListener('click',()=>{
  else estado('No iPhone, use Compartilhar > Imprimir no visualizador do PDF. No computador, use a impressão do navegador.');
 });
 $('fabioPdfCompartilhar').addEventListener('click',()=>{
+ estado('Este PDF é interno. Para enviar sem códigos ou dados de mecânicos, utilize PRÉVIA PARA CLIENTE.');
+ return;
  if(!arquivo||gerando)return;
  const file=new File([arquivo.blob],arquivo.fileName,{type:'application/pdf'});
  const dados={files:[file],title:'O.S. '+arquivo.numero,text:'Segue a ordem de serviço completa com fotos — S.O.S. Valêncio.'};
@@ -991,7 +1028,8 @@ window.fabioPrepararMultiplos=async function(ids){
   for(let i=0;i<unicos.length;i++){
    if(token!==loteEpoch)return;
    estadoLote.textContent='Preparando PDF '+(i+1)+' de '+unicos.length+'…';
-   const doc=await gerarDoc(unicos[i]);
+   const doc=await window.fabioPrepararClienteSeguro?.(unicos[i]);
+   if(!doc?.blob)throw Error('Não foi possível gerar o arquivo de cliente. Documento interno não será enviado.');
    if(token!==loteEpoch)return;
    // Evita sobrescrever nomes repetidos ao compartilhar vários anexos.
    const nome='OS-'+String(doc.numero).replace(/[^a-z0-9_-]/gi,'-')+'-'+unicos[i].slice(-6)+'.pdf';
@@ -1243,6 +1281,176 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!painel.hidden&&byI
 window.addEventListener('afterprint',()=>{if(aberto)document.body.style.overflow='hidden';});
 })();
 
+</script>
+<script id="fabio-separacao-cliente-v1">
+(function(){
+'use strict';
+const get=id=>document.getElementById(id);
+const folha=get('fabioConsultaFolha'),dialog=get('fabioConsulta');
+let idAtual='',cliente=false,arquivo=null,processando=false;
+const baseAbrir=window.fabioAbrirConsultaOS;
+const fonte=id=>window.__fabioOsFonte?.().find(x=>String(x.id)===String(id));
+const nome=v=>v===undefined||v===null?'':String(v);
+function ui(){
+ dialog.classList.toggle('fabio-cliente',cliente);
+ get('fabioConsultaCompartilhar').textContent=cliente?'← VOLTAR À CONFERÊNCIA INTERNA':'📄 CONFERIR PDF PARA CLIENTE';
+ get('fabioClienteEnviar').hidden=!cliente;
+ get('fabioClienteEnviar').disabled=processando;
+ get('fabioClienteEnviar').textContent=processando?'GERANDO PDF…':arquivo?'↗ ENVIAR PDF CONFERIDO':'📤 PREPARAR PDF PARA ENVIO';
+ if(!processando)get('fabioClienteEstado').textContent=cliente?'PRÉVIA PARA CLIENTE — sem códigos de peças/serviços, mecânicos ou comissões. Confira antes de enviar.':'INTERNO — veja o que cada mecânico realizou ou registrou.';
+}
+function incluirMecanicos(){
+ const o=fonte(idAtual);if(!o)return;
+ const mecs=window.__fabioMecanicosOS?.(o)||[];
+ const lista=[...folha.querySelectorAll('.consulta-interno .consulta-mecanico')];
+ lista.forEach((el,i)=>{
+  const m=mecs[i];if(!m)return;
+  const feitos=[],exec=o.execucaoItens||{};
+  const identidade=it=>String(it?.mecId||it?.responsavelId||'')===String(m.id)&&!!m.id;
+  (o.servicos||[]).forEach((it,n)=>{
+   const e=exec['servico-'+n]||{};
+   if(identidade(e))feitos.push('SERVIÇO: '+nome(it.desc||it.descricao||'')+' — '+nome(e.status||'Sem status')+(e.obs?' — OBS: '+e.obs:''));
+   else if((it.rateiosComissao||[]).some(r=>m.id&&String(r.mecId||r.id)===String(m.id)))
+    feitos.push('VINCULADO AO SERVIÇO (sem confirmação de execução): '+nome(it.desc||it.descricao||''));
+  });
+  (o.pecas||[]).forEach((it,n)=>{
+   const e=exec['peca-'+n]||{};
+   if(identidade(e))feitos.push('PEÇA: '+nome(it.desc||it.descricao||'')+' — '+nome(e.status||'Sem status')+(e.obs?' — OBS: '+e.obs:''));
+  });
+  const painel=document.createElement('div');painel.className='fabio-execucao-por-mecanico';
+  const subt=document.createElement('strong');subt.textContent='REGISTROS DO MECÂNICO';painel.appendChild(subt);
+  (feitos.length?feitos:['Não há execução individual atribuída a este mecânico no registro da OS.']).forEach(t=>{
+   const p=document.createElement('p');p.textContent=t;painel.appendChild(p);
+  });
+  el.appendChild(painel);
+ });
+}
+function gerarClienteEmTela(){
+ // Produz a prévia exclusivamente copiando a consulta e excluindo campos restritos.
+ const clone=folha.cloneNode(true);
+ clone.querySelectorAll('.consulta-interno,.consulta-alertas,.fabio-execucao-por-mecanico').forEach(el=>el.remove());
+ clone.querySelectorAll('.consulta-bloco').forEach(sec=>{
+  const titulo=nome(sec.querySelector('.consulta-titulo')?.textContent).toLowerCase();
+  if(titulo.includes('execução real dos serviços'))sec.remove();
+ });
+ clone.querySelectorAll('table.consulta-itens').forEach(table=>{
+  const cols=[...table.querySelectorAll('thead th')],remove=cols.map((c,i)=>/^(cód\.?|código)$/i.test(c.textContent.trim())?i:-1).filter(i=>i>=0);
+  remove.reverse().forEach(i=>table.querySelectorAll('tr').forEach(tr=>tr.children[i]?.remove()));
+  table.querySelectorAll('.consulta-item-resultado div').forEach(el=>el.remove());
+  table.querySelectorAll('td').forEach(td=>{
+   if(/mecânico|execução não confirmada|APROVAD[OA]/i.test(td.textContent)&&td.classList.contains('consulta-item-resultado')){
+    td.textContent=nome(td.firstChild?.textContent||'').trim();
+   }
+  });
+  table.querySelectorAll('th,td').forEach(cell=>{
+   const txt=nome(cell.textContent).replace(/\s*\/\s*(Execução|Aplicação)\s*$/i,'');
+   if(cell.tagName==='TH')cell.textContent=txt;
+   cell.dataset.label=nome(cell.dataset.label).replace(/\s*\/\s*(Execução|Aplicação)\s*$/i,'');
+  });
+ });
+ clone.querySelectorAll('.consulta-total').forEach(x=>{
+  if(/recebimento operacional|pagamento|comissão/i.test(nome(x.textContent)))x.remove();
+ });
+ clone.querySelectorAll('.consulta-dados tr').forEach(x=>{
+  if(/chassi|prefixo da viatura|patrimônio/i.test(nome(x.querySelector('th')?.textContent)))x.remove();
+ });
+ clone.querySelectorAll('.consulta-foto figcaption div').forEach(x=>x.remove());
+ clone.querySelectorAll('.consulta-rodape').forEach(x=>x.textContent='Documento para cliente — S.O.S. VALÊNCIO');
+ // Bloqueia qualquer texto explícito de controle interno que possa sobreviver à filtragem.
+ const residuo=nome(clone.textContent);
+ if(/MECÂNICOS\s*\/|COMISSÕES|REGISTROS DO MECÂNICO|execução individual atribuída/i.test(residuo))
+  throw Error('Prévia ainda contém informação interna. Compartilhamento bloqueado.');
+ folha.replaceChildren(...[...clone.childNodes]);
+ get('fabioConsultaTitulo').textContent='DOCUMENTO PARA CLIENTE — '+nome(fonte(idAtual)?.numero||fonte(idAtual)?.numeroOS||idAtual.slice(-6));
+}
+function abrirInterno(id){
+ idAtual=id;cliente=false;arquivo=null;
+ baseAbrir(id);
+ incluirMecanicos();ui();
+}
+window.fabioAbrirConsultaOS=abrirInterno;
+function alternar(){
+ if(!idAtual)return;
+ if(cliente){abrirInterno(idAtual);return;}
+ cliente=true;arquivo=null;
+ try{gerarClienteEmTela();ui();dialog.querySelector('.consulta-rolagem').scrollTop=0;}
+ catch(e){cliente=false;abrirInterno(idAtual);get('fabioClienteEstado').textContent='Falha ao montar prévia segura: '+e.message;}
+}
+get('fabioConsultaCompartilhar').addEventListener('click',ev=>{ev.preventDefault();ev.stopImmediatePropagation();alternar();},true);
+get('fabioConsultaVoltar').addEventListener('click',ev=>{
+ if(!cliente)return;
+ ev.preventDefault();ev.stopImmediatePropagation();abrirInterno(idAtual);
+},true);
+get('fabioPdfCompartilhar').addEventListener('click',ev=>{
+ ev.preventDefault();ev.stopImmediatePropagation();
+ get('fabioPdfEstado').textContent='Este PDF original contém dados internos; envio somente pela prévia para cliente.';
+},true);
+function carregaLib(src,teste){
+ if(teste())return Promise.resolve();
+ return new Promise((resolve,reject)=>{
+  const sc=document.createElement('script');sc.src=src;sc.onload=()=>teste()?resolve():reject(Error('Biblioteca inválida'));
+  sc.onerror=()=>reject(Error('Não foi possível carregar biblioteca de exportação'));document.head.appendChild(sc);
+ });
+}
+async function criarCliente(id){
+ if(processando)throw Error('Outra geração de PDF em andamento');
+ processando=true;ui();
+ try{
+  if(!cliente||idAtual!==id){
+   abrirInterno(id);
+   cliente=true;gerarClienteEmTela();ui();
+  }
+  await carregaLib('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>typeof window.html2canvas==='function');
+  await carregaLib('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',()=>typeof window.jspdf?.jsPDF==='function');
+  const imgs=[...folha.querySelectorAll('img')];
+  await Promise.all(imgs.map(async im=>{
+   if(!im.complete)await im.decode();
+   if(!im.naturalWidth)throw Error('Imagem indisponível; envio incompleto bloqueado.');
+   if(/^https?:/i.test(im.currentSrc||im.src)){
+    const resp=await fetch(im.currentSrc||im.src,{mode:'cors',credentials:'omit'});
+    if(!resp.ok)throw Error('Foto sem permissão de exportação; envio bloqueado.');
+   }
+  }));
+  const canvas=await window.html2canvas(folha,{scale:1.35,backgroundColor:'#fff',useCORS:true,allowTaint:false,logging:false,imageTimeout:20000});
+  if(!canvas.width||!canvas.height)throw Error('Visualização do PDF vazia.');
+  const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4',compress:true});
+  const largura=194,alturaMax=278,paginaPx=Math.max(1,Math.floor(canvas.width*alturaMax/largura));
+  let pag=0;
+  for(let topo=0;topo<canvas.height;topo+=paginaPx){
+   const h=Math.min(paginaPx,canvas.height-topo);
+   const recorte=document.createElement('canvas');recorte.width=canvas.width;recorte.height=h;
+   recorte.getContext('2d').drawImage(canvas,0,topo,canvas.width,h,0,0,canvas.width,h);
+   if(pag++)pdf.addPage();
+   pdf.addImage(recorte.toDataURL('image/jpeg',.87),'JPEG',8,8,largura,largura*h/canvas.width);
+  }
+  const blob=pdf.output('blob');
+  if(blob.size<1000||(await blob.slice(0,5).text())!=='%PDF-')throw Error('Arquivo PDF não validado.');
+  const o=fonte(id)||{},n=nome(o.numero||o.numeroOS||id.slice(-6));
+  return {blob,numero:n,fileName:'OS-'+n.replace(/[^a-z0-9_-]/gi,'-')+'-CLIENTE.pdf'};
+ }finally{processando=false;ui();}
+}
+window.fabioPrepararClienteSeguro=criarCliente;
+get('fabioClienteEnviar').addEventListener('click',async()=>{
+ if(!cliente||!idAtual||processando)return;
+ if(!arquivo){
+  try{
+   get('fabioClienteEstado').textContent='Gerando o arquivo conforme a prévia…';
+   arquivo=await criarCliente(idAtual);
+   get('fabioClienteEstado').textContent='PDF do cliente preparado. Confira a visualização e toque ENVIAR PDF CONFERIDO.';
+  }catch(e){arquivo=null;get('fabioClienteEstado').textContent='Exportação bloqueada: '+(e.message||e)+'. Nada foi enviado.';}
+  ui();return;
+ }
+ const file=new File([arquivo.blob],arquivo.fileName,{type:'application/pdf'});
+ if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){
+  navigator.share({files:[file],title:'OS '+arquivo.numero,text:'Segue a ordem de serviço S.O.S. Valêncio.'})
+   .catch(e=>{if(e?.name!=='AbortError')get('fabioClienteEstado').textContent='Falha no compartilhamento. Baixe o arquivo para anexar manualmente.';});
+ }else{
+  const url=URL.createObjectURL(arquivo.blob),a=document.createElement('a');a.href=url;a.download=arquivo.fileName;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),120000);
+  get('fabioClienteEstado').textContent='Arquivo baixado. Anexe manualmente no WhatsApp.';
+ }
+});
+})();
 </script>
 </body>
 </html>
