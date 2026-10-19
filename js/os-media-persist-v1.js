@@ -9,7 +9,7 @@ function uniq(lista){
  const map=new Map();
  for(const m of (Array.isArray(lista)?lista:[])){
   const url=String(urlOf(m)||'').trim();
-  if(!/^https:\/\//i.test(url))continue;
+  if(!url)continue;
   if(!map.has(url))map.set(url,m);
  }
  return [...map.values()];
@@ -41,6 +41,7 @@ async function garantirOS({db,tid,id,clienteId,veiculoId,campos,ator}){
 async function gravar({db,tid,osId,itens,ator}){
  if(!db||!tid||!osId)throw Error('O.S. não identificada para salvar os anexos.');
  const novos=uniq(itens);
+ if(novos.some(item=>!/^https:\/\//i.test(String(urlOf(item)))))throw Error('O upload não retornou uma URL HTTPS válida.');
  if(!novos.length)return {salvos:0,media:[],eventos:0};
  const ref=db.collection('ordens_servico').doc(osId);
  return db.runTransaction(async tx=>{
