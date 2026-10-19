@@ -431,6 +431,18 @@ html,body{overflow-x:hidden}
 #fabioPdfDialog .pdf-acoes #fabioPdfCompartilhar:not(:disabled){background:#13744d!important;border-color:#3fbe8f!important}
 @media(max-width:650px){#fabioPdfDialog .pdf-acoes{grid-template-columns:repeat(3,minmax(0,1fr))}#fabioPdfDialog .pdf-acoes #fabioPdfCompartilhar{grid-column:auto;grid-row:auto}#fabioPdfDialog .pdf-acoes button{font-size:.72rem;min-height:42px;padding:5px 2px}#fabioPdfDialog .fabio-doc-controles{grid-template-columns:1fr}}
 </style>
+<style id="fabio-somente-cliente">
+#fabioPdfDialog .fabio-doc-controles,#fabioPdfDialog .fabio-doc-mecanicos{display:none!important}
+.fabio-card-internos{margin:10px 0;border:1px solid #5b7890;border-radius:10px;background:#1a3045;color:#f1f7fb;overflow:hidden}
+.fabio-card-internos summary{list-style:none;cursor:pointer;padding:12px;font-size:.95rem;font-weight:750;overflow-wrap:anywhere}
+.fabio-card-internos summary::-webkit-details-marker{display:none}
+.fabio-card-internos summary:before{content:"▸ "}
+.fabio-card-internos[open] summary:before{content:"▾ "}
+.fabio-card-internos[open] summary{border-bottom:1px solid #59778e}
+.fabio-card-internos-conteudo{padding:10px;display:grid;gap:7px;overflow-wrap:anywhere}
+.fabio-card-interno-item{padding:8px 5px;border-top:1px solid #536e82;font-size:.86rem;line-height:1.4}
+.fabio-card-interno-item strong{display:block;margin-bottom:4px}
+</style>
 </head>
 <body>
 <header><div><small>S.O.S. VALÊNCIO • VISÃO RÁPIDA DO GESTOR</small><h1>Minha oficina</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button id="fabioVoltarPrincipal" type="button">← Voltar</button><button id="sair" type="button">Sair</button></div></header>
@@ -494,13 +506,13 @@ html,body{overflow-x:hidden}
     <div class="pdf-cabecalho"><strong id="fabioPdfTitulo">O.S. completa com fotos</strong><button type="button" id="fabioPdfFechar">✕ Fechar</button></div>
     <div class="pdf-acoes">
       <button type="button" id="fabioPdfAbrir">Abrir / imprimir</button>
-      <button type="button" id="fabioPdfCompartilhar" class="pdf-compartilhar" disabled>Enviar PDF</button>
+      <button type="button" id="fabioPdfCompartilhar" class="pdf-compartilhar" disabled>Compartilhar PDF</button>
       <button type="button" id="fabioPdfBaixar" disabled>Baixar PDF</button>
     </div>
     <div class="pdf-navegacao"><button id="fabioPdfAnterior" type="button">← PDF anterior</button><span id="fabioPdfPosicao">1 de 1</span><button id="fabioPdfProximo" type="button">Próximo PDF →</button></div>
-    <div class="fabio-doc-controles">
-      <button id="fabioDocAlternar" type="button">📄 Conferir versão para cliente</button>
-      <button id="fabioDocExecucoes" type="button">🔧 Execução dos mecânicos</button>
+    <div class="fabio-doc-controles" hidden aria-hidden="true">
+      <button id="fabioDocAlternar" type="button" hidden></button>
+      <button id="fabioDocExecucoes" type="button" hidden></button>
     </div>
     <section id="fabioDocMecanicos" class="fabio-doc-mecanicos" hidden></section>
     <label id="fabioDocConfirmacao" class="fabio-doc-confirmacao" hidden><input id="fabioDocConferi" type="checkbox"> Conferi as páginas do documento para cliente.</label>
@@ -764,10 +776,46 @@ function render(){
    add(card,'h2','',[d.marca,d.modelo].filter(Boolean).join(' '));
    add(card,'div','muted',[d.ano?'Ano '+d.ano:'',d.km?'KM '+d.km:'',d.patrimonio?'Patrimônio '+d.patrimonio:''].filter(Boolean).join(' • '));
    add(card,'div','muted',d.cliente);
+   const internos=add(card,'details','fabio-card-internos','');
+   add(internos,'summary','','Informações internas da OS — ver / ocultar');
+   const boxInterno=add(internos,'div','fabio-card-internos-conteudo','');
+   internos.addEventListener('click',e=>e.stopPropagation());
+   internos.addEventListener('keydown',e=>e.stopPropagation());
    const mecs=mecanicosDaOS(o),ativos=mecs.filter(m=>m.ativo);
-   add(card,'div','resumo-equipe',ativos.length?'EM ATENDIMENTO: '+ativos.map(m=>m.nome).join(', '):'MECÂNICOS VINCULADOS: '+(mecs.length?mecs.map(m=>m.nome).join(', '):'Não vinculados'));
+   add(boxInterno,'div','resumo-equipe',ativos.length?'EM ATENDIMENTO: '+ativos.map(m=>m.nome).join(', '):'MECÂNICOS VINCULADOS: '+(mecs.length?mecs.map(m=>m.nome).join(', '):'Não vinculados'));
    const resumoC=resumoComissao(o);
-   add(card,'div','resumo-comissao '+resumoC.classe,resumoC.label);
+   add(boxInterno,'div','resumo-comissao '+resumoC.classe,resumoC.label);
+   internos.addEventListener('toggle',()=>{
+    if(!internos.open||internos.dataset.carregado)return;
+    internos.dataset.carregado='sim';
+    add(boxInterno,'strong','','REGISTROS DE SERVIÇOS E PEÇAS');
+    const exec=o.execucaoItens&&typeof o.execucaoItens==='object'?o.execucaoItens:{};
+    let count=0;
+    [['servico',o.servicos||[]],['peca',o.pecas||[]]].forEach(([tipo,itens])=>{
+     if(!Array.isArray(itens))return;
+     itens.forEach((item,i)=>{
+      const registro=exec[tipo+'-'+i]||{};
+      const nomeItem=texto(item.desc||item.descricao||'Sem descrição').trim();
+      const codigo=texto(item.codigo||item.codigoPeca||item.pecaCodigo||item.codigoInterno||'').trim();
+      const idExec=texto(registro.mecId||registro.responsavelId||'').trim();
+      const responsavel=mecs.find(m=>idExec&&String(m.id)===idExec)?.nome||texto(registro.mecNome||registro.responsavelNome||'').trim();
+      const status=texto(registro.status||'').trim();
+      const obs=texto(registro.obs||registro.observacao||'').trim();
+      const vinculados=(tipo==='servico'&&Array.isArray(item.rateiosComissao)?item.rateiosComissao:[])
+       .map(r=>texto(r.mecNome||r.nome||mecs.find(m=>String(m.id)===String(r.mecId||r.id||''))?.nome||'').trim()).filter(Boolean);
+      const l=add(boxInterno,'div','fabio-card-interno-item','');
+      add(l,'strong','',(tipo==='servico'?'SERVIÇO: ':'PEÇA: ')+nomeItem);
+      if(codigo)add(l,'div','','Código: '+codigo);
+      if(tipo==='peca'&&item.qtd!==undefined)add(l,'div','','Quantidade: '+texto(item.qtd));
+      if(responsavel)add(l,'div','','Mecânico registrado: '+responsavel);
+      else if(vinculados.length)add(l,'div','','Mecânicos vinculados: '+[...new Set(vinculados)].join(', ')+' (execução não confirmada)');
+      add(l,'div','','Execução: '+(status||'Sem confirmação registrada'));
+      if(obs)add(l,'div','','Observação: '+obs);
+      count++;
+     });
+    });
+    if(!count)add(boxInterno,'p','','Nenhuma peça ou serviço registrado.');
+   });
    const badges=add(card,'div','linha','');
    add(badges,'span','etiqueta green','O.S. FEITA');
    add(badges,'span','etiqueta '+s.classe,s.titulo.toUpperCase());
@@ -776,7 +824,7 @@ function render(){
    if(valorStatus(o)==='aprovado')add(pagamento,'span','etiqueta green','APROVADA');
    else if(aguardando(o))add(pagamento,'span','etiqueta yellow','AGUARDANDO APROVAÇÃO');
    add(card,'div','card-abrir','📄 CONFERIR O.S. ANTES DE ENVIAR →');
-   const detalhar=add(card,'button','card-consulta-btn','Abrir OS / PDF');
+   const detalhar=add(card,'button','card-consulta-btn','Ver PDF do cliente');
    detalhar.type='button';
    detalhar.addEventListener('click',e=>{e.stopPropagation();window.fabioAbrirConsultaOS?.(o.id);});
    card.tabIndex=0;card.setAttribute('role','button');
@@ -1627,10 +1675,6 @@ get('fabioConsultaVoltar').addEventListener('click',ev=>{
  if(!cliente)return;
  ev.preventDefault();ev.stopImmediatePropagation();abrirInterno(idAtual);
 },true);
-get('fabioPdfCompartilhar').addEventListener('click',ev=>{
- ev.preventDefault();ev.stopImmediatePropagation();
- get('fabioPdfEstado').textContent='Este PDF original contém dados internos; envio somente pela prévia para cliente.';
-},true);
 function carregaLib(src,teste){
  if(teste())return Promise.resolve();
  return new Promise((resolve,reject)=>{
@@ -1713,23 +1757,20 @@ get('fabioClienteEnviar').addEventListener('click',async()=>{
 // Fonte única do documento: gerarPDFOS() original do JARVIS, em iframe protegido.
 const g=id=>document.getElementById(id),source=id=>window.__fabioOsFonte?.().find(x=>String(x.id)===String(id));
 const text=v=>v===undefined||v===null?'':String(v);
-let docAtual=null,modo='interna',osAtual='',refOS=null,preparando=false,paginasValidas=false,epoch=0,urlAtual='';
+let docAtual=null,modo='cliente',osAtual='',refOS=null,preparando=false,paginasValidas=false,epoch=0,urlAtual='';
 let zoom=1,ultimoDocumento=null,distanciaPinch=0,zoomNoInicio=1,execAberta=false;
 const display=s=>{g('fabioPdfEstado').textContent=s};
 const update=()=>{
  const fila=(window.__fabioFilaNavegacao||[]).length?window.__fabioFilaNavegacao:(window.__fabioFiltradosIds||[]);
  const pos=fila.indexOf(osAtual);
  g('fabioPdfPosicao').textContent=(pos>=0?pos+1:1)+' de '+(fila.length||1);
- g('fabioDocConfirmacao').hidden=modo!=='cliente'||!paginasValidas;
- g('fabioDocAlternar').textContent=modo==='cliente'?'← VOLTAR AO PDF ORIGINAL':'📄 CONFERIR VERSÃO PARA CLIENTE';
- g('fabioDocExecucoes').hidden=modo==='cliente';
- g('fabioDocMecanicos').hidden=modo==='cliente'||!execAberta;
- g('fabioDocExecucoes').textContent=execAberta?'Ocultar execução':'Ver execução';
- g('fabioDocExecucoes').setAttribute('aria-expanded',String(execAberta&&modo!=='cliente'));
- g('fabioPdfCompartilhar').disabled=preparando||modo!=='cliente'||!paginasValidas||!g('fabioDocConferi').checked;
+ g('fabioDocConfirmacao').hidden=!paginasValidas;
+ g('fabioDocAlternar').hidden=true;
+ g('fabioDocExecucoes').hidden=true;
+ g('fabioDocMecanicos').hidden=true;
+ g('fabioPdfCompartilhar').disabled=preparando||!paginasValidas||!g('fabioDocConferi').checked;
  g('fabioPdfBaixar').disabled=!docAtual||preparando;
  g('fabioPdfAbrir').disabled=!docAtual||preparando;
- g('fabioDocAlternar').disabled=preparando;
  g('fabioPdfAnterior').disabled=preparando||pos<=0;
  g('fabioPdfProximo').disabled=preparando||pos<0||pos>=fila.length-1;
 };
@@ -1841,47 +1882,40 @@ area.addEventListener('touchend',e=>{
  }
 });
 
-async function abrir(id,novoModo='interna'){
- const os=source(id);if(!os)return;
- if(preparando)return;
- preparando=true;osAtual=id;refOS=os;modo=novoModo;execAberta=false;paginasValidas=false;docAtual=null;ultimoDocumento=null;zoom=1;g('fabioNivelZoom').textContent='100%';g('fabioDocConferi').checked=false;
+async function abrir(id){
+ const os=source(id);if(!os||preparando)return;
+ preparando=true;osAtual=id;refOS=os;modo='cliente';paginasValidas=false;
+ docAtual=null;ultimoDocumento=null;zoom=1;g('fabioNivelZoom').textContent='100%';
+ g('fabioDocConferi').checked=false;
  g('fabioPdfDialog').hidden=false;
- g('fabioPdfTitulo').textContent='OS '+text(os.numero||os.numeroOS||id.slice(-6))+' • '+(modo==='cliente'?'PDF para cliente':'PDF ORIGINAL do JARVIS');
+ g('fabioPdfTitulo').textContent='OS '+text(os.numero||os.numeroOS||id.slice(-6))+' • PDF PARA CLIENTE';
  g('fabioDocPaginas').replaceChildren();g('fabioPdfViewer').hidden=true;
- montarEquipe(os);update();const token=++epoch;
- display('Gerando o PDF original pelo motor do JARVIS, com todas as fotos...');
+ update();const token=++epoch;
+ display('Preparando a OS para cliente com o template original e fotos…');
  try{
-  if(novoModo==='cliente'){
-   const checagem=window.fabioConferirOrcamento?.(id);
-   if(!checagem?.ok)throw Error(checagem?.mensagem||'Orçamento não conciliado; envio bloqueado.');
-  }
-  const d=await window.fabioGerarDocOficial(id,novoModo);
-  if(token!==epoch||source(id)!==os)throw Error('A OS foi atualizada durante a preparação. Abra novamente.');
-  const pronto=await desenharPDF(d,novoModo==='cliente',token);
-  if(!pronto)throw Error('Visualização interrompida.');
-  docAtual=d;paginasValidas=true;
-  display(novoModo==='cliente'?'Confira todas as páginas e marque a confirmação para compartilhar.':'PDF original e fotos carregados. Registros de execução aparecem acima, somente para uso interno.');
- }catch(e){
-  console.error('[Fábio conferência PDF]',e);
+  const pdf=await window.fabioGerarDocOficial(id,'cliente');
+  if(token!==epoch||source(id)!==os)throw Error('A OS mudou durante a preparação. Confira novamente.');
+  const ok=await desenharPDF(pdf,true,token);
+  if(!ok)throw Error('A visualização foi interrompida.');
+  docAtual=pdf;paginasValidas=true;
+  display('Confira todas as páginas e confirme antes de compartilhar.');
+ }catch(err){
+  console.error('[Fabio PDF cliente]',err);
   docAtual=null;paginasValidas=false;g('fabioDocPaginas').replaceChildren();
-  display('Documento não liberado: '+(e?.message||e)+'. Nenhum envio será realizado.');
+  display('PDF não liberado: '+(err?.message||err)+'. Nenhum arquivo foi enviado.');
  }finally{preparando=false;update();}
 }
 window.fabioAbrirPdfOS=(id)=>abrir(id);
 window.fabioAbrirConsultaOS=(id)=>abrir(id);
 window.fabioPrepararClienteSeguro=async id=>{
- const registro=source(id),c=window.fabioConferirOrcamento?.(id);
- if(!registro||!c?.ok)throw Error(c?.mensagem||'Orçamento não confirmado.');
+ const registro=source(id);
+ if(!registro)throw Error('OS não encontrada.');
  const doc=await window.fabioGerarDocOficial(id,'cliente');
  if(source(id)!==registro)throw Error('A OS mudou durante a preparação do lote.');
  await validarConteudoClientePDF(doc);
  if(source(id)!==registro)throw Error('A OS mudou durante a conferência.');
  return doc;
 };
-g('fabioDocAlternar').addEventListener('click',()=>{
- if(osAtual&&!preparando)abrir(osAtual,modo==='interna'?'cliente':'interna');
-});
-g('fabioDocExecucoes').addEventListener('click',()=>{execAberta=!execAberta;update();});
 g('fabioDocConferi').addEventListener('change',update);
 const interromper=()=>{epoch++;ultimoDocumento=null;docAtual=null;paginasValidas=false;g('fabioDocPaginas').replaceChildren();};
 g('fabioPdfFechar').addEventListener('click',interromper,true);
@@ -1890,7 +1924,7 @@ function download(){
  if(urlAtual)URL.revokeObjectURL(urlAtual);
  urlAtual=URL.createObjectURL(docAtual.blob);
  const anchor=document.createElement('a');
- anchor.href=urlAtual;anchor.download=modo==='cliente'?'OS-'+text(source(osAtual)?.numero||osAtual.slice(-6))+'-CLIENTE.pdf':(docAtual.fileName||'OS.pdf');
+ anchor.href=urlAtual;anchor.download='OS-'+text(source(osAtual)?.numero||osAtual.slice(-6))+'-CLIENTE.pdf';
  document.body.appendChild(anchor);anchor.click();anchor.remove();
 }
 g('fabioPdfBaixar').addEventListener('click',e=>{e.stopImmediatePropagation();download();},true);
@@ -1903,7 +1937,7 @@ g('fabioPdfAbrir').addEventListener('click',e=>{
 },true);
 g('fabioPdfCompartilhar').addEventListener('click',e=>{
  e.stopImmediatePropagation();
- if(modo!=='cliente'||!paginasValidas||!g('fabioDocConferi').checked||!docAtual)return;
+ if(!paginasValidas||!g('fabioDocConferi').checked||!docAtual)return;
  if(source(osAtual)!==refOS){
   paginasValidas=false;docAtual=null;g('fabioDocConferi').checked=false;update();
   display('A OS foi atualizada. Confira novamente o PDF antes de compartilhar.');return;
@@ -1921,7 +1955,7 @@ for(const [id,passo] of [['fabioPdfAnterior',-1],['fabioPdfProximo',1]]){
  g(id).addEventListener('click',e=>{
   e.stopImmediatePropagation();if(preparando)return;
   const fila=window.__fabioFilaNavegacao||window.__fabioFiltradosIds||[];
-  const i=fila.indexOf(osAtual),proximo=fila[i+passo];if(proximo)abrir(proximo,'interna');
+  const i=fila.indexOf(osAtual),proximo=fila[i+passo];if(proximo)abrir(proximo);
  },true);
 }
 })();
