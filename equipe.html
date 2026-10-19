@@ -1062,6 +1062,15 @@ function _equipeVoltarNaPagina(){
   }
   const abertos=Array.from(document.querySelectorAll('.overlay.open'));
   const modal=abertos[abertos.length-1];
+  if(modal?.id==='modalOS'&&_equipeHistoricoInterno.at(-1)?.tipo==='pane'){
+    const anterior=_equipeHistoricoInterno.pop();
+    const tab=Array.from(modal.querySelectorAll('.mtab')).find(t=>t.getAttribute('onclick')?.match(/swTab\(this,'([^']+)'/)?.[1]===anterior.id);
+    if(tab){
+      _equipeVoltandoInternamente=true;
+      try{tab.click();}finally{_equipeVoltandoInternamente=false;}
+      return;
+    }
+  }
   if(modal?.id){fecharModal(modal.id);return;}
   _equipeVoltandoInternamente=true;
   try{
