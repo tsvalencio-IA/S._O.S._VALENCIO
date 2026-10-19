@@ -1300,6 +1300,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div style="font-family:var(--fd);font-size:1rem;font-weight:700;color:var(--cyan);">SERVIÇOS / MÃO DE OBRA</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button type="button" class="btn-ghost" onclick="window._tempaSugerir()" style="font-size:0.7rem;padding:6px 10px;background:rgba(0,212,255,0.08);" title="Cruza os serviços com a Tabela Tempária SINDIREPA-SP e preenche valores automaticamente baseado em (tempo padrão × R$/hora-mecânica)">📖 SUGERIR TEMPOS (TABELA)</button>
+          <button type="button" class="btn-outline" id="osAutorizarExecucaoZero" onclick="window.autorizarExecucaoSemPrecoJarvis?.()" title="Autorizar execução por peça ou serviço, inclusive R$ 0,00, sem mudar o status do veículo">AUTORIZAR EXECUÇÃO (ATÉ R$ 0,00)</button>
           <button type="button" class="btn-outline" onclick="window.adicionarServicoOS()">+ ADICIONAR SERVIÇO</button>
         </div>
       </div>
