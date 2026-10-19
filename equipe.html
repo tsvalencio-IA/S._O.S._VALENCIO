@@ -2483,6 +2483,10 @@ async function salvarExecucaoAprovadosEquipe(osId) {
 
 function aplicarMarcadoresAprovacaoEquipe(os) {
   const U = window.JOS || window.JarvisOSUtils || {};
+  // A ficha é atualizada após cada baixa: descartar controles antigos antes de
+  // recriá-los para impedir duas caixas de status/botões para o mesmo lançamento.
+  document.querySelectorAll('#containerServicos .equipe-exec-inline,#containerPecas .equipe-exec-inline').forEach(el=>el.remove());
+  document.querySelectorAll('#modalOS .equipe-exec-salvar').forEach(el=>el.remove());
   document.getElementById('resumoAprovacaoEquipe')?.remove();
   document.querySelectorAll('#containerServicos .aprovacao-item-badge,#containerPecas .aprovacao-item-badge').forEach(el => el.remove());
   const chaveAprovadas=U.getApprovedKeys?.(os)||new Set();
