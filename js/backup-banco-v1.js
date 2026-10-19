@@ -15,6 +15,8 @@ const SUBCOLLECTIONS=Object.freeze({
  ordens_servico:['items','financial','internalNotes','publicTimeline','execution'],
  cotacoes_publicas:['respostas']
 });
+// Consultas compatíveis com as regras sameTenantRead das subcoleções operacionais.
+const CHILD_TENANT_FILTER=new Set(['items','publicTimeline','execution','respostas']);
 const IMMUTABLE=new Set(['mensagens','lixeira_auditoria','auditLogs','ordens_servico/*/internalNotes',
  'ordens_servico/*/publicTimeline','cotacoes_publicas/*/respostas']);
 const PROTECTED=new Set(['oficinas','notificacoes_live']);
@@ -223,7 +225,9 @@ async function exportDB(){
    addDoc(d);
    const childNames=SUBCOLLECTIONS[coll]||[];
    for(const child of childNames){
-    await eachPage(d.ref.collection(child),async nested=>addDoc(nested));
+    const children=d.ref.collection(child);
+    const scoped=CHILD_TENANT_FILTER.has(child)?children.where('tenantId','==',tenant):children;
+    await eachPage(scoped,async nested=>addDoc(nested));
    }
   });
  }
