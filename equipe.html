@@ -2413,7 +2413,7 @@ async function salvarExecucaoAprovadosEquipe(osId) {
   const U=window.JOS||window.JarvisOSUtils||{};
   const osLocal=dbOS.find(x=>String(x.id)===String(osId));
   const autorizado=['gerente','gestor','admin','superadmin','dono'].includes(String(J.role||'').toLowerCase())||
-    equipeEstaVinculadoAOS(osLocal);
+    osAtribuidaAoUsuarioEquipe(osLocal);
   if(!osLocal||!J.tid||!J.fid||!String(J.nome||'').trim()||!autorizado){
     toast('O.S. ou profissional não autorizado para registrar execução.','warn');return;
   }
@@ -2450,8 +2450,8 @@ async function salvarExecucaoAprovadosEquipe(osId) {
       const os=snap.data()||{};
       if(String(os.tenantId||'')!==String(J.tid))throw Error('Oficina não autorizada.');
       if(!(['gerente','gestor','admin','superadmin','dono'].includes(String(J.role||'').toLowerCase())||
-            equipeEstaVinculadoAOS(os)))throw Error('O profissional não está vinculado à OS.');
-      const chaves=U.getApprovedKeys(os);
+            osAtribuidaAoUsuarioEquipe(os)))throw Error('O profissional não está vinculado à OS.');
+      const chaves=U.getApprovedKeys?.(os)||new Set();
       if(chaves.size!==chavesAntes.size||[...chavesAntes].some(k=>!chaves.has(k)))
         throw Error('A aprovação foi alterada. Reabra a O.S.');
       const cli=dbClientes.find(c=>c.id===os.clienteId);
@@ -2476,7 +2476,7 @@ async function salvarExecucaoAprovadosEquipe(osId) {
         const descricao=String(item.desc||alteracao.chave);
         eventos.push({
           dt:agora,user:autor,usuarioId:J.fid,perfil:J.role||'equipe',
-          tipo:'execucao_item_aprovado',itemKey:alteracao.chave,itemTipo:alteracao.tipo,
+          tipo:'execucao_item_os',itemKey:alteracao.chave,itemTipo:alteracao.tipo,
           itemDescricao:descricao,statusAnterior:stAnterior,statusNovo:alteracao.estado,
           observacaoAnterior:obsAnterior,observacaoNova:alteracao.observacao,
           aprovadoFinanceiramente:chaves.has(alteracao.chave),
@@ -2503,7 +2503,11 @@ async function salvarExecucaoAprovadosEquipe(osId) {
     toast('✓ '+resultado.eventos.length+' atualização(ões) registrada(s) com identificação do profissional.','ok');
   }catch(err){
     console.error('[Equipe execução aprovada]',err);
-    toast('Não foi possível registrar execução: '+(err.message||err),'err');
+    const causa=String(err?.code||'');
+    const texto=causa==='permission-denied'
+      ?'O Firestore recusou a gravação para esta sessão. Nenhum status foi salvo. Confirme a permissão do profissional no Firebase.'
+      :'Não foi possível registrar execução: '+(err.message||err);
+    toast(texto,'err');
   }finally{if(botao)botao.disabled=false;}
 }
 
@@ -2578,7 +2582,7 @@ function aplicarMarcadoresAprovacaoEquipe(os) {
   const chaveAprovadas=U.getApprovedKeys?.(os)||new Set();
   const aprovadaAtiva=equipeTemOrcamentoAprovado(os);
   if(!(['gerente','gestor','admin','superadmin','dono'].includes(String(J.role||'').toLowerCase())||
-       equipeEstaVinculadoAOS(os)))return;
+       osAtribuidaAoUsuarioEquipe(os)))return;
   const cli=(dbClientes||[]).find(c=>c.id===os?.clienteId);
   const disponiveis=equipeItensOperacionaisOS(os,cli);
   const keys=chaveAprovadas;
@@ -2864,11 +2868,24 @@ async function salvarOS(){
 
       // Status intencionalmente não é comparado nem alterado na tela da equipe.
 
-      const oldDiag = (oldOS.diagnostico || '').trim();
-      const novoDiag = ($v('osDiag') || '').trim();
-      if (novoDiag && novoDiag !== oldDiag) {
-          tl.push({ dt: new Date().toISOString(), user: funcUser, acao: `Diagnóstico Técnico atualizado.` });
-          registouAlgo = true;
+      // Registrar exatamente o antes/depois de cada campo modificado na ficha.
+      // Os eventos ficam exclusivamente na timeline interna da OS.
+      const diffsEquipe=[
+        ['desc','Descrição da OS',$v('osDesc')],
+        ['diagnostico','Diagnóstico técnico',$v('osDiag')],
+        ['km','Quilometragem',$v('osKm')],
+        ['chkObs','Observações da inspeção',$v('chkObs')]
+      ];
+      for(const [campo,rotulo,novo] of diffsEquipe){
+        const anterior=String(oldOS[campo]??'').trim(),atual=String(novo??'').trim();
+        // O salvamento da equipe preserva campo previamente preenchido quando o formulário vier vazio.
+        if(!atual||anterior===atual)continue;
+        const agora=new Date().toISOString();
+        tl.push({dt:agora,user:funcUser,usuarioId:J.fid||'',perfil:J.role||'equipe',
+          tipo:'alteracao_campo_os',campo,rotulo,valorAnterior:anterior,valorNovo:atual,
+          interno:true,visivelCliente:false,
+          acao:rotulo+': "'+(anterior||'(vazio)')+'" → "'+atual+'" — '+funcUser});
+        registouAlgo=true;
       }
 
       const mapCheck = { chkPainel: 'Painel', chkPressao: 'Pressão dos Pneus', chkCar: 'Carroceria', chkDoc: 'Documentos' };
@@ -2914,11 +2931,8 @@ async function salvarOS(){
           registouAlgo = true;
       }
 
-      // As evidências são auditadas por URL individual após compor o payload.
-
-      if (!registouAlgo) {
-          tl.push({ dt: new Date().toISOString(), user: funcUser, acao: `Atualizou os detalhes da O.S.` });
-      }
+      // Não inventar auditoria genérica se nenhum campo foi alterado.
+      // Eventos reais de mídia, serviço e peça continuam auditados individualmente.
   } else {
       tl = JSON.parse($v('tlData') || '[]');
       tl.push({ dt: new Date().toISOString(), user: funcUser, acao: `Abriu a O.S. (Status inicial: ${statusPreservadoEquipe})` });
