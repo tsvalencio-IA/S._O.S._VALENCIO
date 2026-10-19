@@ -460,6 +460,7 @@ html,body{overflow-x:hidden}
   <p id="fabioLoteResumo">Preparando os documentos oficiais…</p>
   <div id="fabioLoteEstado" role="status" aria-live="polite"></div>
   <div id="fabioLoteArquivos"></div>
+  <label id="fabioLoteConferencia" style="display:block;margin-top:12px;color:#dcf3ff;font-weight:800"><input id="fabioLoteConferiu" type="checkbox" style="width:23px;height:23px;vertical-align:middle;margin-right:9px">Conferi os PDFs preparados e autorizo abrir o compartilhamento.</label>
   <div class="lote-botoes">
    <button id="fabioLoteCompartilhar" type="button" disabled>Compartilhar arquivos preparados</button>
    <button id="fabioLoteFechar" type="button">✕ Fechar / voltar</button>
@@ -1013,7 +1014,11 @@ function fecharLoteFabio(){
  loteLinks.forEach(url=>URL.revokeObjectURL(url));loteLinks=[];
  $('fabioLoteArquivos').replaceChildren();$('fabioLote').hidden=true;
  $('fabioLoteCompartilhar').disabled=true;
+ $('fabioLoteConferiu').checked=false;
 }
+$('fabioLoteConferiu').addEventListener('change',()=>{
+ $('fabioLoteCompartilhar').disabled=!$('fabioLoteConferiu').checked||loteGerando||!lotePronto.length;
+});
 $('fabioLoteFechar').addEventListener('click',fecharLoteFabio);
 window.fabioPrepararMultiplos=async function(ids){
  if(loteGerando||gerando)return;
@@ -1021,7 +1026,7 @@ window.fabioPrepararMultiplos=async function(ids){
  if(!unicos.length)return;
  fecharLoteFabio();const token=++loteEpoch;
  $('fabioLote').hidden=false;$('fabioLoteCompartilhar').disabled=true;
- $('fabioLoteResumo').textContent=unicos.length+' O.S. selecionadas — geração dos PDFs originais, somente leitura.';
+ $('fabioLoteResumo').textContent=unicos.length+' O.S. selecionadas — geração das versões sem informações internas para clientes. Confira cada arquivo antes de compartilhar.';
  const estadoLote=$('fabioLoteEstado');loteGerando=true;lotePronto=[];
  let erro=null;
  try{
@@ -1043,7 +1048,7 @@ window.fabioPrepararMultiplos=async function(ids){
    lotePronto=[];estadoLote.textContent='Falha ao preparar os documentos: '+(erro.message||erro)+'. Nenhum PDF foi enviado.';
   }else{
    estadoLote.textContent=lotePronto.length+' PDF(s) oficiais preparados. Toque em Compartilhar para escolher o aplicativo.';
-   $('fabioLoteCompartilhar').disabled=false;
+   $('fabioLoteCompartilhar').disabled=true;
    lotePronto.forEach(file=>{
     const url=URL.createObjectURL(file);loteLinks.push(url);
     const a=document.createElement('a');a.href=url;a.download=file.name;a.textContent='Baixar individualmente: '+file.name;
@@ -1053,7 +1058,7 @@ window.fabioPrepararMultiplos=async function(ids){
  }
 };
 $('fabioLoteCompartilhar').addEventListener('click',()=>{
- if(loteGerando||!lotePronto.length)return;
+ if(loteGerando||!lotePronto.length||!$('fabioLoteConferiu').checked)return;
  const dados={files:lotePronto,title:'Ordens de serviço S.O.S. Valêncio',text:'Seguem as ordens de serviço selecionadas.'};
  if(typeof navigator.share==='function'&&(!navigator.canShare||navigator.canShare({files:lotePronto}))){
   // Web Share API precisa ser acionada diretamente pelo clique do usuário.
@@ -1369,6 +1374,20 @@ function abrirInterno(id){
  incluirMecanicos();ui();
 }
 window.fabioAbrirConsultaOS=abrirInterno;
+let mudouDuranteGeracao=false;
+const atualizarConsultaOriginal=window.fabioAtualizarOSAberta;
+window.fabioAtualizarOSAberta=function(){
+ // Não permitir que a atualização em tempo real restaure campos internos na prévia do cliente.
+ if(processando){mudouDuranteGeracao=true;return;}
+ if(!idAtual||dialog.hidden){atualizarConsultaOriginal?.();return;}
+ const manterCliente=cliente;
+ abrirInterno(idAtual);
+ if(manterCliente){
+  try{cliente=true;gerarClienteEmTela();}
+  catch(e){cliente=false;abrirInterno(idAtual);get('fabioClienteEstado').textContent='Prévia de cliente bloqueada após atualização da OS: '+e.message;}
+ }
+ arquivo=null;ui();
+};
 function alternar(){
  if(!idAtual)return;
  if(cliente){abrirInterno(idAtual);return;}
@@ -1394,7 +1413,7 @@ function carregaLib(src,teste){
 }
 async function criarCliente(id){
  if(processando)throw Error('Outra geração de PDF em andamento');
- processando=true;ui();
+ mudouDuranteGeracao=false;processando=true;ui();
  try{
   if(!cliente||idAtual!==id){
    abrirInterno(id);
@@ -1423,11 +1442,16 @@ async function criarCliente(id){
    if(pag++)pdf.addPage();
    pdf.addImage(recorte.toDataURL('image/jpeg',.87),'JPEG',8,8,largura,largura*h/canvas.width);
   }
+  if(mudouDuranteGeracao)throw Error('A OS foi atualizada durante a geração. Confira novamente antes de enviar.');
   const blob=pdf.output('blob');
   if(blob.size<1000||(await blob.slice(0,5).text())!=='%PDF-')throw Error('Arquivo PDF não validado.');
   const o=fonte(id)||{},n=nome(o.numero||o.numeroOS||id.slice(-6));
   return {blob,numero:n,fileName:'OS-'+n.replace(/[^a-z0-9_-]/gi,'-')+'-CLIENTE.pdf'};
- }finally{processando=false;ui();}
+ }finally{
+  processando=false;
+  if(mudouDuranteGeracao){mudouDuranteGeracao=false;window.fabioAtualizarOSAberta();}
+  ui();
+ }
 }
 window.fabioPrepararClienteSeguro=criarCliente;
 get('fabioClienteEnviar').addEventListener('click',async()=>{
