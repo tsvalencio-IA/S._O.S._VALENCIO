@@ -1057,6 +1057,10 @@ function _equipeVoltarNaPagina(){
     if(typeof fecharGaleriaFotosEquipe==='function')fecharGaleriaFotosEquipe();
     return;
   }
+  if(document.getElementById('equipeHistoricoAnteriorOverlay')){
+    fecharHistoricoOSAnteriorEquipe();
+    return;
+  }
   if(document.getElementById('modalIaOS')?.classList.contains('open')){
     fecharModalIA();return;
   }
@@ -3080,10 +3084,11 @@ function atualizarHeaderOS(veiculoId,clienteId){
  const atual=String(document.getElementById('osId')?.value||'');
  const local=(Array.isArray(dbOS)?dbOS:[]).filter(o=>String(o.veiculoId)===String(veiculoId)&&String(o.id)!==atual);
  renderHistoricoOSCardsEquipe(local);
- db.collection('ordens_servico').where('tenantId','==',J.tid).where('veiculoId','==',veiculoId).get().then(snap=>{
+ // Usa os documentos já sincronizados pelo listener econômico: sem índice extra nem leitura de rede.
+ db.collection('ordens_servico').where('tenantId','==',J.tid).get({source:'cache'}).then(snap=>{
   if(req!==_eqHistReq)return;
   const map=new Map(local.map(o=>[String(o.id),o]));
-  snap.docs.forEach(d=>{if(d.id!==atual&&String(d.data().tenantId)===String(J.tid))map.set(d.id,{id:d.id,...d.data()});});
+  snap.docs.forEach(d=>{if(d.id!==atual&&String(d.data().tenantId)===String(J.tid)&&String(d.data().veiculoId||'')===String(veiculoId))map.set(d.id,{id:d.id,...d.data()});});
   renderHistoricoOSCardsEquipe([...map.values()]);
  }).catch(err=>{
   if(req!==_eqHistReq)return;
