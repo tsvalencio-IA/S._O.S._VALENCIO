@@ -1006,10 +1006,32 @@ function toast(msg,type='ok'){
   setTimeout(()=>{el.style.opacity='0';setTimeout(()=>el.remove(),400);},3000);
 }
 
-// MODAL
-function abrirModal(id){if(id==='modalExtratoFunc')return;$(id).classList.add('open');}
-function fecharModal(id){$(id).classList.remove('open');}
+// MODAL: histórico interno para o botão físico/gesto VOLTAR do Android.
+const _equipeHistoricoInterno=[];
+let _equipeVoltandoInternamente=false;
+function _equipeHistoricoAdicionar(tipo,id){
+  if(!_equipeVoltandoInternamente&&id)_equipeHistoricoInterno.push({tipo,id});
+}
+function abrirModal(id){
+  if(id==='modalExtratoFunc')return;
+  const modal=$(id);
+  if(!modal)return;
+  if(!modal.classList.contains('open'))_equipeHistoricoAdicionar('modal',id);
+  modal.classList.add('open');
+}
+function fecharModal(id){
+  $(id)?.classList.remove('open');
+  // Modal fechado manualmente não deve reaparecer ao voltar.
+  for(let i=_equipeHistoricoInterno.length-1;i>=0;i--){
+    if(_equipeHistoricoInterno[i].tipo==='modal'&&_equipeHistoricoInterno[i].id===id){
+      _equipeHistoricoInterno.splice(i,1);break;
+    }
+  }
+}
 function swTab(el,a,...rest){
+  const anterior=el?.parentElement?.querySelector('.mtab.active');
+  const prevId=anterior?.getAttribute('onclick')?.match(/swTab\(this,'([^']+)'/)?.[1];
+  if(prevId&&prevId!==a)_equipeHistoricoAdicionar('pane',prevId);
   el.parentElement.querySelectorAll('.mtab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
   $(a).classList.add('active');
@@ -1019,12 +1041,67 @@ function sair(){sessionStorage.clear();window.location.href='index.html';}
 
 // TAB NAV
 function irTab(id,el){
+  const anterior=document.querySelector('.section.active')?.id;
+  if(anterior&&anterior!==id)_equipeHistoricoAdicionar('tab',anterior);
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   $(id)?.classList.add('active'); el?.classList.add('active');
   if(id==='t-chat') iniciarChatEquipeDados();
   repararLayoutEquipe();
 }
+
+// O botão físico do Android não deve navegar para index.html:
+// primeiro fecha foto/modal, depois volta para a aba anterior do Equipe.
+function _equipeVoltarNaPagina(){
+  if(document.getElementById('equipeGaleriaFotosOverlay')){
+    if(typeof fecharGaleriaFotosEquipe==='function')fecharGaleriaFotosEquipe();
+    return;
+  }
+  if(document.getElementById('modalIaOS')?.classList.contains('open')){
+    fecharModalIA();return;
+  }
+  const abertos=Array.from(document.querySelectorAll('.overlay.open'));
+  const modal=abertos[abertos.length-1];
+  if(modal?.id){fecharModal(modal.id);return;}
+  _equipeVoltandoInternamente=true;
+  try{
+    while(_equipeHistoricoInterno.length){
+      const anterior=_equipeHistoricoInterno.pop();
+      if(anterior.tipo==='modal')continue;
+      if(anterior.tipo==='pane'){
+        const m=$('modalOS');
+        if(!m?.classList.contains('open'))continue;
+        const tab=Array.from(m.querySelectorAll('.mtab')).find(t=>t.getAttribute('onclick')?.match(/swTab\(this,'([^']+)'/)?.[1]===anterior.id);
+        if(tab){tab.click();return;}
+      }
+      if(anterior.tipo==='tab'&&$(anterior.id)?.classList.contains('section')){
+        const tab=Array.from(document.querySelectorAll('.tab')).find(t=>t.getAttribute('onclick')?.includes("'"+anterior.id+"'"));
+        irTab(anterior.id,tab);return;
+      }
+    }
+    // Raiz do Equipe: não retorna automaticamente ao login.
+    if(!document.getElementById('t-kanban')?.classList.contains('active')){
+      const tab=Array.from(document.querySelectorAll('.tab')).find(t=>t.getAttribute('onclick')?.includes("'t-kanban'"));
+      irTab('t-kanban',tab);
+    }
+  }finally{_equipeVoltandoInternamente=false;}
+}
+(function instalarVoltarAndroidEquipe(){
+  // Uma entrada de histórico retém o WebView/PWA nesta página quando usuário
+  // pressiona a seta física/gesto nativo; não mexe na URL nem no login.
+  const guard={sosEquipeBackGuard:true};
+  try{
+    history.pushState(guard,'',location.href);
+    window.addEventListener('popstate',()=>{
+      _equipeVoltarNaPagina();
+      history.pushState(guard,'',location.href);
+    });
+  }catch(e){console.warn('[Equipe] histórico interno indisponível',e);}
+  try{
+    const app=window.Capacitor?.Plugins?.App;
+    if(app?.addListener)app.addListener('backButton',()=>_equipeVoltarNaPagina());
+  }catch(e){console.warn('[Equipe] botão nativo indisponível',e);}
+})();
 
 const dtBr = iso=>iso?new Date(iso).toLocaleDateString('pt-BR'):'-';
 const dtHrBr = iso=>iso?new Date(iso).toLocaleString('pt-BR'):'-';
