@@ -2360,10 +2360,10 @@ function adicionarServico(s=null, originalIndex=null){
   
   div.innerHTML=`
     <div style="position:relative;min-width:0;">
-      <input type="text" class="j-input serv-desc" id="${uid}" placeholder="Descreva o serviço..." value="${s?s.desc:''}" style="width:100%;padding-right:40px;">
+      <input type="text" class="j-input serv-desc" id="${uid}" placeholder="Descreva o serviço..." value="${s?s.desc:''}" ${s ? 'readonly title="Serviço existente: equipe somente acrescenta novos serviços"' : ''} style="width:100%;padding-right:40px;">
       <button type="button" class="btn-voice" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);" onclick="iniciarVoz('${uid}',this)" title="Falar serviço">🎙️</button>
     </div>
-    <select class="j-select serv-mec" ${podeAlterarResponsavel ? '' : 'disabled'} title="Mecânico responsável pelo serviço">${opcoesMecanicoServicoEquipe(mecIdServico, window._equipeOSAtual)}</select>
+    <select class="j-select serv-mec" ${(podeAlterarResponsavel&&!s) ? '' : 'disabled'} title="Mecânico responsável pelo serviço">${opcoesMecanicoServicoEquipe(mecIdServico, window._equipeOSAtual)}</select>
     <!-- Sem preços e exclusão no painel Equipe. -->
   `;
   $('containerServicos').appendChild(div);
@@ -2380,7 +2380,7 @@ function adicionarPeca(){
 function renderPecaRow(p){
  const div=document.createElement('div');
  div.style.cssText='display:grid;grid-template-columns:minmax(0,1fr) 70px;gap:7px;align-items:center;';
- div.innerHTML=`<select class="j-select peca-sel" onchange="selPeca(this)"><option value="${p.estoqueId||''}">${p.desc||''}</option>${dbEstoque.filter(x=>(x.qtd||0)>0||x.id===p.estoqueId).map(x=>`<option value="${x.id}" data-d="${x.desc||''}" ${x.id===p.estoqueId?'selected':''}>${x.desc}</option>`).join('')}</select><input type="number" class="j-input peca-qtd" value="${p.qtd||1}" min="1">`;
+ div.innerHTML=`<select class="j-select peca-sel" disabled title="Peça existente: equipe somente acrescenta" onchange="selPeca(this)"><option value="${p.estoqueId||''}">${p.desc||''}</option>${dbEstoque.filter(x=>(x.qtd||0)>0||x.id===p.estoqueId).map(x=>`<option value="${x.id}" data-d="${x.desc||''}" ${x.id===p.estoqueId?'selected':''}>${x.desc}</option>`).join('')}</select><input type="number" class="j-input peca-qtd" value="${p.qtd||1}" min="1" readonly title="Quantidade existente: somente gestor pode alterar">`;
  $('containerPecas').appendChild(div);
 }
 function selPeca(sel){ /* Nenhum valor de preço é exposto no DOM. */ }
@@ -2535,13 +2535,7 @@ async function salvarOS(){
               registouAlgo = true;
           }
       });
-      oldPecas.forEach(oldP => {
-          const descOld = (oldP.desc || '').toLowerCase().trim();
-          if (!newPecas.find(p => (p.desc || '').toLowerCase().trim() === descOld)) {
-              tl.push({ dt: new Date().toISOString(), user: funcUser, acao: `Removeu peça: ${oldP.desc}` });
-              registouAlgo = true;
-          }
-      });
+      // EQUIPE não possui fluxo de remoção: registro existente é preservado.
 
       const oldServicos = oldOS.servicos || [];
       const newServicos = servicos || [];
@@ -2552,13 +2546,7 @@ async function salvarOS(){
               registouAlgo = true;
           }
       });
-      oldServicos.forEach(oldS => {
-          const descOld = (oldS.desc || '').toLowerCase().trim();
-          if (!newServicos.find(s => (s.desc || '').toLowerCase().trim() === descOld)) {
-              tl.push({ dt: new Date().toISOString(), user: funcUser, acao: `Removeu serviço: ${oldS.desc}` });
-              registouAlgo = true;
-          }
-      });
+      // EQUIPE não audita exclusões porque a transação nunca exclui serviços.
 
       const obsEquipeNova = ($v('osObsEquipeNova') || '').trim();
       if (obsEquipeNova) {
@@ -2635,24 +2623,6 @@ async function salvarOS(){
     if (moverTriagemConfirmado && isTriagemEquipe(p.status)) {
       toast('Equipe não pode arquivar ou excluir aprovação. Solicite ao gestor no JARVIS.','warn');
       return;
-      const hist = Array.isArray(osAntigaAprovacao.aprovacaoHistorico) ? osAntigaAprovacao.aprovacaoHistorico.slice() : [];
-      hist.push({
-        aprovadoEm: osAntigaAprovacao.aprovacao?.aprovadoEm || osAntigaAprovacao.updatedAt || new Date().toISOString(),
-        arquivadoEm: new Date().toISOString(),
-        arquivadoPor: J.nome || 'Equipe',
-        origem: 'equipe_foto_para_triagem',
-        motivo: motivoTriagemEquipe,
-        aprovacao: osAntigaAprovacao.aprovacao || null,
-        itensAprovados: osAntigaAprovacao.itensAprovados || [],
-        totalAprovado: osAntigaAprovacao.totalAprovado || 0
-      });
-      p.aprovacaoHistorico = hist;
-      p.aprovacao = firebase.firestore.FieldValue.delete();
-      p.itensAprovados = firebase.firestore.FieldValue.delete();
-      p.totalAprovado = firebase.firestore.FieldValue.delete();
-      p.aprovacaoAtiva = false;
-      tl.push({ dt: new Date().toISOString(), user: J.nome || 'Equipe', acao: `Arquivou aprovacao ativa ao mover para Triagem. Motivo: ${motivoTriagemEquipe}` });
-      p.timeline = tl;
     } else {
       p.aprovacao = osAntigaAprovacao.aprovacao;
       p.itensAprovados = osAntigaAprovacao.itensAprovados || [];
