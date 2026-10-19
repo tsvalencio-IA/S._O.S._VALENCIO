@@ -410,6 +410,27 @@ html,body{overflow-x:hidden}
  #fabioPdfDialog .pdf-cabecalho strong{font-size:.84rem}
 }
 </style>
+<style id="fabio-pdf-ergonomia-v2">
+#fabioPdfDialog .pdf-box{background:#132034;max-width:100%;overflow:hidden}
+#fabioPdfDialog .pdf-cabecalho{padding:6px 10px}
+#fabioPdfDialog .pdf-cabecalho strong{font-size:.9rem}
+#fabioPdfDialog .pdf-acoes{gap:4px;padding:5px 8px}
+#fabioPdfDialog .pdf-acoes button{min-height:40px;padding:5px;font-size:.81rem}
+#fabioPdfDialog .pdf-navegacao{gap:5px;padding:4px 8px}
+#fabioPdfDialog .pdf-navegacao button{min-height:39px;padding:5px;font-size:.79rem}
+#fabioPdfDialog .fabio-doc-controles{padding:4px 8px;gap:5px}
+#fabioPdfDialog .fabio-doc-controles button{min-height:40px;background:#26394f;border:1px solid #60758a;font-size:.84rem;color:#fff}
+#fabioPdfDialog .fabio-zoom{display:flex;align-items:center;justify-content:center;gap:9px;padding:3px 8px}
+#fabioPdfDialog .fabio-zoom button{min-height:37px;padding:5px 12px;border-radius:7px;font-size:.85rem;background:#26394f;border:1px solid #60758a}
+#fabioPdfDialog .fabio-zoom output{min-width:49px;text-align:center;font-size:.83rem}
+#fabioPdfDialog #fabioPdfEstado{font-size:.81rem;padding:6px 9px}
+#fabioPdfDialog .fabio-doc-paginas{overflow-y:auto;overflow-x:hidden;touch-action:pan-y;overscroll-behavior:contain}
+#fabioPdfDialog .fabio-doc-paginas canvas{max-width:none;display:block;height:auto;margin:0 auto 8px}
+#fabioPdfDialog .fabio-doc-mecanicos,#fabioPdfDialog .fabio-doc-confirmacao{background:#192c3f;border-color:#60758a}
+.os .card-abrir,.os .card-consulta-btn{background:#21415a;border:1px solid #617f95;color:#fff}
+#fabioPdfDialog .pdf-acoes #fabioPdfCompartilhar:not(:disabled){background:#13744d!important;border-color:#3fbe8f!important}
+@media(max-width:650px){#fabioPdfDialog .pdf-acoes{grid-template-columns:repeat(3,minmax(0,1fr))}#fabioPdfDialog .pdf-acoes #fabioPdfCompartilhar{grid-column:auto;grid-row:auto}#fabioPdfDialog .pdf-acoes button{font-size:.72rem;min-height:42px;padding:5px 2px}#fabioPdfDialog .fabio-doc-controles{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
 <header><div><small>S.O.S. VALÊNCIO • VISÃO RÁPIDA DO GESTOR</small><h1>Minha oficina</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button id="fabioVoltarPrincipal" type="button">← Voltar</button><button id="sair" type="button">Sair</button></div></header>
@@ -483,6 +504,7 @@ html,body{overflow-x:hidden}
     </div>
     <section id="fabioDocMecanicos" class="fabio-doc-mecanicos" hidden></section>
     <label id="fabioDocConfirmacao" class="fabio-doc-confirmacao" hidden><input id="fabioDocConferi" type="checkbox"> Conferi as páginas do documento para cliente.</label>
+    <div class="fabio-zoom"><button type="button" id="fabioMenosZoom">− Reduzir</button><output id="fabioNivelZoom">100%</output><button type="button" id="fabioMaisZoom">+ Ampliar</button></div>
     <div id="fabioPdfEstado" role="status" aria-live="polite"></div>
     <div id="fabioDocPaginas" class="fabio-doc-paginas" role="document" aria-label="Páginas reais do PDF"></div>
     <iframe id="fabioPdfViewer" title="Documento PDF original da ordem de serviço" allow="fullscreen" hidden></iframe>
@@ -754,7 +776,7 @@ function render(){
    if(valorStatus(o)==='aprovado')add(pagamento,'span','etiqueta green','APROVADA');
    else if(aguardando(o))add(pagamento,'span','etiqueta yellow','AGUARDANDO APROVAÇÃO');
    add(card,'div','card-abrir','📄 CONFERIR O.S. ANTES DE ENVIAR →');
-   const detalhar=add(card,'button','card-consulta-btn','🔎 EXECUÇÃO DE CADA MECÂNICO');
+   const detalhar=add(card,'button','card-consulta-btn','Ver PDF e execução');
    detalhar.type='button';
    detalhar.addEventListener('click',e=>{e.stopPropagation();window.fabioAbrirConsultaOS?.(o.id);});
    card.tabIndex=0;card.setAttribute('role','button');
@@ -968,37 +990,41 @@ async function gerarDoc(id,versao='interna'){
  let restaurarFiltro=null,redacoes=0;
  try{
   if(versao==='cliente'){
-   const api=w.jspdf.jsPDF.API,old=api.autoTable;
-   if(typeof old!=='function')throw Error('Modelo oficial de tabelas indisponível.');
-   api.autoTable=function(opt,...args){
-    if(!opt||!Array.isArray(opt.head)||!Array.isArray(opt.head[0]))return old.call(this,opt,...args);
-    const cols=opt.head[0],rem=[];
-    cols.forEach((x,i)=>{
-     const t=String(x).trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-     if(/^(cod\.?|codigo|codigos|codigo da peca)$/.test(t))rem.push(i);
-    });
-    if(!rem.length)return old.call(this,opt,...args);
-    const omit=new Set(rem),keep=cols.map((_,i)=>i).filter(i=>!omit.has(i));
-    const pick=arr=>{
-     if(!Array.isArray(arr)||arr.length!==cols.length)throw Error('Mudança na tabela original: envio bloqueado.');
-     return keep.map(i=>arr[i]);
+   const ConstructorOriginal=w.jspdf.jsPDF;
+   function ConstructorCliente(...args){
+    const doc=new ConstructorOriginal(...args),auto=doc.autoTable;
+    if(typeof auto!=='function')throw Error('Tabela original não encontrada.');
+    doc.autoTable=function(opt,...resto){
+     if(!Array.isArray(opt?.head?.[0]))return auto.call(this,opt,...resto);
+     const head=opt.head[0],remove=[];
+     head.forEach((h,k)=>{
+      const value=String(h).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+      if(/^(cod\.?|codigo|codigos|codigo da peca)$/.test(value))remove.push(k);
+     });
+     if(!remove.length)return auto.call(this,opt,...resto);
+     if(!Array.isArray(opt.body))throw Error('PDF com estrutura de itens desconhecida.');
+     const keep=head.map((_,k)=>k).filter(k=>!remove.includes(k));
+     const only=r=>{if(!Array.isArray(r)||r.length!==head.length)throw Error('Mudança no padrão da tabela oficial.');return keep.map(k=>r[k]);};
+     const safe={...opt,head:opt.head.map(only),body:opt.body.map(only)};
+     if(Array.isArray(opt.foot))safe.foot=opt.foot.map(only);
+     if(opt.columnStyles){
+      let width=0;const style={};
+      keep.forEach((src,dest)=>{style[dest]={...(opt.columnStyles[src]||{})};width+=Number(style[dest].cellWidth)||0;});
+      if(width>0)for(const v of Object.values(style))if(typeof v.cellWidth==='number')v.cellWidth*=(Number(opt.tableWidth)||186)/width;
+      safe.columnStyles=style;
+     }
+     redacoes+=remove.length;
+     return auto.call(this,safe,...resto);
     };
-    if(!Array.isArray(opt.body))throw Error('Tabela original incompatível: envio bloqueado.');
-    const novo={...opt,head:opt.head.map(pick),body:opt.body.map(pick)};
-    if(Array.isArray(opt.foot))novo.foot=opt.foot.map(pick);
-    if(opt.columnStyles){
-     let largura=0;const cs={};
-     keep.forEach((idx,j)=>{cs[j]={...(opt.columnStyles[idx]||{})};largura+=Number(cs[j].cellWidth)||0;});
-     if(largura>0)Object.values(cs).forEach(c=>{if(typeof c.cellWidth==='number')c.cellWidth=c.cellWidth*186/largura;});
-     novo.columnStyles=cs;
-    }
-    redacoes+=rem.length;
-    return old.call(this,novo,...args);
-   };
-   restaurarFiltro=()=>{api.autoTable=old;};
+    return doc;
+   }
+   Object.assign(ConstructorCliente,ConstructorOriginal);
+   w.jspdf.jsPDF=ConstructorCliente;
+   restaurarFiltro=()=>{w.jspdf.jsPDF=ConstructorOriginal;};
   }
   await w.gerarPDFOS(); // ÚNICO gerador original do JARVIS, sem editar arquivo ou lógica.
-  if(versao==='cliente'&&!redacoes)throw Error('Colunas do PDF não puderam ser verificadas. Envio bloqueado.');
+  // PDF sem coluna de códigos é válido; o texto ainda é conferido antes do compartilhamento.
+  if(versao==='cliente'&&!salvo)throw Error('Não foi possível produzir a versão para cliente.');
  }finally{
   restaurarFiltro?.();
   w.URL.createObjectURL=originalURL;
@@ -1688,6 +1714,7 @@ get('fabioClienteEnviar').addEventListener('click',async()=>{
 const g=id=>document.getElementById(id),source=id=>window.__fabioOsFonte?.().find(x=>String(x.id)===String(id));
 const text=v=>v===undefined||v===null?'':String(v);
 let docAtual=null,modo='interna',osAtual='',refOS=null,preparando=false,paginasValidas=false,epoch=0,urlAtual='';
+let zoom=1,ultimoDocumento=null,distanciaPinch=0,zoomNoInicio=1;
 const display=s=>{g('fabioPdfEstado').textContent=s};
 const update=()=>{
  const fila=(window.__fabioFilaNavegacao||[]).length?window.__fabioFilaNavegacao:(window.__fabioFiltradosIds||[]);
@@ -1697,6 +1724,7 @@ const update=()=>{
  g('fabioDocAlternar').textContent=modo==='cliente'?'← VOLTAR AO PDF ORIGINAL':'📄 CONFERIR VERSÃO PARA CLIENTE';
  g('fabioDocExecucoes').hidden=modo==='cliente';
  g('fabioDocMecanicos').hidden=modo==='cliente';
+ g('fabioDocExecucoes').textContent=g('fabioDocMecanicos').hidden?'Ver execução':'Ocultar execução';
  g('fabioPdfCompartilhar').disabled=preparando||modo!=='cliente'||!paginasValidas||!g('fabioDocConferi').checked;
  g('fabioPdfBaixar').disabled=!docAtual||preparando;
  g('fabioPdfAbrir').disabled=!docAtual||preparando;
@@ -1751,36 +1779,71 @@ async function validarConteudoClientePDF(doc){
   throw Error('O documento ainda contém dados internos. Nenhum arquivo será compartilhado.');
  return true;
 }
-async function desenharPDF(doc,client,token){
+async function desenharPDF(doc,client,token,refazer=false){
  await pdfLib();
- const bytes=new Uint8Array(await doc.blob.arrayBuffer());
- const pdf=await window.pdfjsLib.getDocument({data:bytes}).promise;
- const area=g('fabioDocPaginas');area.replaceChildren();
- let textoCompleto='';
- for(let i=1;i<=pdf.numPages;i++){
+ if(!refazer||ultimoDocumento?.doc!==doc){
+  ultimoDocumento={doc,pdf:await window.pdfjsLib.getDocument({data:new Uint8Array(await doc.blob.arrayBuffer())}).promise};
+ }
+ const pdf=ultimoDocumento.pdf,area=g('fabioDocPaginas');
+ const px=area.scrollWidth?area.scrollLeft/area.scrollWidth:0;
+ const py=area.scrollHeight?area.scrollTop/area.scrollHeight:0;
+ area.replaceChildren();area.style.overflowX=zoom>1?'auto':'hidden';
+ let texto='';
+ const largura=Math.max(250,area.clientWidth-12)*zoom;
+ for(let pagina=1;pagina<=pdf.numPages;pagina++){
   if(token!==epoch||g('fabioPdfDialog').hidden)return false;
-  const page=await pdf.getPage(i);
-  if(client)textoCompleto+=' '+(await page.getTextContent()).items.map(p=>p.str||'').join(' ');
-  const basis=page.getViewport({scale:1});
-  const width=Math.max(280,Math.min(840,area.clientWidth||700));
-  const size=page.getViewport({scale:Math.min(2.4,Math.max(1,width/basis.width*1.4))});
-  const canvas=document.createElement('canvas');canvas.width=Math.ceil(size.width);canvas.height=Math.ceil(size.height);
-  canvas.setAttribute('aria-label','Página '+i+' de '+pdf.numPages);
-  const ctx=canvas.getContext('2d',{alpha:false});if(!ctx)throw Error('Prévia em canvas não suportada');
-  await page.render({canvasContext:ctx,viewport:size}).promise;
+  const p=await pdf.getPage(pagina);
+  if(client&&!refazer)texto+=' '+(await p.getTextContent()).items.map(t=>t.str||'').join(' ');
+  const base=p.getViewport({scale:1}),dpi=Math.min(2,Math.max(1,window.devicePixelRatio||1));
+  const view=p.getViewport({scale:Math.min(2.8,largura/base.width*dpi)});
+  const shrink=Math.min(1,2500/Math.max(view.width,view.height));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.ceil(view.width*shrink);canvas.height=Math.ceil(view.height*shrink);
+  canvas.style.width=Math.round(largura)+'px';canvas.style.height='auto';
+  canvas.setAttribute('aria-label','Página '+pagina+' de '+pdf.numPages);
+  const ctx=canvas.getContext('2d',{alpha:false});
+  if(!ctx)throw Error('Visualização PDF indisponível no aparelho.');
+  await p.render({canvasContext:ctx,viewport:view,transform:shrink<1?[shrink,0,0,shrink,0,0]:undefined}).promise;
   if(token!==epoch)return false;
   area.appendChild(canvas);
-  display('Página '+i+' de '+pdf.numPages+' — '+(client?'documento para cliente':'PDF original')+'.');
  }
- if(client&&(/(?:^|\s)(?:Cód\.|Código da peça|Códigos)(?:\s|$)/i.test(textoCompleto)||
- /(?:mec[aâ]nicos\s*\/\s*atendimento|comiss[oõ]es|registros do mec[aâ]nico)/i.test(textoCompleto)))
-  throw Error('Dados internos detectados na versão cliente. Envio bloqueado.');
+ if(client&&!refazer&&(
+  /(?:^|\s)(?:C[oó]d\.?|C[oó]digo(?:s)?)(?=\s|$)/i.test(texto)||
+  /(?:mec[aâ]nicos\s*\/\s*atendimento|comiss[oõ]es|registros do mec[aâ]nico)/i.test(texto)
+ ))throw Error('PDF do cliente contém informação interna. Envio bloqueado.');
+ if(refazer){area.scrollLeft=px*area.scrollWidth;area.scrollTop=py*area.scrollHeight;}else area.scrollTop=0;
+ g('fabioNivelZoom').textContent=Math.round(zoom*100)+'%';
  return true;
 }
+async function mudarZoomPDF(target){
+ const value=Math.min(2.5,Math.max(1,Math.round(target*10)/10));
+ if(value===zoom||!docAtual||preparando)return;
+ zoom=value;
+ try{await desenharPDF(docAtual,modo==='cliente',epoch,true);}
+ catch(e){display('Zoom indisponível. Use Abrir / imprimir para consultar o PDF.');}
+}
+g('fabioMaisZoom').addEventListener('click',()=>mudarZoomPDF(zoom+.5));
+g('fabioMenosZoom').addEventListener('click',()=>mudarZoomPDF(zoom-.5));
+const area=g('fabioDocPaginas');
+const distancia=e=>Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+area.addEventListener('touchstart',e=>{if(e.touches.length===2){distanciaPinch=distancia(e);zoomNoInicio=zoom;}},{passive:true});
+area.addEventListener('touchmove',e=>{
+ if(e.touches.length===2&&distanciaPinch>0){
+  e.preventDefault();
+  area.dataset.zoomPendente=String(Math.min(2.5,Math.max(1,zoomNoInicio*distancia(e)/distanciaPinch)));
+ }
+},{passive:false});
+area.addEventListener('touchend',e=>{
+ if(e.touches.length<2&&distanciaPinch){
+  distanciaPinch=0;const z=Number(area.dataset.zoomPendente||zoom);delete area.dataset.zoomPendente;
+  mudarZoomPDF(z);
+ }
+});
+
 async function abrir(id,novoModo='interna'){
  const os=source(id);if(!os)return;
  if(preparando)return;
- preparando=true;osAtual=id;refOS=os;modo=novoModo;paginasValidas=false;docAtual=null;g('fabioDocConferi').checked=false;
+ preparando=true;osAtual=id;refOS=os;modo=novoModo;paginasValidas=false;docAtual=null;ultimoDocumento=null;zoom=1;g('fabioNivelZoom').textContent='100%';g('fabioDocConferi').checked=false;
  g('fabioPdfDialog').hidden=false;
  g('fabioPdfTitulo').textContent='OS '+text(os.numero||os.numeroOS||id.slice(-6))+' • '+(modo==='cliente'?'PDF para cliente':'PDF ORIGINAL do JARVIS');
  g('fabioDocPaginas').replaceChildren();g('fabioPdfViewer').hidden=true;
@@ -1817,9 +1880,9 @@ window.fabioPrepararClienteSeguro=async id=>{
 g('fabioDocAlternar').addEventListener('click',()=>{
  if(osAtual&&!preparando)abrir(osAtual,modo==='interna'?'cliente':'interna');
 });
-g('fabioDocExecucoes').addEventListener('click',()=>{g('fabioDocMecanicos').hidden=!g('fabioDocMecanicos').hidden;});
+g('fabioDocExecucoes').addEventListener('click',()=>{g('fabioDocMecanicos').hidden=!g('fabioDocMecanicos').hidden;update();});
 g('fabioDocConferi').addEventListener('change',update);
-const interromper=()=>{epoch++;docAtual=null;paginasValidas=false;g('fabioDocPaginas').replaceChildren();};
+const interromper=()=>{epoch++;ultimoDocumento=null;docAtual=null;paginasValidas=false;g('fabioDocPaginas').replaceChildren();};
 g('fabioPdfFechar').addEventListener('click',interromper,true);
 function download(){
  if(!docAtual)return;
