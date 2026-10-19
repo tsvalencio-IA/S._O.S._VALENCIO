@@ -28,6 +28,8 @@ const LIMIT=150000, FILE_LIMIT=160*1024*1024, PAGE=200, VERSION=1, KDF_ITERATION
 const tenant=String(sessionStorage.getItem('j_tid')||'').trim();
 const role=String(sessionStorage.getItem('j_role')||'').toLowerCase();
 const actor=String(sessionStorage.getItem('j_actor_type')||'').toLowerCase();
+const cargo=String(sessionStorage.getItem('j_cargo')||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+const acessoJarvis=String(sessionStorage.getItem('j_cargo_acesso')||'').trim().toLowerCase();
 let db=null,busy=false,plan=null,source=null;
 const counters=()=>({novo:0,atualizar:0,igual:0,protegido:0});
 const setStatus=(s,isErr=false)=>{const e=$('status');e.textContent=s;e.className=isErr?'error':'';};
@@ -36,8 +38,14 @@ const msg=e=>String(e?.message||e||'Erro desconhecido');
 const numFmt=n=>new Intl.NumberFormat('pt-BR').format(n);
 function progress(p,label){const v=Math.max(0,Math.min(100,Math.round(p)));$('barra').style.width=v+'%';$('andamento').setAttribute('aria-valuenow',String(v));if(label)setStatus(label);}
 function access(){
- if(!tenant||tenant==='MASTER_ADMIN'||role!=='admin'||actor==='equipe')
-  throw Error('Acesso restrito ao administrador principal da oficina. Faça login no JARVIS como administrador.');
+ // O login de funcionário com acesso ao JARVIS usa j_role=admin e j_actor_type=equipe.
+ // Somente gerentes/gestores com j_cargo_acesso=jarvis são autorizados aqui,
+ // além do administrador principal. Nunca liberar todo perfil "equipe".
+ const adminPrincipal=role==='admin'&&actor!=='equipe';
+ const gestorJarvis=role==='admin'&&actor==='equipe'&&acessoJarvis==='jarvis'&&
+   (cargo==='gestor'||cargo==='gerente');
+ if(!tenant||tenant==='MASTER_ADMIN'||!(adminPrincipal||gestorJarvis))
+  throw Error('Backup disponível para administrador principal, gerente ou gestor autorizado no JARVIS.');
  if(!window.crypto?.subtle||!window.TextEncoder)throw Error('Este recurso exige uma conexão HTTPS e navegador com criptografia WebCrypto.');
  if(!window.initFirebase||!window.firebase?.firestore)throw Error('Firebase não foi carregado corretamente.');
 }
