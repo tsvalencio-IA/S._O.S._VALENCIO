@@ -491,6 +491,32 @@ body.equipe-page #modalOS .equipe-exec-salvar{
   }
 }
 </style>
+<style id="equipe-concluidos-recolhiveis-v1">
+/* Somente itens de execução na ficha da OS. Mantém os DIVs originais para salvarOS. */
+body.equipe-page #modalOS #containerServicos>.equipe-item-executado,
+body.equipe-page #modalOS #containerPecas>.equipe-item-executado{order:2;}
+body.equipe-page #modalOS #containerServicos>.equipe-executados-resumo,
+body.equipe-page #modalOS #containerPecas>.equipe-executados-resumo{order:1;width:100%;min-width:0;max-width:100%;margin:7px 0 0;}
+body.equipe-page #modalOS #containerServicos:not(.equipe-executados-visiveis)>.equipe-item-executado,
+body.equipe-page #modalOS #containerPecas:not(.equipe-executados-visiveis)>.equipe-item-executado{display:none!important;}
+body.equipe-page #modalOS .equipe-executados-resumo button{
+ width:100%;max-width:100%;min-height:43px;display:flex;align-items:center;
+ justify-content:space-between;text-align:left;gap:8px;white-space:normal;
+ padding:9px 12px;border-radius:6px;color:var(--text);
+ background:var(--surf3);border:1px solid var(--border2);
+ font-weight:750;font-size:.85rem;cursor:pointer;
+}
+body.equipe-page #modalOS .equipe-executados-resumo small{
+ display:block;font-size:.74rem;line-height:1.35;color:var(--warn);
+ margin-top:5px;overflow-wrap:anywhere;
+}
+body.equipe-page #modalOS #containerServicos select.serv-mec:disabled,
+body.equipe-page #modalOS #containerServicos select.exec-mec:disabled,
+body.equipe-page #modalOS #containerPecas select.peca-sel:disabled{
+ -webkit-appearance:none!important;appearance:none!important;
+ background-image:none!important;padding-right:8px!important;cursor:default!important;
+}
+</style>
 </head>
 <body class="equipe-page">
 <div id="toastBox"></div>
@@ -2481,6 +2507,66 @@ async function salvarExecucaoAprovadosEquipe(osId) {
   }finally{if(botao)botao.disabled=false;}
 }
 
+
+function equipeItemFoiExecutado(status,tipo){
+  const s=String(status||'').trim().toLowerCase();
+  return s==='executado'||s==='executado_obs'||(tipo==='peca'&&s==='trocada');
+}
+document.addEventListener('change',event=>{
+  if(event.target?.matches?.('#containerServicos .exec-status, #containerPecas .exec-status, #containerServicos .exec-obs, #containerPecas .exec-obs'))
+    equipeReorganizarItensExecutados();
+});
+document.addEventListener('input',event=>{
+  if(event.target?.matches?.('#containerServicos .exec-obs, #containerPecas .exec-obs'))
+    equipeReorganizarItensExecutados();
+});
+function equipeReorganizarItensExecutados(){
+  for(const id of ['containerServicos','containerPecas']){
+    const container=document.getElementById(id);
+    if(!container)return;
+    const rows=[...container.children].filter(el=>el.tagName==='DIV'&&el.querySelector('.exec-status'));
+    const completos=rows.filter(row=>{
+      const ctrl=row.querySelector('.execucao-aprovado-row');
+      const done=!!ctrl&&equipeItemFoiExecutado(ctrl.querySelector('.exec-status')?.value,ctrl.dataset.tipo);
+      row.classList.toggle('equipe-item-executado',done);
+      return done;
+    });
+    let area=[...container.children].find(el=>el.classList?.contains('equipe-executados-resumo'));
+    if(!completos.length){
+      area?.remove();
+      container.classList.remove('equipe-executados-visiveis');
+      continue;
+    }
+    if(!area){
+      area=document.createElement('section');
+      area.className='equipe-executados-resumo';
+      const btn=document.createElement('button');
+      btn.type='button';btn.setAttribute('aria-expanded','false');
+      const aviso=document.createElement('small');
+      area.append(btn,aviso);
+      btn.addEventListener('click',()=>{
+        const aberto=container.classList.toggle('equipe-executados-visiveis');
+        btn.setAttribute('aria-expanded',String(aberto));
+        equipeReorganizarItensExecutados();
+      });
+      container.appendChild(area);
+    }
+    const btn=area.querySelector('button'),msg=area.querySelector('small');
+    const aberto=container.classList.contains('equipe-executados-visiveis');
+    const unsaved=rows.filter(row=>{
+      const c=row.querySelector('.execucao-aprovado-row');
+      const st=c?.querySelector('.exec-status')?.value||'pendente';
+      const ob=c?.querySelector('.exec-obs')?.value.trim()||'';
+      return c&&(st!==String(c.dataset.statusInicial||'pendente')||
+        ob!==String(c.dataset.obsInicial||''));
+    }).length;
+    btn.textContent=(aberto?'− Ocultar':'＋ Mostrar')+' executados ('+completos.length+')';
+    btn.setAttribute('aria-expanded',String(aberto));
+    msg.hidden=!unsaved;
+    msg.textContent=unsaved?unsaved+' alteração(ões) ainda não salva(s). Toque em SALVAR EXECUÇÃO.':'';
+  }
+}
+
 function aplicarMarcadoresAprovacaoEquipe(os) {
   const U = window.JOS || window.JarvisOSUtils || {};
   // A ficha é atualizada após cada baixa: descartar controles antigos antes de
@@ -2512,6 +2598,7 @@ function aplicarMarcadoresAprovacaoEquipe(os) {
   const itens=todosItens;
   const aprovados = itens.filter(it => keys.has(it.key));
   const pendentes = itens.filter(it => !keys.has(it.key));
+  const executados = itens.filter(it => equipeItemFoiExecutado((os?.execucaoItens||{})[it.key]?.status,it.tipo));
   const moeda = U.moeda || (v => 'R$ ' + parseBR(v).toFixed(2).replace('.', ','));
   const total = os?.totalAprovado != null ? parseBR(os.totalAprovado) : aprovados.reduce((sum, it) => sum + parseBR(it.valorFinal), 0);
   const exec = os?.execucaoItens || {};
@@ -2541,11 +2628,7 @@ function aplicarMarcadoresAprovacaoEquipe(os) {
   box.id = 'resumoAprovacaoEquipe';
   box.style.cssText = 'background:rgba(0,255,136,.07);border:1px solid rgba(0,255,136,.24);border-radius:4px;padding:12px;margin-bottom:14px;';
   box.innerHTML = `
-    <div style="font-family:var(--fd);font-weight:800;color:var(--success);letter-spacing:1px;margin-bottom:8px;">EXECUÇÃO DA O.S. — ${aprovados.length}/${itens.length} ITEM(NS) APROVADOS — VALORES OCULTOS</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;">
-      ${aprovados.map(it => `<div style="border:1px solid rgba(0,255,136,.2);background:rgba(0,0,0,.14);border-radius:3px;padding:8px;font-size:.75rem;"><b style="color:var(--success);">APROVADO</b><br>${U.escapeHtml?.(it.desc || '-') || it.desc || '-'}<br><small>${it.codigo ? '[' + (U.escapeHtml?.(it.codigo) || it.codigo) + '] ' : ''}${it.tempo ? 'TMO ' + String(it.tempo).replace('.', ',') + 'h' : ''}</small></div>`).join('')}
-      ${pendentes.map(it => `<div style="border:1px solid rgba(255,184,0,.24);background:rgba(0,0,0,.1);border-radius:3px;padding:8px;font-size:.75rem;opacity:.75;"><b style="color:var(--warn);">NAO APROVADO</b><br>${U.escapeHtml?.(it.desc || '-') || it.desc || '-'}<br><small>Mantido para historico.</small></div>`).join('')}
-    </div>
+    <div class="equipe-execucao-resumo" style="font-family:var(--fd);font-weight:800;color:var(--text);letter-spacing:.5px;margin-bottom:8px;">EXECUÇÃO DA O.S. — ${executados.length} EXECUTADO(S) · ${itens.length-executados.length} A EXECUTAR — VALORES OCULTOS</div>
     ${execHtml}`;
   const alvo = document.getElementById('containerServicos')?.parentElement;
   if (alvo){
@@ -2586,6 +2669,7 @@ function aplicarMarcadoresAprovacaoEquipe(os) {
       label.textContent=nome;
       row.prepend(label);
     });
+    equipeReorganizarItensExecutados();
   }
 }
 
