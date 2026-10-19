@@ -9,7 +9,9 @@ const COLLECTIONS=Object.freeze([
  'clientes','veiculos','ordens_servico','estoqueItems','financeiro','funcionarios',
  'fornecedores','agendamentos','mensagens','chat_equipe','lixeira_auditoria',
  'auditLogs','serviceCategories','cotacoes_pecas','cotacoes_publicas',
- 'cotacoes_respostas','notificacoes_live','vendas_pecas','nf_itens_vinculos'
+ 'cotacoes_respostas','notificacoes_live','vendas_pecas','nf_itens_vinculos',
+ 'notasFiscaisEntrada','notas_fiscais_entrada','estoque_movimentos',
+ 'pacotes_boletos','auditoria','checklists','checklistsEntrega','cerebro_respostas'
 ]);
 const SUBCOLLECTIONS=Object.freeze({
  ordens_servico:['items','financial','internalNotes','publicTimeline','execution'],
