@@ -4656,5 +4656,107 @@ window.iaAnalisarEstoque = function() { _jiaChamar('Quais pecas estao em estoque
 <script src="js/sigfrota-integration.js?v=2.1.1"></script>
 <script src="js/jarvis-mobile-fit-v1.js?v=26.25.9"></script>
 <script src="js/jarvis-equipe-status-v1.js?v=26.25.9"></script>
+<style id="jarvis-os-auditoria-operacional-v1">
+/* Visível somente na aba interna Auditoria da OS; nenhum documento para cliente. */
+#modalOS #tabOS3 .os-auditoria-detalhe{
+ margin:7px 0 3px;padding:9px 11px;border-left:3px solid var(--cyan);
+ background:rgba(20,60,85,.35);border-radius:3px;overflow-wrap:anywhere;
+ color:var(--text);font-size:.76rem;line-height:1.55;
+}
+#modalOS #tabOS3 .os-auditoria-detalhe strong{display:block;color:var(--cyan);font-weight:800}
+#modalOS #tabOS3 .os-auditoria-detalhe p{margin:3px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+</style>
+<script id="jarvis-os-auditoria-operacional-v1">
+(function(){
+ 'use strict';
+ // Não altera a rotina original nem acessa portais externos.
+ // Lê somente os eventos já gravados no documento da O.S. autenticada.
+ const originalTimeline=window.renderTimelineOS;
+ if(typeof originalTimeline!=='function')return;
+ function eventosVisiveis(){
+  const normalizar=window.normalizarTimelineOS;
+  const raw=document.getElementById('osTimelineData')?.value||'[]';
+  let events=typeof normalizar==='function'?normalizar(raw):JSON.parse(raw);
+  if(!Array.isArray(events))return [];
+  try{
+   const sigilo=typeof osSegredo177AtivoOS==='function'&&osSegredo177AtivoOS();
+   if(!sigilo&&typeof osEventoPecaRealProtegidoOS==='function')
+    events=events.filter(e=>!osEventoPecaRealProtegidoOS(e));
+  }catch(_){return [];} // Falha fechada: não revelar eventos protegidos.
+  return events.slice().reverse();
+ }
+ const p=(pai,label,value)=>{
+  const el=document.createElement('p');
+  const strong=document.createElement('strong');strong.textContent=label;
+  const valueNode=document.createElement('span');valueNode.textContent=String(value??'');
+  el.append(strong,valueNode);pai.appendChild(el);
+ };
+ window.renderTimelineOS=function(...args){
+  const result=originalTimeline.apply(this,args);
+  try{
+   const rows=[...document.querySelectorAll('#modalOS #tabOS3 #osTimeline>.tl-item')];
+   const events=eventosVisiveis();
+   // Nunca mapear evento incorreto para outro registro.
+   if(rows.length!==events.length)return result;
+   rows.forEach((row,i)=>{
+    const e=events[i]||{},tipo=String(e.tipo||e.tipoEvento||'');
+    if(!['execucao_item_os','execucao_item_aprovado','alteracao_campo_os'].includes(tipo))return;
+    row.querySelectorAll('.os-auditoria-detalhe').forEach(n=>n.remove());
+    const detail=document.createElement('div');detail.className='os-auditoria-detalhe';
+    if(tipo==='alteracao_campo_os'){
+     p(detail,'Campo modificado: ',e.rotulo||e.campo||'');
+     p(detail,'Anterior: ',e.valorAnterior===''?'(vazio)':e.valorAnterior);
+     p(detail,'Novo: ',e.valorNovo===''?'(vazio)':e.valorNovo);
+    }else{
+     p(detail,'Item: ',(e.itemTipo==='peca'?'Peça':'Serviço')+' — '+(e.itemDescricao||e.itemKey||''));
+     p(detail,'Situação anterior: ',e.statusAnterior||'Pendente');
+     p(detail,'Nova situação: ',e.statusNovo||'');
+     if(e.observacaoAnterior!==undefined||e.observacaoNova!==undefined){
+      if(String(e.observacaoAnterior||'')!==String(e.observacaoNova||'')){
+       p(detail,'Observação anterior: ',e.observacaoAnterior||'(vazia)');
+       p(detail,'Observação nova: ',e.observacaoNova||'(vazia)');
+      }
+     }
+     p(detail,'Aprovação financeira: ',e.aprovadoFinanceiramente?'Aprovado':'Execução operacional (independente de aprovação)');
+    }
+    p(detail,'Profissional: ',e.user||e.usuarioNome||'-');
+    row.appendChild(detail);
+   });
+  }catch(err){console.warn('[JARVIS auditoria detalhada]',err?.message||err);}
+  return result;
+ };
+ // Atualizar somente a aba de auditoria quando a escuta JARVIS receber novo snapshot.
+ // Não cria listener extra no Firestore nem toca em formulário, preços ou status.
+ const kanbanOriginal=window.renderKanban;
+ if(typeof kanbanOriginal==='function'){
+  window.renderKanban=function(...args){
+   const result=kanbanOriginal.apply(this,args);
+   try{
+    const modal=document.getElementById('modalOS');
+    const tab=document.getElementById('tabOS3');
+    if(!modal?.classList.contains('open')||!tab?.classList.contains('active'))return result;
+    const id=String(document.getElementById('osId')?.value||'');
+    const remoto=(window.J?.os||[]).find(o=>String(o.id)===id);
+    if(!id||!remoto)return result;
+    const normalizar=window.normalizarTimelineOS;
+    const eventosRemotos=typeof normalizar==='function'?normalizar(remoto.timeline):remoto.timeline||[];
+    const field=document.getElementById('osTimelineData');if(!field)return result;
+    const anterior=typeof normalizar==='function'?normalizar(field.value):JSON.parse(field.value||'[]');
+    const all=[...eventosRemotos],seen=new Set(all.map(e=>JSON.stringify(e)));
+    for(const entry of anterior){
+     const key=JSON.stringify(entry);
+     if(!seen.has(key)){all.push(entry);seen.add(key);}
+    }
+    const novoValor=JSON.stringify(all);
+    if(field.value!==novoValor){
+     field.value=novoValor;
+     window.renderTimelineOS();
+    }
+   }catch(err){console.warn('[JARVIS atualização da auditoria]',err?.message||err);}
+   return result;
+  };
+ }
+})();
+</script>
 </body>
 </html>
