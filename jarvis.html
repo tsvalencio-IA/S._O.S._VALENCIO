@@ -1283,10 +1283,16 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     </div>
     <div id="osObservacoesEquipeInternas" style="display:none;background:rgba(255,183,77,.06);border:1px solid rgba(255,183,77,.30);border-left:3px solid var(--warn);border-radius:3px;padding:12px 14px;margin:8px 0 12px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:7px;">
-        <div style="font-family:var(--fm);font-size:.68rem;font-weight:800;letter-spacing:.9px;color:var(--warn);">🔒 OBSERVAÇÕES INTERNAS DA EQUIPE</div>
+        <div style="font-family:var(--fm);font-size:.68rem;font-weight:800;letter-spacing:.9px;color:var(--warn);">🔒 AVISOS INTERNOS — EQUIPE E JARVIS</div>
         <div style="font-family:var(--fm);font-size:.55rem;color:var(--muted);">NÃO APARECE PARA CLIENTE • PDF • PLANILHAS • ORÇAMENTOS EXPORTADOS</div>
       </div>
       <div id="osObservacoesEquipeLista" style="font-family:var(--fm);font-size:.68rem;line-height:1.55;color:var(--text);"></div>
+    </div>
+    <div id="osAvisoInternoJarvis" style="background:rgba(255,183,77,.045);border:1px solid rgba(255,183,77,.24);border-radius:4px;padding:10px 12px;margin:8px 0 12px;">
+      <label class="j-label" for="osAvisoInternoJarvisTexto" style="color:var(--warn);">Novo aviso interno para a equipe e o JARVIS</label>
+      <textarea class="j-textarea" id="osAvisoInternoJarvisTexto" rows="2" maxlength="1800" placeholder="Mensagem interna para a equipe — não aparece no PDF nem para o cliente"></textarea>
+      <button type="button" class="btn-outline" id="btnRegistrarAvisoInternoJarvis" onclick="window.registrarAvisoInternoJarvisOS()" style="margin-top:8px;">REGISTRAR AVISO INTERNO</button>
+      <div style="font-family:var(--fm);font-size:.58rem;color:var(--muted2);margin-top:6px;">Grava diretamente na auditoria desta O.S., com usuário e horário. Não altera orçamento, status ou financeiro.</div>
     </div>
 
     <div style="background:var(--surf3);border:1px solid rgba(0,212,255,0.15);border-radius:3px;padding:18px;margin-top:12px;">
