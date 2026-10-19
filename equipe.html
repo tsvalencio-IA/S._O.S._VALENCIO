@@ -1719,7 +1719,11 @@ function previewFotosOS(input){
   _renderPreviewOS();
 }
 
+let _equipePreviewObjectURLs=[];
 function _renderPreviewOS(){
+  // Limpa URLs de prévia antigas para não acumular vídeos/fotos na memória.
+  _equipePreviewObjectURLs.forEach(url=>{try{URL.revokeObjectURL(url);}catch(e){}});
+  _equipePreviewObjectURLs=[];
   const wrap = $('mediaPreviewLocal');
   const grid = $('mediaPreviewGrid');
   const count = $('mediaPreviewCount');
@@ -1732,6 +1736,7 @@ function _renderPreviewOS(){
   grid.innerHTML = _batchOSFiles.map((f,i)=>{
     const isVideo = /^video\//.test(f.type||'');
     const url = URL.createObjectURL(f);
+    _equipePreviewObjectURLs.push(url);
     const mediaEl = isVideo ? `<video src="${url}" muted></video>` : `<img src="${url}" alt="prévia">`;
     return `<div class="media-item" data-idx="${i}">
       ${mediaEl}
