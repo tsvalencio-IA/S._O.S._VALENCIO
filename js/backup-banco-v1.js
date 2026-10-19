@@ -205,7 +205,7 @@ async function eachPage(query,callback){
 }
 async function exportDB(){
  const password=$('senhaExportar').value,password2=$('senhaExportar2').value;
- if(password.length<12||password!==password2)throw Error('Informe uma senha de no mínimo 12 caracteres e confirme exatamente igual.');
+ if(!/^[0-9]{4}$/.test(password)||password!==password2)throw Error('Informe exatamente 4 dígitos numéricos e confirme a mesma senha.');
  const docs=[],counts={},rootCollections=[...COLLECTIONS,'oficinas'];
  const addDoc=(snapshot)=>{
   if(!snapshot.exists)return;
