@@ -414,6 +414,83 @@ body.equipe-page #t-kanban .k-col.k-col-recolhida .k-col-body{display:none!impor
  body.equipe-page #t-kanban .k-col-alternar{min-height:42px;min-width:42px;}
 }
 </style>
+<style id="equipe-os-itens-sem-rolagem-lateral-v1">
+/* Escopo: ficha da OS, serviços e peças. Não interfere no pátio ou em outras telas. */
+body.equipe-page #modalOS .modal,body.equipe-page #modalOS #tp1{
+  width:100%;max-width:100%;min-width:0;box-sizing:border-box;
+}
+body.equipe-page #modalOS #containerServicos,
+body.equipe-page #modalOS #containerPecas{
+  width:100%;max-width:100%;min-width:0;
+}
+body.equipe-page #modalOS #containerServicos>div,
+body.equipe-page #modalOS #containerPecas>div{
+  box-sizing:border-box;min-width:0;max-width:100%;width:100%;
+}
+body.equipe-page #modalOS #containerServicos>div>*,
+body.equipe-page #modalOS #containerPecas>div>*{
+  min-width:0;max-width:100%;
+}
+body.equipe-page #modalOS .equipe-exec-inline{
+  grid-column:1 / -1;
+  width:100%;max-width:100%;min-width:0;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+  overflow-wrap:anywhere;
+}
+body.equipe-page #modalOS .equipe-exec-inline .j-select,
+body.equipe-page #modalOS .equipe-exec-inline .j-input,
+body.equipe-page #modalOS .equipe-linha-servico .j-select,
+body.equipe-page #modalOS .equipe-linha-servico .j-input{
+  display:block;width:100%;max-width:100%;min-width:0;box-sizing:border-box;
+}
+body.equipe-page #modalOS .equipe-peca-descricao{
+  display:none;grid-column:1 / -1;
+  white-space:normal;overflow-wrap:anywhere;word-break:break-word;
+  color:var(--text);font-size:.88rem;line-height:1.45;font-weight:700;
+}
+body.equipe-page #modalOS .equipe-exec-salvar{
+  display:block;width:100%;max-width:100%;min-height:46px;margin-top:12px;
+}
+@media(max-width:760px){
+  body.equipe-page #modalOS #tp1,
+  body.equipe-page #modalOS #tp1>div,
+  body.equipe-page #modalOS #containerServicos,
+  body.equipe-page #modalOS #containerPecas{min-width:0;max-width:100%;width:100%;}
+  body.equipe-page #modalOS #containerServicos>div,
+  body.equipe-page #modalOS #containerPecas>div{
+    grid-template-columns:minmax(0,1fr)!important;
+    gap:8px!important;
+    padding:8px 0;
+  }
+  body.equipe-page #modalOS #containerServicos .serv-desc{
+    white-space:pre-wrap;overflow-wrap:anywhere;
+  }
+  body.equipe-page #modalOS #containerPecas .equipe-peca-descricao{
+    display:block;
+  }
+  body.equipe-page #modalOS #containerPecas .peca-sel:disabled{
+    position:absolute;opacity:0;width:1px!important;height:1px!important;
+    pointer-events:none;
+  }
+  body.equipe-page #modalOS #containerServicos .j-select,
+  body.equipe-page #modalOS #containerPecas .j-select,
+  body.equipe-page #modalOS #containerServicos .j-input,
+  body.equipe-page #modalOS #containerPecas .j-input{
+    min-width:0!important;width:100%!important;max-width:100%!important;
+    font-size:16px;
+  }
+  body.equipe-page #modalOS .equipe-exec-inline{
+    grid-template-columns:minmax(0,1fr)!important;
+    padding:10px!important;gap:8px!important;
+  }
+  body.equipe-page #modalOS .equipe-exec-inline .exec-obs{
+    white-space:normal;
+  }
+  body.equipe-page #modalOS #containerPecas .peca-qtd{
+    width:100%;max-width:100%;
+  }
+}
+</style>
 </head>
 <body class="equipe-page">
 <div id="toastBox"></div>
@@ -2318,7 +2395,7 @@ async function salvarExecucaoAprovadosEquipe(osId) {
   const clienteLocal=(dbClientes||[]).find(c=>String(c.id)===String(osLocal.clienteId));
   const todosLocais=new Map(equipeItensOperacionaisOS(osLocal,clienteLocal).map(it=>[it.key,it]));
   const alterados=[],validos=new Set(['pendente','em_execucao','executado','trocada','executado_obs','nao_executado','cancelado']);
-  for(const row of document.querySelectorAll('#resumoAprovacaoEquipe .execucao-aprovado-row')){
+  for(const row of document.querySelectorAll('#containerServicos .execucao-aprovado-row, #containerPecas .execucao-aprovado-row, #resumoAprovacaoEquipe .execucao-aprovado-row')){
     const chave=String(row.dataset.key||''),tipo=String(row.dataset.tipo||'');
     const estado=String(row.querySelector('.exec-status')?.value||'pendente');
     const observacao=String(row.querySelector('.exec-obs')?.value||'').trim();
@@ -2435,7 +2512,7 @@ function aplicarMarcadoresAprovacaoEquipe(os) {
   const total = os?.totalAprovado != null ? parseBR(os.totalAprovado) : aprovados.reduce((sum, it) => sum + parseBR(it.valorFinal), 0);
   const exec = os?.execucaoItens || {};
   const execHtml = itens.length ? `
-    <div style="margin-top:14px;border-top:1px solid rgba(255,255,255,.12);padding-top:12px;">
+    <div class="equipe-exec-bloco" style="margin-top:14px;border-top:1px solid rgba(255,255,255,.12);padding-top:12px;">
       <div style="font-family:var(--fm);font-size:.72rem;color:var(--cyan);font-weight:800;letter-spacing:1px;margin-bottom:8px;">EXECUÇÃO DOS ITENS DA O.S.</div>
       <div style="font-family:var(--fm);font-size:.60rem;color:var(--muted);margin-bottom:8px;">Mecânicos e usuários da equipe podem marcar o que foi executado, trocado, não executado ou não encontrado. O cliente não visualiza essas marcações internas.</div>
       <div style="display:grid;gap:7px;">
@@ -2467,7 +2544,45 @@ function aplicarMarcadoresAprovacaoEquipe(os) {
     </div>
     ${execHtml}`;
   const alvo = document.getElementById('containerServicos')?.parentElement;
-  if (alvo) alvo.insertAdjacentElement('beforebegin', box);
+  if (alvo){
+    alvo.insertAdjacentElement('beforebegin', box);
+    // Exibir controles operacionais ao lado do respectivo lançamento,
+    // não num quadro isolado que fica acima das listas.
+    const servicosRows=[...document.querySelectorAll('#containerServicos>div')];
+    const pecasRows=[...document.querySelectorAll('#containerPecas>div')];
+    for(const controle of [...box.querySelectorAll('.execucao-aprovado-row')]){
+      const chave=String(controle.dataset.key||'');
+      const match=/^(servico|peca)-(\d+)$/.exec(chave);
+      if(!match)continue;
+      const indice=Number(match[2]);
+      const linha=match[1]==='peca' ? pecasRows[indice] :
+        servicosRows.find((row,idx)=>row.dataset.servicoIndex!==undefined
+          ? Number(row.dataset.servicoIndex)===indice:idx===indice);
+      if(!linha)continue; // Mantém controle no resumo se item não pôde ser localizado.
+      controle.classList.add('equipe-exec-inline');
+      linha.appendChild(controle);
+    }
+    const botao=box.querySelector('#eqSalvarExecucaoAprovada');
+    const listaPecas=document.getElementById('containerPecas');
+    if(botao&&listaPecas){
+      botao.classList.add('equipe-exec-salvar');
+      listaPecas.insertAdjacentElement('afterend',botao);
+    }
+    const areaExec=box.querySelector('.equipe-exec-bloco');
+    if(areaExec&&!areaExec.querySelector('.execucao-aprovado-row')&&!areaExec.querySelector('#eqSalvarExecucaoAprovada'))
+      areaExec.remove();
+    // Nome completo das peças visível no celular (select desabilitado pode truncar).
+    pecasRows.forEach((row,i)=>{
+      row.querySelector('.equipe-peca-descricao')?.remove();
+      const nome=disponiveis.find(it=>it.key==='peca-'+i)?.desc||
+        row.querySelector('.peca-sel option:checked')?.textContent||'';
+      if(!nome)return;
+      const label=document.createElement('div');
+      label.className='equipe-peca-descricao';
+      label.textContent=nome;
+      row.prepend(label);
+    });
+  }
 }
 
 function mecanicosEquipeDaOS(os) {
@@ -2503,17 +2618,27 @@ function adicionarServico(s=null, originalIndex=null){
   const mecIdServico = s?.mecId || s?.mecanicoId || s?.responsavelId || window._equipeOSAtual?.mecId || J.fid || '';
   
   div.style.cssText='display:grid;grid-template-columns:minmax(220px,1fr) minmax(150px,190px);gap:7px;align-items:center;position:relative;';
+  div.className='equipe-linha-servico';
   const uid = 'sv_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
   
   div.innerHTML=`
     <div style="position:relative;min-width:0;">
-      <input type="text" class="j-input serv-desc" id="${uid}" placeholder="Descreva o serviço..." value="${s?s.desc:''}" ${s ? 'readonly title="Serviço existente: equipe somente acrescenta novos serviços"' : ''} style="width:100%;padding-right:40px;">
+      <textarea class="j-input serv-desc" id="${uid}" rows="2" placeholder="Descreva o serviço..." ${s ? 'readonly title="Serviço existente: equipe somente acrescenta novos serviços"' : ''} style="width:100%;padding-right:40px;resize:vertical;line-height:1.45;min-height:60px;overflow:hidden;">${escExecEquipe(s?.desc||'')}</textarea>
       <button type="button" class="btn-voice" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);" onclick="iniciarVoz('${uid}',this)" title="Falar serviço">🎙️</button>
     </div>
     <select class="j-select serv-mec" ${(podeAlterarResponsavel&&!s) ? '' : 'disabled'} title="Mecânico responsável pelo serviço">${opcoesMecanicoServicoEquipe(mecIdServico, window._equipeOSAtual)}</select>
     <!-- Sem preços e exclusão no painel Equipe. -->
   `;
   $('containerServicos').appendChild(div);
+  const descricao=div.querySelector('.serv-desc');
+  if(descricao){
+    const ajustarAltura=()=>{
+      descricao.style.height='auto';
+      descricao.style.height=Math.max(60,descricao.scrollHeight)+'px';
+    };
+    descricao.addEventListener('input',ajustarAltura);
+    ajustarAltura();
+  }
 }
 function renderServicoRow(s, originalIndex){ adicionarServico(s, originalIndex); }
 
