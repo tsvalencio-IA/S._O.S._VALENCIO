@@ -6002,7 +6002,11 @@ window.previewOsMediaBatch = function(input) {
   window.renderOsMediaPreview();
 };
 
+window._osPreviewObjectURLs = [];
 window.renderOsMediaPreview = function() {
+  // Libera prévias anteriores: evita consumo de memória crescente no Android.
+  window._osPreviewObjectURLs.forEach(url=>{try{URL.revokeObjectURL(url);}catch(e){}});
+  window._osPreviewObjectURLs = [];
   const wrap = $('osMediaPreviewLocal');
   const grid = $('osMediaPreviewGrid');
   const count = $('osMediaPreviewCount');
@@ -6021,6 +6025,7 @@ window.renderOsMediaPreview = function() {
   grid.innerHTML = window._osBatchFiles.map((f, i) => {
     const isVideo = /^video\//.test(f.type || '');
     const url = URL.createObjectURL(f);
+    window._osPreviewObjectURLs.push(url);
     const mediaEl = isVideo
       ? `<video src="${url}" muted></video>`
       : `<img src="${url}" alt="prévia">`;
