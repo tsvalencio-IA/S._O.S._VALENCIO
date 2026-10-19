@@ -600,7 +600,10 @@ body.equipe-page .overlay.open{display:flex!important;}
     <button class="modal-close" onclick="fecharModal('modalOS')">✕</button>
   </div>
   <div id="bannerHistVeiculo" style="display:none;padding:10px 20px;background:rgba(255,184,0,0.06);border-bottom:1px solid rgba(255,184,0,0.2);">
-    <div style="font-family:var(--fm);font-size:0.58rem;color:var(--warn);letter-spacing:1px;margin-bottom:5px;">HISTÓRICO DE O.S. ANTERIORES — SOMENTE CONSULTA</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:5px;">
+      <div style="font-family:var(--fm);font-size:0.58rem;color:var(--warn);letter-spacing:1px;">HISTÓRICO DE O.S. ANTERIORES — SOMENTE CONSULTA</div>
+      <button type="button" id="btnTamanhoHistEquipe" class="btn-ghost" onclick="alternarTamanhoHistoricoEquipe()" aria-expanded="false" aria-controls="bannerHistContent" style="min-height:36px;padding:6px 10px;font-size:.7rem;">⤢ MAXIMIZAR</button>
+    </div>
     <div id="bannerHistContent" style="font-size:0.78rem;color:var(--text);line-height:1.6;"></div>
   </div>
   <div class="modal-tabs">
@@ -2169,6 +2172,7 @@ function prepOS(mode,id=null){
   const ph = document.getElementById('osPlacanHeader'); if(ph){ph.style.display='none';ph.innerText='';}
   const ch = document.getElementById('osClienteHeader'); if(ch) ch.innerText='';
   const bh = document.getElementById('bannerHistVeiculo'); if(bh) bh.style.display='none';
+  _eqHistExpandido=false; atualizarTamanhoHistoricoEquipe();
   limparPreviewOS(); _resetChkBtns();
   if($('osObsEquipeNova'))$('osObsEquipeNova').value=''; renderObservacoesEquipeOS(null);
   popularSelects();
@@ -3037,6 +3041,23 @@ $('chatInput')?.addEventListener('keydown',e=>{
 
 let _eqHistReq=0;
 const _eqHistOS=new Map();
+let _eqHistExpandido=false;
+function atualizarTamanhoHistoricoEquipe(){
+ const box=document.getElementById('bannerHistContent'),botao=document.getElementById('btnTamanhoHistEquipe');
+ if(box){
+  box.style.maxHeight=_eqHistExpandido?'min(65vh,620px)':'165px';
+  box.style.overflowY='auto';
+  box.style.overscrollBehavior='contain';
+ }
+ if(botao){
+  botao.textContent=_eqHistExpandido?'⤡ MINIMIZAR':'⤢ MAXIMIZAR';
+  botao.setAttribute('aria-expanded',String(_eqHistExpandido));
+ }
+}
+function alternarTamanhoHistoricoEquipe(){
+ _eqHistExpandido=!_eqHistExpandido;
+ atualizarTamanhoHistoricoEquipe();
+}
 function eqHistTxt(v){
  return textoEquipeSemValores(String(v??''))
   .replace(/\b(?:código|codigo|ref\.?|sku)\s*[:#-]?\s*[A-Z0-9._-]+/gi,'[código oculto]')
@@ -3048,6 +3069,26 @@ function eqHistDate(o){
  const d=typeof v?.toDate==='function'?v.toDate():new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(v))?v+'T12:00:00':v);
  return Number.isNaN(d.getTime())?'Data não informada':d.toLocaleDateString('pt-BR');
 }
+function eqHistItens(o,tipo){
+ const origem=o?.[tipo==='servico'?'servicos':'pecas'];
+ if(!Array.isArray(origem))return [];
+ return origem.map((item,indice)=>({item,indice}))
+  .filter(({item})=>tipo!=='peca'||(!item?.pecaReal&&!item?.interno&&item?.tipoPeca!=='real'))
+  .map(({item,indice})=>{
+   const registro=o?.execucaoItens?.[tipo+'-'+indice]||{};
+   const status=String(registro.status||'').trim().toLowerCase();
+   const confirmado=status==='trocada'||status==='trocado'?'TROCADO':
+    status==='executado'||status==='executado_obs'?'EXECUTADO':'';
+   return {
+    nome:eqHistTxt(item?.desc||item?.descricao||(tipo==='servico'?'Serviço':'Peça')),
+    confirmado,
+    obs:eqHistTxt(registro.obs||'')
+   };
+  });
+}
+function eqHistDescricaoItem(item){
+ return '• '+item.nome+(item.confirmado?' — '+item.confirmado:'')+(item.obs?' — OBS: '+item.obs:'');
+}
 function fecharHistoricoOSAnteriorEquipe(){document.getElementById('equipeHistoricoAnteriorOverlay')?.remove();}
 function abrirHistoricoOSAnteriorEquipe(id){
  const o=_eqHistOS.get(String(id));if(!o||String(o.tenantId||'')!==String(J.tid))return;
@@ -3057,23 +3098,22 @@ function abrirHistoricoOSAnteriorEquipe(id){
  overlay.style.cssText='position:fixed;inset:0;z-index:10060;background:rgba(0,0,0,.93);display:flex;align-items:center;justify-content:center;padding:max(8px,env(safe-area-inset-top)) 8px max(8px,env(safe-area-inset-bottom));';
  const panel=document.createElement('div');panel.style.cssText='background:var(--surf2);color:var(--text);width:min(720px,100%);max-height:95%;min-height:0;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--border2);border-radius:8px;';
  const bar=document.createElement('div');bar.style.cssText='padding:12px;display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border2);';
- const title=document.createElement('strong');title.textContent='O.S. ANTERIOR • '+eqHistDate(o)+' • '+eqHistTxt(o.status);
+ const title=document.createElement('strong');title.textContent='O.S. ANTERIOR • '+eqHistDate(o);
  title.style.cssText='flex:1;min-width:0;overflow-wrap:anywhere;';
  const close=document.createElement('button');close.className='btn-outline';close.type='button';close.textContent='✕ FECHAR';close.style.minHeight='44px';
  close.onclick=fecharHistoricoOSAnteriorEquipe;bar.append(title,close);panel.appendChild(bar);
  const body=document.createElement('div');body.style.cssText='overflow:auto;min-height:0;padding:14px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;font-size:.82rem;';
- const intro=document.createElement('small');intro.textContent='Histórico somente leitura. Valores financeiros e códigos não são exibidos.';intro.style.color='var(--muted2)';body.appendChild(intro);
+ // Conteúdo restrito às peças, serviços e respectivas marcações internas existentes.
  function line(name,val){
   const b=document.createElement('div');b.style.marginTop='14px';
   const h=document.createElement('strong');h.textContent=name;h.style.color='var(--cyan)';
   const p=document.createElement('div');p.textContent=eqHistTxt(val)||'Não registrado';
   b.append(h,p);body.appendChild(b);
  }
- line('Queixa',o.desc||o.relato||o.descricao);
- line('Diagnóstico',o.diagnostico);
- const exec=o.execucaoItens||{};
- line('Serviços registrados',(Array.isArray(o.servicos)?o.servicos:[]).map((x,i)=>'• '+eqHistTxt(x.desc||x.descricao||'Serviço')+(String(exec['servico-'+i]?.status||'').toLowerCase()==='executado'?' — execução confirmada':' — execução não confirmada')).join('\n'));
- line('Peças registradas',(Array.isArray(o.pecas)?o.pecas:[]).filter(x=>!x.pecaReal&&!x.interno&&x.tipoPeca!=='real').map((x,i)=>'• '+eqHistTxt(x.desc||x.descricao||'Peça')+(['executado','trocada'].includes(String(exec['peca-'+i]?.status||'').toLowerCase())?' — aplicação confirmada':' — aplicação não confirmada')).join('\n'));
+ const servicos=eqHistItens(o,'servico'),pecas=eqHistItens(o,'peca');
+ if(servicos.length)line('SERVIÇOS',servicos.map(eqHistDescricaoItem).join('\n'));
+ if(pecas.length)line('PEÇAS',pecas.map(eqHistDescricaoItem).join('\n'));
+ if(!servicos.length&&!pecas.length)line('PEÇAS E SERVIÇOS','Nenhum item registrado nesta O.S.');
  panel.appendChild(body);overlay.appendChild(panel);document.body.appendChild(overlay);
  overlay.onclick=e=>{if(e.target===overlay)fecharHistoricoOSAnteriorEquipe();};
 }
@@ -3087,13 +3127,17 @@ function renderHistoricoOSCardsEquipe(lista,aviso=''){
   _eqHistOS.set(String(o.id),o);
   const card=document.createElement('button');card.type='button';
   card.style.cssText='width:100%;display:block;text-align:left;min-height:65px;margin:7px 0;padding:12px;border:1px solid rgba(255,184,0,.35);border-radius:7px;background:var(--surf2);color:var(--text);white-space:normal;overflow-wrap:anywhere;cursor:pointer;';
-  const h=document.createElement('strong');h.style.color='var(--warn)';h.textContent=eqHistDate(o)+' • '+eqHistTxt(o.status||'O.S.');
-  const p=document.createElement('div');p.textContent=eqHistTxt(o.desc||o.relato||(o.servicos||[])[0]?.desc||'Ver serviços e diagnóstico');p.style.marginTop='5px';
-  const d=document.createElement('small');d.style.cssText='display:block;color:var(--cyan);margin-top:7px';d.textContent='ABRIR OS ANTERIOR →';
+  const h=document.createElement('strong');h.style.color='var(--warn)';h.textContent='O.S. • '+eqHistDate(o);
+  const servicos=eqHistItens(o,'servico'),pecas=eqHistItens(o,'peca');
+  const resumo=[...servicos.slice(0,2).map(x=>'Serviço: '+x.nome+(x.confirmado?' — '+x.confirmado:'')),
+   ...pecas.slice(0,2).map(x=>'Peça: '+x.nome+(x.confirmado?' — '+x.confirmado:''))];
+  const p=document.createElement('div');p.textContent=resumo.join(' · ')+(servicos.length>2||pecas.length>2?' · …':'')||'Sem peças ou serviços registrados';p.style.marginTop='5px';
+  const d=document.createElement('small');d.style.cssText='display:block;color:var(--cyan);margin-top:7px';d.textContent='VER PEÇAS, SERVIÇOS E OBS →';
   card.append(h,p,d);card.onclick=()=>abrirHistoricoOSAnteriorEquipe(o.id);box.appendChild(card);
  });
  if(aviso){const p=document.createElement('p');p.textContent=aviso;p.style.color='var(--warn)';box.appendChild(p);}
- area.style.display=box.childElementCount?'block':'none';box.style.cssText='max-height:240px;overflow-y:auto;overscroll-behavior:contain;';
+ area.style.display=box.childElementCount?'block':'none';
+ atualizarTamanhoHistoricoEquipe();
 }
 function atualizarHeaderOS(veiculoId,clienteId){
  const v=dbVeiculos.find(x=>x.id===veiculoId),c=dbClientes.find(x=>x.id===clienteId);
