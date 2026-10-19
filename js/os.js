@@ -6374,6 +6374,54 @@ window.removerMediaOS = function(idx) {
   media.splice(idx, 1); $('osMediaArray').value = JSON.stringify(media); window.renderMediaOS();
 };
 
+// Avisos internos bidirecionais, isolados dos campos de laudo/planilhas/orçamento.
+window.registrarAvisoInternoJarvisOS = async function(){
+  const campo=document.getElementById('osAvisoInternoJarvisTexto');
+  const btn=document.getElementById('btnRegistrarAvisoInternoJarvis');
+  const texto=String(campo?.value||'').trim();
+  const id=String(document.getElementById('osId')?.value||'').trim();
+  if(!id){window.toast?.('Registre a O.S. antes de enviar um aviso interno.','warn');return;}
+  if(!texto){window.toast?.('Escreva o aviso antes de enviar.','warn');return;}
+  if(texto.length>1800){window.toast?.('Aviso deve ter até 1800 caracteres.','warn');return;}
+  if(btn?.disabled)return;
+  if(btn)btn.disabled=true;
+  try{
+    const ref=db.collection('ordens_servico').doc(id);
+    const agora=new Date().toISOString();
+    const nome=String(J.nome||sessionStorage.getItem('j_nome')||'Gestor');
+    const uid=String(J.fid||J.uid||J.userId||J.usuarioId||'');
+    const observacao={dt:agora,usuario:nome,usuarioId:uid,perfil:String(J.role||'gestor'),
+      origem:'jarvis',interno:true,visivelCliente:false,texto};
+    const evento={dt:agora,user:nome,userId:uid,perfil:String(J.role||'gestor'),
+      tipo:'observacao_equipe',tipoEvento:'observacao_interna',origem:'jarvis',
+      interno:true,visivelCliente:false,observacao:texto,acao:'Observação interna: '+texto};
+    await db.runTransaction(async tx=>{
+      const snap=await tx.get(ref);
+      if(!snap.exists)throw Error('O.S. não localizada. Reabra a ficha.');
+      if(String(snap.data()?.tenantId||'')!==String(J.tid))throw Error('O.S. não pertence a esta oficina.');
+      tx.update(ref,{
+        observacoesEquipe:firebase.firestore.FieldValue.arrayUnion(observacao),
+        timeline:firebase.firestore.FieldValue.arrayUnion(evento)
+      });
+    });
+    // Mantém a ficha corrente em sincronia mesmo antes do próximo snapshot.
+    const local=(window.J?.os||[]).find(o=>String(o.id)===id);
+    if(local){
+      local.observacoesEquipe=[...(Array.isArray(local.observacoesEquipe)?local.observacoesEquipe:[]),observacao];
+      local.timeline=[...(Array.isArray(local.timeline)?local.timeline:[]),evento];
+      window.renderObservacoesEquipeJarvisOS?.(local);
+      const t=document.getElementById('osTimelineData');
+      if(t)t.value=JSON.stringify(local.timeline);
+      window.renderTimelineOS?.();
+    }
+    if(campo)campo.value='';
+    window.toast?.('Aviso interno registrado na O.S. para a equipe e o JARVIS.','ok');
+  }catch(e){
+    console.error('[OS aviso interno]',e);
+    window.toast?.('Não foi possível registrar o aviso: '+(e?.message||e),'err');
+  }finally{if(btn)btn.disabled=false;}
+};
+
 window.renderObservacoesEquipeJarvisOS = function(os) {
   const box = $('osObservacoesEquipeInternas');
   const listaEl = $('osObservacoesEquipeLista');
