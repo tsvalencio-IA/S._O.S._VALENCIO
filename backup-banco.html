@@ -69,9 +69,9 @@ td:not(:first-child),th:not(:first-child){text-align:right}
 <h2>Exportar banco de dados</h2>
 <p>Salva os registros da sua oficina em arquivo <b>criptografado</b>. Preserva IDs, vínculos, datas e informações armazenadas no Firestore, inclusive subcoleções conhecidas das O.S.</p>
 <label for="senhaExportar">Senha para proteger o backup</label>
-<input id="senhaExportar" type="password" autocomplete="new-password" minlength="12" placeholder="Mínimo de 12 caracteres">
+<input id="senhaExportar" type="password" inputmode="numeric" pattern="[0-9]{4}" autocomplete="new-password" minlength="4" maxlength="4" placeholder="4 dígitos numéricos">
 <label for="senhaExportar2">Confirmar senha</label>
-<input id="senhaExportar2" type="password" autocomplete="new-password" minlength="12" placeholder="Repetir a senha">
+<input id="senhaExportar2" type="password" inputmode="numeric" pattern="[0-9]{4}" autocomplete="new-password" minlength="4" maxlength="4" placeholder="Repita os 4 dígitos">
 <div class="actions"><button id="btnExportar" type="button" class="primary" disabled>Exportar backup seguro</button></div>
 <div id="downloadHolder" aria-live="polite"></div>
 <p class="note">O arquivo contém dados pessoais e financeiros. A senha não é armazenada. Sem ela, não é possível restaurar o arquivo.</p>
@@ -82,7 +82,7 @@ td:not(:first-child),th:not(:first-child){text-align:right}
 <label for="arquivo">Arquivo de backup</label>
 <input id="arquivo" type="file" accept=".sosbackup,.json,application/json">
 <label for="senhaImportar">Senha do backup</label>
-<input id="senhaImportar" type="password" autocomplete="off" placeholder="Senha utilizada na exportação">
+<input id="senhaImportar" type="password" autocomplete="off" placeholder="4 dígitos (ou senha de backup antigo)">
 <div class="actions"><button id="btnAnalisar" type="button" class="secondary" disabled>Conferir antes de importar</button></div>
 <p class="note">Importação com atualização de campos e preservação dos campos não presentes. Auditorias imutáveis e documentos protegidos seguem as regras do banco.</p>
 </article>
