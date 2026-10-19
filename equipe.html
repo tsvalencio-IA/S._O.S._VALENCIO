@@ -395,6 +395,25 @@ body.equipe-page .overlay.open{display:flex!important;}
 }
 </style>
 <link rel="stylesheet" href="css/equipe-jarvis-mobile-v262515.css?v=26.25.15">
+<style id="equipe-patio-status-expandir-v1">
+/* Exclusivo dos 6 grupos do pátio; cartões e consultas permanecem inalterados. */
+body.equipe-page #t-kanban .k-col-controles{display:flex;align-items:center;justify-content:flex-end;gap:5px;flex:0 0 auto;}
+body.equipe-page #t-kanban .k-col-head{gap:5px;}
+body.equipe-page #t-kanban .k-col-label{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;}
+body.equipe-page #t-kanban .k-col-alternar{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:34px;min-height:34px;padding:0 6px;
+  background:var(--surf3);color:var(--text);border:1px solid var(--border2);
+  border-radius:5px;font-size:1.15rem;font-weight:800;
+  cursor:pointer;touch-action:manipulation;
+}
+body.equipe-page #t-kanban .k-col-alternar:focus-visible{outline:2px solid var(--cyan);outline-offset:2px;}
+body.equipe-page #t-kanban .k-col.k-col-recolhida{min-height:0!important;max-height:none!important;}
+body.equipe-page #t-kanban .k-col.k-col-recolhida .k-col-body{display:none!important;}
+@media(max-width:760px){
+ body.equipe-page #t-kanban .k-col-alternar{min-height:42px;min-width:42px;}
+}
+</style>
 </head>
 <body class="equipe-page">
 <div id="toastBox"></div>
@@ -461,12 +480,12 @@ body.equipe-page .overlay.open{display:flex!important;}
       <div id="statusEquipeDados" class="status-equipe-dados"></div>
 
       <div class="kanban-wrap">
-        <div class="k-col" style="border-top:2px solid var(--muted2)"><div class="k-col-head"><span class="k-col-label" style="color:var(--muted2)">TRIAGEM</span><span class="k-col-count" id="cnt-Aguardando">0</span></div><div class="k-col-body" id="kb-Aguardando"></div></div>
-        <div class="k-col" style="border-top:2px solid var(--warn)"><div class="k-col-head"><span class="k-col-label" style="color:var(--warn)">ORÇAMENTO</span><span class="k-col-count" id="cnt-Orcamento">0</span></div><div class="k-col-body" id="kb-Orcamento"></div></div>
-        <div class="k-col" style="border-top:2px solid var(--cyan)"><div class="k-col-head"><span class="k-col-label" style="color:var(--cyan)">APROVADO</span><span class="k-col-count" id="cnt-Aprovado">0</span></div><div class="k-col-body" id="kb-Aprovado"></div></div>
-        <div class="k-col" style="border-top:2px solid #FF8C00"><div class="k-col-head"><span class="k-col-label" style="color:#FF8C00">EM SERVIÇO</span><span class="k-col-count" id="cnt-Andamento">0</span></div><div class="k-col-body" id="kb-Andamento"></div></div>
-        <div class="k-col" style="border-top:2px solid var(--success)"><div class="k-col-head"><span class="k-col-label" style="color:var(--success)">PRONTO P/ RETIRADA</span><span class="k-col-count" id="cnt-Pronto">0</span></div><div class="k-col-body" id="kb-Pronto"></div></div>
-        <div class="k-col" style="border-top:2px solid #00FF88;opacity:0.85;"><div class="k-col-head"><span class="k-col-label" style="color:#00FF88">✓ ENTREGUE</span><span class="k-col-count" id="cnt-Entregue">0</span></div><div class="k-col-body" id="kb-Entregue"></div></div>
+        <div class="k-col" style="border-top:2px solid var(--muted2)"><div class="k-col-head"><span class="k-col-label" style="color:var(--muted2)">TRIAGEM</span><div class="k-col-controles"><span class="k-col-count" id="cnt-Aguardando">0</span><button type="button" class="k-col-alternar" aria-controls="kb-Aguardando" aria-expanded="true" aria-label="Minimizar TRIAGEM" title="Minimizar TRIAGEM" onclick="alternarColunaPatioEquipe('Aguardando',this)">−</button></div></div><div class="k-col-body" id="kb-Aguardando"></div></div>
+        <div class="k-col" style="border-top:2px solid var(--warn)"><div class="k-col-head"><span class="k-col-label" style="color:var(--warn)">ORÇAMENTO</span><div class="k-col-controles"><span class="k-col-count" id="cnt-Orcamento">0</span><button type="button" class="k-col-alternar" aria-controls="kb-Orcamento" aria-expanded="true" aria-label="Minimizar ORÇAMENTO" title="Minimizar ORÇAMENTO" onclick="alternarColunaPatioEquipe('Orcamento',this)">−</button></div></div><div class="k-col-body" id="kb-Orcamento"></div></div>
+        <div class="k-col" style="border-top:2px solid var(--cyan)"><div class="k-col-head"><span class="k-col-label" style="color:var(--cyan)">APROVADO</span><div class="k-col-controles"><span class="k-col-count" id="cnt-Aprovado">0</span><button type="button" class="k-col-alternar" aria-controls="kb-Aprovado" aria-expanded="true" aria-label="Minimizar APROVADO" title="Minimizar APROVADO" onclick="alternarColunaPatioEquipe('Aprovado',this)">−</button></div></div><div class="k-col-body" id="kb-Aprovado"></div></div>
+        <div class="k-col" style="border-top:2px solid #FF8C00"><div class="k-col-head"><span class="k-col-label" style="color:#FF8C00">EM SERVIÇO</span><div class="k-col-controles"><span class="k-col-count" id="cnt-Andamento">0</span><button type="button" class="k-col-alternar" aria-controls="kb-Andamento" aria-expanded="true" aria-label="Minimizar EM SERVIÇO" title="Minimizar EM SERVIÇO" onclick="alternarColunaPatioEquipe('Andamento',this)">−</button></div></div><div class="k-col-body" id="kb-Andamento"></div></div>
+        <div class="k-col" style="border-top:2px solid var(--success)"><div class="k-col-head"><span class="k-col-label" style="color:var(--success)">PRONTO P/ RETIRADA</span><div class="k-col-controles"><span class="k-col-count" id="cnt-Pronto">0</span><button type="button" class="k-col-alternar" aria-controls="kb-Pronto" aria-expanded="true" aria-label="Minimizar PRONTO P/ RETIRADA" title="Minimizar PRONTO P/ RETIRADA" onclick="alternarColunaPatioEquipe('Pronto',this)">−</button></div></div><div class="k-col-body" id="kb-Pronto"></div></div>
+        <div class="k-col" style="border-top:2px solid #00FF88;opacity:0.85;"><div class="k-col-head"><span class="k-col-label" style="color:#00FF88">✓ ENTREGUE</span><div class="k-col-controles"><span class="k-col-count" id="cnt-Entregue">0</span><button type="button" class="k-col-alternar" aria-controls="kb-Entregue" aria-expanded="true" aria-label="Minimizar ENTREGUE" title="Minimizar ENTREGUE" onclick="alternarColunaPatioEquipe('Entregue',this)">−</button></div></div><div class="k-col-body" id="kb-Entregue"></div></div>
       </div>
     </div>
 
@@ -1996,6 +2015,20 @@ function renderKPIs(){
 // Mecânico SÓ pode mover até "Pronto p/ Retirada".
 // Só gestor/gerente/admin pode marcar "Entregue" (exige pagamento no caixa).
 // ============================================================
+
+// Somente apresentação do pátio Equipe: não modifica O.S., status ou Firebase.
+function alternarColunaPatioEquipe(status,botao){
+  const corpo=document.getElementById('kb-'+status);
+  const coluna=corpo?.closest('.k-col');
+  if(!coluna||!botao)return;
+  const recolhida=coluna.classList.toggle('k-col-recolhida');
+  const nome=coluna.querySelector('.k-col-label')?.textContent.trim()||status;
+  const acao=(recolhida?'Maximizar ':'Minimizar ')+nome;
+  botao.textContent=recolhida?'+':'−';
+  botao.setAttribute('aria-expanded',String(!recolhida));
+  botao.setAttribute('aria-label',acao);
+  botao.title=acao;
+}
 function renderKanban(){
   const busca=($v('searchOS')||'').trim().toLowerCase();
   const statuses=['Aguardando','Orcamento','Aprovado','Andamento','Pronto','Entregue'];
