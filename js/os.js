@@ -7575,9 +7575,13 @@ window.imprimirRelatorioPecasReaisOS = async function() {
     const mec = (window.J?.equipe || []).find(f => String(f.id) === String(mecId));
     if (mec?.nome || osAtual.mecNome) responsaveis.push(mec?.nome || osAtual.mecNome);
   }
+  // Seguir o total da ficha *177: todas as peças reais registradas
+  // compõem o custo contabilizado, com instalação confirmada discriminada à parte.
   const total = pecas.reduce((s, p) => s + Math.max(0, numBR(p.qtd || 0)) * Math.max(0, numBR(p.valorCompra || 0)), 0);
+  const totalPecasConferencia = pecasConferencia.reduce((s, p) => s + Math.max(0, numBR(p.qtd || 0)) * Math.max(0, numBR(p.valorCompra || 0)), 0);
+  const totalPecasRegistradas = total + totalPecasConferencia;
   const totalServicosReais = servicosReais.reduce((s, item) => s + Math.max(0, numBR(item.valorCompra || 0)), 0);
-  const totalRealGeral = total + totalServicosReais;
+  const totalRealGeral = totalPecasRegistradas + totalServicosReais;
   const moedaLocal = typeof moedaOS === 'function' ? moedaOS : (v => 'R$ ' + numBR(v).toFixed(2).replace('.', ','));
   const linhas = pecas.map((p, index) => {
     const qtd = Math.max(0, numBR(p.qtd || 0));
@@ -7606,7 +7610,7 @@ window.imprimirRelatorioPecasReaisOS = async function() {
       <td data-label="Nota fiscal">${escOS(p.nfRelatorio)}</td>
       <td data-label="Fornecedor">${escOS(p.fornecedorRelatorio)}</td>
       <td data-label="Status">${escOS(p.statusAplicacao || 'Sem confirmação')}</td>
-      <td data-label="Custo informado" class="num">${moedaLocal(numBR(p.valorCompra || 0))}</td>
+      <td data-label="Custo total (qtd. × unitário)" class="num"><b>${moedaLocal(Math.max(0,numBR(p.qtd || 0))*Math.max(0,numBR(p.valorCompra || 0)))}</b><br><small>Unit.: ${moedaLocal(numBR(p.valorCompra || 0))}</small></td>
     </tr>`).join('');
 
   const linhasServicosReais = servicosReais.map((s, index) => `<tr>
@@ -7687,9 +7691,10 @@ window.imprimirRelatorioPecasReaisOS = async function() {
     <div class="box wide"><b>Local da troca</b>${escOS([nomeOficina, enderecoOficina].filter(Boolean).join(' — '))}</div>
   </section>
   ${pecas.length ? `<h2 style="font-size:12px;margin:10px 0 5px;">PEÇAS REAIS INSTALADAS (${pecas.length}) — CONFIRMADAS/DOCUMENTADAS</h2><div class="table-wrap"><table><colgroup><col style="width:3%"><col style="width:9%"><col style="width:20%"><col style="width:4%"><col style="width:12%"><col style="width:9%"><col style="width:8%"><col style="width:16%"><col style="width:9%"><col style="width:10%"></colgroup><thead><tr><th>#</th><th>Código real</th><th>Descrição real instalada</th><th>Qtd.</th><th>Onde comprou / fornecedor</th><th>Nota fiscal / rastreio</th><th>Data compra / entrada</th><th>Origem / estoque</th><th>Custo unit.</th><th>Custo total</th></tr></thead><tbody>${linhas}</tbody><tfoot><tr><td colspan="10" class="total-geral"><b>CUSTO REAL TOTAL DAS PEÇAS</b><b>${moedaLocal(total)}</b></td></tr></tfoot></table></div>` : ''}
-  ${pecasConferencia.length ? `<h2 style="font-size:12px;margin:12px 0 5px;">PEÇAS EM CONFERÊNCIA — NÃO CONFIRMADAS COMO INSTALADAS (${pecasConferencia.length})</h2><p style="font-size:10px;color:#8a2b11">Registros mantidos separados: não entram no custo das peças realmente instaladas até confirmação na O.S.</p><div class="table-wrap"><table><thead><tr><th>#</th><th>Código</th><th>Descrição</th><th>Qtd.</th><th>Motivo</th><th>Origem</th><th>NF</th><th>Fornecedor</th><th>Situação</th><th>Custo informado</th></tr></thead><tbody>${linhasPecasConferencia}</tbody></table></div>` : ''}
+  ${pecasConferencia.length ? `<h2 style="font-size:12px;margin:12px 0 5px;">PEÇAS EM CONFERÊNCIA — NÃO CONFIRMADAS COMO INSTALADAS (${pecasConferencia.length})</h2><p style="font-size:10px;color:#8a2b11">Registros mantidos separados: não entram no custo das peças realmente instaladas até confirmação na O.S.</p><div class="table-wrap"><table><thead><tr><th>#</th><th>Código</th><th>Descrição</th><th>Qtd.</th><th>Motivo</th><th>Origem</th><th>NF</th><th>Fornecedor</th><th>Situação</th><th>Custo total / unitário</th></tr></thead><tbody>${linhasPecasConferencia}</tbody><tfoot><tr><td colspan="10" class="total-geral"><b>CUSTO DAS PEÇAS REGISTRADAS EM CONFERÊNCIA</b><b>${moedaLocal(totalPecasConferencia)}</b></td></tr></tfoot></table></div>` : ''}
   ${servicosReais.length ? `<h2 style="font-size:12px;margin:12px 0 5px;">SERVIÇOS TERCEIRIZADOS REAIS</h2><div class="table-wrap"><table><colgroup><col style="width:4%"><col style="width:31%"><col style="width:23%"><col style="width:16%"><col style="width:12%"><col style="width:14%"></colgroup><thead><tr><th>#</th><th>Serviço terceirizado</th><th>Prestador / fornecedor</th><th>Nota / documento</th><th>Data</th><th>Custo real</th></tr></thead><tbody>${linhasServicosReais}</tbody><tfoot><tr><td colspan="6" class="total-geral"><b>CUSTO REAL TOTAL DOS SERVIÇOS</b><b>${moedaLocal(totalServicosReais)}</b></td></tr></tfoot></table></div>` : ''}
-  <div style="display:flex;justify-content:flex-end;margin-top:10px;"><div style="border:2px solid #111;padding:8px 12px;font-size:13px;display:flex;gap:24px;"><b>CUSTO REAL GERAL</b><b>${moedaLocal(totalRealGeral)}</b></div></div>
+  <div style="margin-top:10px;padding:8px;border:1px solid #888;font-size:11px;line-height:1.6"><b>RESUMO DOS CUSTOS DA O.S.</b><br>Peças com instalação confirmada: <b>${moedaLocal(total)}</b><br>Peças reais registradas em conferência: <b>${moedaLocal(totalPecasConferencia)}</b><br>Total de peças reais registradas: <b>${moedaLocal(totalPecasRegistradas)}</b><br>Serviços reais: <b>${moedaLocal(totalServicosReais)}</b><br><small>O custo registrado inclui peças sem confirmação de instalação. NF de compra não comprova aplicação.</small></div>
+  <div style="display:flex;justify-content:flex-end;margin-top:10px;"><div style="border:2px solid #111;padding:8px 12px;font-size:13px;display:flex;gap:24px;"><b>CUSTO REAL GERAL REGISTRADO</b><b>${moedaLocal(totalRealGeral)}</b></div></div>
   <div class="rodape"><span>Documento interno gerado pelo OFICIN-IA. Peças de estoque mantêm rastreio Kardex; serviços terceirizados são registros internos da O.S.</span><span>Powered by thIAguinho Soluções Digitais</span></div></main></body></html>`;
 
   win.document.open();
