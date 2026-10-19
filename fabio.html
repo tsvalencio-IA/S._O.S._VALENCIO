@@ -314,6 +314,53 @@ button:disabled{opacity:.5;cursor:not-allowed}
 }
 @media print{#fabioConsulta .consulta-navegacao,#fabioLote{display:none!important}}
 </style>
+
+<style id="fabio-correcao-mobile-v1">
+/* Somente exibição Fábio. Impressão e PDF original seguem intocados. */
+html,body,main,header,.resumo,#lista,.os,.toolbar-busca,.filtro-cliente-veiculo,.filtro-acoes{max-width:100%;min-width:0}
+html,body{overflow-x:hidden}
+.os{overflow-wrap:anywhere}
+.os .card-abrir{display:block;background:#087350;border:2px solid #34c49b;border-radius:12px;padding:15px 10px;text-align:center;font-size:1.03rem;font-weight:900;color:#fff}
+.os .card-consulta-btn{width:100%;margin-top:9px;background:#1b4466;border:2px solid #68c5ff;min-height:54px}
+.filtro-acoes button{min-height:54px;font-size:.95rem}
+.toolbar-busca .toolbar input{width:100%;min-width:0}
+.filtro-cliente-veiculo input,.filtro-cliente-veiculo select{font-size:16px}
+#fabioConsulta .consulta-folha,#fabioConsulta .consulta-bloco,#fabioConsulta .consulta-tabela-rolagem{max-width:100%;min-width:0;overflow-x:hidden}
+#fabioConsulta .consulta-itens{width:100%;max-width:100%;table-layout:fixed}
+#fabioConsulta .consulta-itens td{overflow-wrap:anywhere;word-break:break-word}
+#fabioPdfDialog .pdf-box{min-width:0;min-height:0;width:100%;max-width:100%;height:100%}
+#fabioPdfViewer{width:100%;min-width:0;flex:1 1 auto}
+@media screen and (max-width:650px){
+ header{padding:12px}
+ header>div:last-child{width:100%;display:grid!important;grid-template-columns:1fr 1fr}
+ header button{min-height:52px;width:100%}
+ .resumo{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .resumo .indicador{min-width:0;padding:12px;min-height:98px}
+ .resumo .indicador b{font-size:1.85rem}
+ .toolbar-busca .toolbar{display:grid;grid-template-columns:minmax(0,1fr)}
+ .toolbar-busca .toolbar button{width:100%;max-width:100%}
+ .filtro-cliente-veiculo{grid-template-columns:minmax(0,1fr)}
+ .filtro-acoes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ #fabioSelecaoContagem,#fabioEnviarMultiplas{grid-column:1/-1}
+ #fabioConsulta .consulta-rolagem{overflow-x:hidden}
+ #fabioConsulta .consulta-folha{padding:12px 8px;max-width:100%}
+ #fabioConsulta .consulta-itens,#fabioConsulta .consulta-itens tbody{display:block;width:100%}
+ #fabioConsulta .consulta-itens tbody tr{display:grid;grid-template-columns:minmax(0,1fr);width:100%}
+ #fabioConsulta .consulta-itens td{grid-column:1/-1!important;width:100%!important;border-left:0!important}
+ #fabioConsulta .consulta-dados tr{grid-template-columns:minmax(0,34%) minmax(0,66%);max-width:100%}
+ #fabioConsulta .consulta-dados th,#fabioConsulta .consulta-dados td{min-width:0;overflow-wrap:anywhere}
+ #fabioConsulta .consulta-topo{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #fabioConsulta .consulta-topo button{min-height:49px}
+ #fabioConsulta .consulta-topo .principal{grid-column:1/-1}
+ #fabioPdfDialog{padding:0}
+ #fabioPdfDialog .pdf-box{border:0;border-radius:0;height:100dvh;max-height:100dvh}
+ #fabioPdfDialog .pdf-acoes{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+ #fabioPdfDialog .pdf-acoes button{min-height:50px;font-size:.9rem}
+ #fabioPdfDialog .pdf-acoes #fabioPdfCompartilhar{grid-column:1/-1}
+ #fabioPdfDialog .pdf-navegacao button{min-height:48px}
+}
+@media screen and (max-width:340px){#fabioConsulta .consulta-topo{grid-template-columns:1fr}#fabioConsulta .consulta-topo button,#fabioConsulta .consulta-topo .principal{grid-column:1}}
+</style>
 </head>
 <body>
 <header><div><small>S.O.S. VALÊNCIO • VISÃO RÁPIDA DO GESTOR</small><h1>Minha oficina</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button id="fabioVoltarPrincipal" type="button">← Voltar</button><button id="sair" type="button">Sair</button></div></header>
@@ -325,28 +372,28 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <button class="indicador" data-filter="entregues"><b id="nEntregues">—</b><span>Entregues</span></button>
 <button class="indicador" data-filter="quitados"><b id="nQuitados">—</b><span>Quitados / recebidos</span></button>
 </div>
-<div class="toolbar-busca"><label for="busca">PESQUISAR ORDENS DE SERVIÇO</label>
+<div class="toolbar-busca"><label for="busca">🔎 PESQUISAR O.S. — É SÓ DIGITAR</label>
 <div class="toolbar"><input id="busca" aria-label="Buscar veículo, placa, cliente ou ordem" placeholder="Pesquisar: cliente, placa, veículo, número da O.S." autocomplete="off"><button id="limpar" type="button">Limpar filtros / Ver todos</button></div></div>
 <div class="filtro-cliente-veiculo" aria-label="Filtrar por cliente e veículo">
-  <label class="filtro-campo" for="fabioBuscarCliente">CLIENTE — DIGITE O NOME
+  <label class="filtro-campo" for="fabioBuscarCliente">👤 CLIENTE — DIGITE O NOME (AUTOMÁTICO)
     <input id="fabioBuscarCliente" type="search" placeholder="Ex.: Brito" autocomplete="off">
   </label>
-  <label class="filtro-campo" for="fabioClienteFiltro">SELECIONAR CLIENTE
+  <label class="filtro-campo" for="fabioClienteFiltro">👤 OU SELECIONAR CLIENTE (OPCIONAL)
     <select id="fabioClienteFiltro"><option value="">Todos os clientes</option></select>
   </label>
-  <label class="filtro-campo" for="fabioVeiculoFiltro">VEÍCULOS DO CLIENTE
+  <label class="filtro-campo" for="fabioVeiculoFiltro">🚗 VEÍCULOS DO CLIENTE (OPCIONAL)
     <select id="fabioVeiculoFiltro" disabled><option value="">Todos os veículos</option></select>
   </label>
   <div class="filtro-campo" style="align-content:end">
-    <button id="fabioAtualizarQuitados" type="button">↻ Atualizar recebimentos do financeiro</button>
+    <button id="fabioAtualizarQuitados" type="button">↻ CONFERIR QUITADOS NO FINANCEIRO</button>
   </div>
 </div>
 <div class="filtro-acoes" aria-label="Selecionar e navegar pelas ordens">
  <span id="fabioSelecaoContagem" aria-live="polite">0 O.S. selecionadas</span>
- <button id="fabioSelecionarVisiveis" type="button">Selecionar exibidas</button>
- <button id="fabioLimparSelecao" type="button">Limpar seleção</button>
- <button id="fabioNavegarSelecionadas" type="button" disabled>◀ Ver OS em sequência ▶</button>
- <button id="fabioEnviarMultiplas" type="button" disabled>Enviar múltiplos PDFs</button>
+ <button id="fabioSelecionarVisiveis" type="button">☑ SELECIONAR OS EXIBIDAS</button>
+ <button id="fabioLimparSelecao" type="button">✕ LIMPAR SELEÇÃO</button>
+ <button id="fabioNavegarSelecionadas" type="button" disabled>📄 VER PDFs SELECIONADOS ◀ ▶</button>
+ <button id="fabioEnviarMultiplas" type="button" disabled>↗ ENVIAR VÁRIOS PDFs</button>
 </div>
 <p id="filtroTexto" class="muted" aria-live="polite">Todas as O.S. • Toque nos números para filtrar</p>
 <div id="statusConexao" role="status">Conectando ao sistema…</div>
@@ -608,10 +655,12 @@ function render(){
    if(clienteSelecionado&&String(o.clienteId)!==clienteSelecionado)return false;
    if(veiculoSelecionado&&String(o.veiculoId)!==veiculoSelecionado)return false;
    const d=dados(o);
-   return !busca||normal([d.placa,d.prefixo,d.patrimonio,d.chassi,d.marca,d.modelo,d.ano,d.cliente,o.numero,o.numeroOS,o.prisma,o.numeroPrisma,...mecanicosDaOS(o).map(m=>m.nome)].join(' ')).includes(busca);
+   if(buscaCliente&&!normal(d.cliente).includes(normal(buscaCliente)))return false;
+   return !busca||normal([d.placa,d.prefixo,d.patrimonio,d.chassi,d.marca,d.modelo,d.ano,d.cliente,o.numero,o.numeroOS,o.id,o.prisma,o.numeroPrisma,...mecanicosDaOS(o).map(m=>m.nome)].join(' ')).includes(busca);
  });
  exibidos.sort((a,b)=>{const va=a.updatedAt||a.createdAt||0,vb=b.updatedAt||b.createdAt||0;const num=x=>typeof x==='number'?x:x?.seconds?x.seconds*1000:Date.parse(x)||0;return num(vb)-num(va);});
  window.__fabioFiltradosIds=exibidos.map(o=>o.id);
+ $('filtroTexto').textContent+=' • '+exibidos.length+' exibida(s)';
  if(!exibidos.length){let mensagem='Nenhuma O.S. encontrada.';
   if(busca){const v=[...veiculos.values()].find(v=>normal([v.placa,v.modelo,v.marca,v.prefixo].join(' ')).includes(busca));
    if(v&&!validos.some(o=>o.veiculoId===v.id||(v.placa&&normal(o.placa)===normal(v.placa))))mensagem='Veículo cadastrado, mas não foi localizada uma O.S.';
@@ -643,11 +692,14 @@ function render(){
    add(pagamento,'span','etiqueta '+(osQuitadaFabio(o)?'green':'yellow'),osQuitadaFabio(o)?'RECEBIDO / QUITADO':recebeu(o)?'RECEBIMENTO MARCADO':'RECEBIMENTO NÃO CONFIRMADO');
    if(valorStatus(o)==='aprovado')add(pagamento,'span','etiqueta green','APROVADA');
    else if(aguardando(o))add(pagamento,'span','etiqueta yellow','AGUARDANDO APROVAÇÃO');
-   add(card,'div','card-abrir','TOQUE PARA ABRIR A O.S. →');
+   add(card,'div','card-abrir','📄 TOQUE PARA ABRIR O PDF ORIGINAL →');
+   const detalhar=add(card,'button','card-consulta-btn','🔎 CONSULTA DETALHADA NA TELA');
+   detalhar.type='button';
+   detalhar.addEventListener('click',e=>{e.stopPropagation();window.fabioAbrirConsultaOS?.(o.id);});
    card.tabIndex=0;card.setAttribute('role','button');
-   card.setAttribute('aria-label','Ver ordem de serviço '+texto(o.numero||o.id)+' do veículo '+d.placa);
-   card.addEventListener('click',()=>window.fabioAbrirConsultaOS?.(o.id));
-   card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();window.fabioAbrirConsultaOS?.(o.id);}});
+   card.setAttribute('aria-label','Abrir PDF oficial da ordem de serviço '+texto(o.numero||o.id)+' do veículo '+d.placa);
+   card.addEventListener('click',()=>window.fabioAbrirPdfOS?.(o.id));
+   card.addEventListener('keydown',e=>{if(e.target!==card)return;if(e.key==='Enter'||e.key===' '){e.preventDefault();window.fabioAbrirPdfOS?.(o.id);}});
  }
 }
 document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click',()=>{
@@ -656,14 +708,22 @@ document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click'
  if(filtro==='quitados')carregarRecebimentosFabio();
  render();
 }));
-$('busca').addEventListener('input',e=>{busca=normal(e.target.value.trim());render();});
+$('busca').addEventListener('input',e=>{
+ busca=normal(e.target.value.trim());
+ if(busca){filtro='todos';document.querySelectorAll('.indicador').forEach(x=>x.classList.remove('active'));}
+ render();
+});
 $('limpar').addEventListener('click',()=>{
  $('busca').value='';busca='';$('fabioBuscarCliente').value='';buscaCliente='';
  clienteSelecionado='';veiculoSelecionado='';filtro='todos';
  document.querySelectorAll('.indicador').forEach(x=>x.classList.remove('active'));render();
 });
 $('fabioVoltarPrincipal').addEventListener('click',()=>window.location.assign('selecionar-perfil.html'));
-$('fabioBuscarCliente').addEventListener('input',e=>{buscaCliente=e.target.value;atualizarFiltrosRelacionadosFabio();render();});
+$('fabioBuscarCliente').addEventListener('input',e=>{
+ buscaCliente=e.target.value;
+ if(buscaCliente.trim()){filtro='todos';document.querySelectorAll('.indicador').forEach(x=>x.classList.remove('active'));}
+ render();
+});
 $('fabioClienteFiltro').addEventListener('change',e=>{clienteSelecionado=e.target.value;veiculoSelecionado='';osSelecionadas.clear();render();});
 $('fabioVeiculoFiltro').addEventListener('change',e=>{veiculoSelecionado=e.target.value;render();});
 $('fabioAtualizarQuitados').addEventListener('click',()=>carregarRecebimentosFabio(true));

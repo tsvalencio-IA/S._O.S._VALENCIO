@@ -173,19 +173,35 @@ body::after {
 <script src="js/links-publicos.js?v=26.24.0"></script>
 <script src="js/tenant-modules.js"></script>
 <script>
-sessionStorage.clear();
+// No retorno dos botões Sair, não permitir restauração imediata de login.
+const _urlLogin = new URLSearchParams(window.location.search);
+let _origemLogoutLogin=false;
+try{
+ const anterior=new URL(document.referrer);
+ _origemLogoutLogin=anterior.origin===window.location.origin
+  && ['jarvis.html','equipe.html'].includes(anterior.pathname.split('/').pop())
+  && !sessionStorage.getItem('j_tid');
+}catch(_){}
+const _logoutLogin=_urlLogin.get('logout')==='1'||_origemLogoutLogin;
+if(_logoutLogin){
+ sessionStorage.clear();
+ localStorage.removeItem('j_saved_login');
+ localStorage.removeItem('j_role_master');
+}
 
 const db = window.initFirebase();
 
 // Retorno ao Fábio somente para sessões de gestores autorizados.
 // URLs externas e outras páginas não são aceitas como destino do login.
-const _destinoSolicitadoLogin = new URLSearchParams(window.location.search).get('destino') === 'fabio.html' ? 'fabio.html' : '';
+const _destinoSolicitadoLogin = ['fabio.html','equipe.html','jarvis.html'].includes(_urlLogin.get('destino')) ? _urlLogin.get('destino') : '';
 function _destinoFinalLogin(destinoPadrao, sessao) {
   const cargo = _normalizarCargoLogin(sessao?.j_cargo);
   const role = String(sessao?.j_role || '').toLowerCase();
   const tenant = String(sessao?.j_tid || '');
   const autorizadoFabio = tenant && tenant !== 'MASTER_ADMIN' && (['admin', 'gestor'].includes(role) || cargo === 'gestor');
   if (_destinoSolicitadoLogin === 'fabio.html' && autorizadoFabio) return 'fabio.html';
+  if (_destinoSolicitadoLogin === 'equipe.html' && sessao?.j_actor_type === 'equipe' && cargo !== 'gestor' && role !== 'admin') return 'equipe.html';
+  if (_destinoSolicitadoLogin === 'jarvis.html' && autorizadoFabio) return 'jarvis.html';
   if (sessao?.j_actor_type === 'equipe' && cargo === 'gestor') return 'fabio.html';
   return destinoPadrao;
 }
@@ -198,8 +214,17 @@ window.addEventListener('load', () => {
 });
 
 (function carregarCredenciais() {
-  const saved = JSON.parse(localStorage.getItem('j_saved_login') || 'null');
+  const saved = _logoutLogin ? null : JSON.parse(localStorage.getItem('j_saved_login') || 'null');
   const lastUser = localStorage.getItem('j_last_user') || '';
+  if(!_logoutLogin && sessionStorage.getItem('j_tid') && sessionStorage.getItem('j_role')){
+    const sessao={};for(let n=0;n<sessionStorage.length;n++){const k=sessionStorage.key(n);if(k&&k.startsWith('j_'))sessao[k]=sessionStorage.getItem(k);}
+    const cargo=_normalizarCargoLogin(sessao.j_cargo);
+    const padrao=sessao.j_tid==='MASTER_ADMIN'?'superadmin.html':
+     sessao.j_actor_type==='equipe' ? (cargo==='gestor'?'fabio.html':
+      (['admin','gerente','dono','proprietario','owner'].includes(cargo)?'jarvis.html':'equipe.html')):'jarvis.html';
+    window.location.replace(_destinoFinalLogin(padrao,sessao));
+    return;
+  }
   if (saved) {
     document.getElementById('usr').value = saved.usr || lastUser || '';
     document.getElementById('pwd').value = saved.pwd || '';
