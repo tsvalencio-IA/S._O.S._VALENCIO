@@ -4379,6 +4379,10 @@ async function reconciliarComissoesOS(osId, payload, calculos) {
 }
 
 window.salvarOS = async function() {
+  if(window._osMediaFilaEmAndamento){
+    window.toast('Aguarde o envio da fila de fotos/vídeos terminar. Os arquivos serão salvos automaticamente.','warn');
+    return;
+  }
   window.calcOSTotalAgora?.();
   const osId = $v('osId');
   const osRefSalvar = osId ? db.collection('ordens_servico').doc(osId) : db.collection('ordens_servico').doc();
@@ -6060,6 +6064,8 @@ window.uploadOsMediaBatch = async function() {
   if(!window._osBatchFiles?.length){window.toast('⚠ Selecione ao menos um arquivo.','warn');return;}
   if(!window.sosMediaOsPersist){window.toast('Módulo de gravação de anexos indisponível. Nada foi enviado.','err');return;}
   const btn=$('btnUploadMedia'),prog=$('osMediaProgress'),arquivos=window._osBatchFiles.slice();
+  if(window._osMediaFilaEmAndamento)return;
+  window._osMediaFilaEmAndamento=true;
   if(btn){btn.disabled=true;btn.innerText='ENVIANDO E SALVANDO...';}
   if(prog){prog.style.display='inline';prog.innerText='Preparando O.S....';}
   try{
@@ -6087,17 +6093,20 @@ window.uploadOsMediaBatch = async function() {
     const persistido=await window.sosMediaOsPersist.gravar({
       db,tid:J.tid,osId,itens:novas,ator:J.nome||'Gestor'
     });
-    const atuais=JSON.parse($('osMediaArray')?.value||'[]');
-    $('osMediaArray').value=JSON.stringify(window.sosMediaOsPersist.uniq([...atuais,...persistido.media]));
-    window.renderMediaOS();
-    window._osBatchFiles=arquivos.filter((_,i)=>!resultados[i]?.ok);
-    window.renderOsMediaPreview();
+    if($v('osId')===osId){
+      const atuais=JSON.parse($('osMediaArray')?.value||'[]');
+      $('osMediaArray').value=JSON.stringify(window.sosMediaOsPersist.uniq([...atuais,...persistido.media]));
+      window.renderMediaOS();
+      window._osBatchFiles=arquivos.filter((_,i)=>!resultados[i]?.ok);
+      window.renderOsMediaPreview();
+    }
     if(!falhas)window.toast('✓ '+novas.length+' arquivo(s) salvo(s) diretamente na O.S.','ok');
     else window.toast('✓ '+novas.length+' salvo(s) na O.S.; '+falhas+' pendente(s) para tentar novamente.','warn');
   }catch(e){
     console.error('[OS upload persistente]',e);
     window.toast('✕ Anexos não confirmados na O.S.: '+(e?.message||e)+'. Fila preservada.','err');
   }finally{
+    window._osMediaFilaEmAndamento=false;
     if(btn){btn.disabled=false;btn.innerText='ENVIAR FILA';}
     if(prog){prog.style.display='none';prog.innerText='';}
   }
