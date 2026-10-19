@@ -776,7 +776,7 @@ function render(){
    if(valorStatus(o)==='aprovado')add(pagamento,'span','etiqueta green','APROVADA');
    else if(aguardando(o))add(pagamento,'span','etiqueta yellow','AGUARDANDO APROVAÇÃO');
    add(card,'div','card-abrir','📄 CONFERIR O.S. ANTES DE ENVIAR →');
-   const detalhar=add(card,'button','card-consulta-btn','Ver PDF e execução');
+   const detalhar=add(card,'button','card-consulta-btn','Abrir OS / PDF');
    detalhar.type='button';
    detalhar.addEventListener('click',e=>{e.stopPropagation();window.fabioAbrirConsultaOS?.(o.id);});
    card.tabIndex=0;card.setAttribute('role','button');
@@ -1714,7 +1714,7 @@ get('fabioClienteEnviar').addEventListener('click',async()=>{
 const g=id=>document.getElementById(id),source=id=>window.__fabioOsFonte?.().find(x=>String(x.id)===String(id));
 const text=v=>v===undefined||v===null?'':String(v);
 let docAtual=null,modo='interna',osAtual='',refOS=null,preparando=false,paginasValidas=false,epoch=0,urlAtual='';
-let zoom=1,ultimoDocumento=null,distanciaPinch=0,zoomNoInicio=1;
+let zoom=1,ultimoDocumento=null,distanciaPinch=0,zoomNoInicio=1,execAberta=false;
 const display=s=>{g('fabioPdfEstado').textContent=s};
 const update=()=>{
  const fila=(window.__fabioFilaNavegacao||[]).length?window.__fabioFilaNavegacao:(window.__fabioFiltradosIds||[]);
@@ -1723,8 +1723,9 @@ const update=()=>{
  g('fabioDocConfirmacao').hidden=modo!=='cliente'||!paginasValidas;
  g('fabioDocAlternar').textContent=modo==='cliente'?'← VOLTAR AO PDF ORIGINAL':'📄 CONFERIR VERSÃO PARA CLIENTE';
  g('fabioDocExecucoes').hidden=modo==='cliente';
- g('fabioDocMecanicos').hidden=modo==='cliente';
- g('fabioDocExecucoes').textContent=g('fabioDocMecanicos').hidden?'Ver execução':'Ocultar execução';
+ g('fabioDocMecanicos').hidden=modo==='cliente'||!execAberta;
+ g('fabioDocExecucoes').textContent=execAberta?'Ocultar execução':'Ver execução';
+ g('fabioDocExecucoes').setAttribute('aria-expanded',String(execAberta&&modo!=='cliente'));
  g('fabioPdfCompartilhar').disabled=preparando||modo!=='cliente'||!paginasValidas||!g('fabioDocConferi').checked;
  g('fabioPdfBaixar').disabled=!docAtual||preparando;
  g('fabioPdfAbrir').disabled=!docAtual||preparando;
@@ -1843,7 +1844,7 @@ area.addEventListener('touchend',e=>{
 async function abrir(id,novoModo='interna'){
  const os=source(id);if(!os)return;
  if(preparando)return;
- preparando=true;osAtual=id;refOS=os;modo=novoModo;paginasValidas=false;docAtual=null;ultimoDocumento=null;zoom=1;g('fabioNivelZoom').textContent='100%';g('fabioDocConferi').checked=false;
+ preparando=true;osAtual=id;refOS=os;modo=novoModo;execAberta=false;paginasValidas=false;docAtual=null;ultimoDocumento=null;zoom=1;g('fabioNivelZoom').textContent='100%';g('fabioDocConferi').checked=false;
  g('fabioPdfDialog').hidden=false;
  g('fabioPdfTitulo').textContent='OS '+text(os.numero||os.numeroOS||id.slice(-6))+' • '+(modo==='cliente'?'PDF para cliente':'PDF ORIGINAL do JARVIS');
  g('fabioDocPaginas').replaceChildren();g('fabioPdfViewer').hidden=true;
@@ -1880,7 +1881,7 @@ window.fabioPrepararClienteSeguro=async id=>{
 g('fabioDocAlternar').addEventListener('click',()=>{
  if(osAtual&&!preparando)abrir(osAtual,modo==='interna'?'cliente':'interna');
 });
-g('fabioDocExecucoes').addEventListener('click',()=>{g('fabioDocMecanicos').hidden=!g('fabioDocMecanicos').hidden;update();});
+g('fabioDocExecucoes').addEventListener('click',()=>{execAberta=!execAberta;update();});
 g('fabioDocConferi').addEventListener('change',update);
 const interromper=()=>{epoch++;ultimoDocumento=null;docAtual=null;paginasValidas=false;g('fabioDocPaginas').replaceChildren();};
 g('fabioPdfFechar').addEventListener('click',interromper,true);
