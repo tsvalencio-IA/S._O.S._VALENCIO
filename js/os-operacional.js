@@ -12,7 +12,13 @@
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const byId = id => D.getElementById(id);
   const manager = s => ['admin','oficina_admin','superadmin','gestor','gerente','dono'].includes(String(s?.role || '').toLowerCase());
-  const actor = s => {let authId='';try{authId=W.firebase?.auth?.()?.currentUser?.uid||'';}catch(_){}return {user:s.nome || 'Equipe',usuarioId:String(s.fid || s.uid || s.userId || s.usuarioId || authId || ''),usuarioAuthId:authId||null,perfil:s.role || 'equipe'};};
+  const actor = s => {
+    let authId='';try{authId=W.firebase?.auth?.()?.currentUser?.uid||'';}catch(_){}
+    // O login administrativo pode não ter fid; seu identificador é a conta
+    // administrativa/oficina. O UID técnico do Firebase permanece separado.
+    const accountId=manager(s)?(s.adminEmail || s.tid || ''):'';
+    return {user:String(s.nome || '').trim(),usuarioId:String(s.fid || s.uid || s.userId || s.usuarioId || accountId || authId || ''),usuarioAuthId:authId||null,perfil:s.role || 'equipe'};
+  };
   const labels = {pendente:'Pendente',em_execucao:'Em execução',executado:'Executado / aplicado',trocada:'Trocada / aplicada',executado_obs:'Executado com observação',nao_executado:'Não executado',nao_encontrada:'Peça não encontrada',nao_trocada:'Peça não aplicada',cancelado:'Cancelado'};
   const normalize = s => ({executado_com_observacao:'executado_obs',concluido:'executado',finalizado:'executado',feito:'executado',realizado:'executado'}[s] || s || 'pendente');
   const stateOf = e => ({status:normalize(e?.status),obs:String(e?.obs || '')});
@@ -48,10 +54,58 @@
     const e = Error('Há alterações simultâneas no mesmo campo. A proposta foi enviada ao JARVIS para conferência; o rascunho foi mantido.');
     e.code = 'os-conflict'; return e;
   }
-  function executionEvent(session,key,item,before,after) {
+  function executionEvent(session,key,item,before,after,who=actor(session),origin='') {
     return event(session,'execucao_item_os',(item.tipo === 'peca' ? 'Peça ' : 'Serviço ')+item.desc+': '+
-      labels[before.status]+' → '+labels[after.status]+(before.obs !== after.obs ? ' | Observação: "'+(before.obs || '(vazia)')+'" → "'+(after.obs || '(vazia)')+'"' : ''),
-      {itemKey:key,itemTipo:item.tipo,itemDescricao:item.desc,statusAnterior:before.status,statusNovo:after.status,observacaoAnterior:before.obs,observacaoNova:after.obs,aprovadoFinanceiramente:true});
+      labels[before.status]+' → '+labels[after.status]+(before.obs !== after.obs ? ' | Observação: "'+(before.obs || '(vazia)')+'" → "'+(after.obs || '(vazia)')+'"' : '')+' — usuário: '+who.user,
+      {...who,usuarioNome:who.user,origem:origin,itemKey:key,itemTipo:item.tipo,itemDescricao:item.desc,statusAnterior:before.status,statusNovo:after.status,statusAlterado:before.status!==after.status,observacaoAnterior:before.obs,observacaoNova:after.obs,aprovadoFinanceiramente:true});
+  }
+  function executionRecord(previous,key,item,before,after,who,entry) {
+    const changed=before.status!==after.status;
+    return {...previous,...after,key,tipo:item.tipo,itemDescricao:item.desc,itemIdentidade:identity(item),
+      atualizadoPor:who.user,atualizadoPorId:who.usuarioId,atualizadoPorAuthId:who.usuarioAuthId,
+      atualizadoPorTipo:who.perfil,atualizadoEm:entry.dt,updatedAt:entry.dt,
+      ...(changed?{statusAlteradoPor:who.user,statusAlteradoPorId:who.usuarioId,statusAlteradoPorAuthId:who.usuarioAuthId,
+        statusAlteradoPorPerfil:who.perfil,statusAlteradoEm:entry.dt,statusAlteradoDe:before.status,
+        statusAlteradoPara:after.status,statusAlteradoOrigem:entry.origem}:{})};
+  }
+  function executionDate(value) {
+    if(!value)return null;
+    const date=typeof value?.toDate==='function'?value.toDate():value?.seconds!=null?new Date(value.seconds*1000):new Date(value);
+    return Number.isNaN(date.getTime())?null:date;
+  }
+  function executionStatusAudit(os,key,record=os?.execucaoItens?.[key] || {}) {
+    const current=normalize(record.status);
+    const events=(Array.isArray(os?.timeline)?os.timeline:[]).map((e,index)=>({e,index}))
+      .filter(({e})=>['execucao_item_os','execucao_item_aprovado'].includes(String(e?.tipo || e?.tipoEvento || '')) &&
+        String(e.itemKey || '')===String(key) && e.statusAnterior!=null && e.statusNovo!=null && normalize(e.statusAnterior)!==normalize(e.statusNovo))
+      .sort((a,b)=>(executionDate(a.e.dt)?.getTime() || 0)-(executionDate(b.e.dt)?.getTime() || 0) || a.index-b.index);
+    const last=events.at(-1)?.e;
+    const direct=(record.statusAlteradoPor || record.statusAlteradoPorId) && normalize(record.statusAlteradoPara || record.status)===current
+      ? {nome:record.statusAlteradoPor || '',id:record.statusAlteradoPorId || '',dt:record.statusAlteradoEm || '',
+        anterior:record.statusAlteradoDe,novo:record.statusAlteradoPara || record.status,origem:record.statusAlteradoOrigem || '',fonte:'registro'}:null;
+    const directTime=executionDate(direct?.dt)?.getTime() || 0,lastTime=executionDate(last?.dt)?.getTime() || 0;
+    if(direct && (!last || (directTime && directTime>=lastTime)))return direct;
+    // Só eventos vinculados ao item e ao seu estado atual podem provar a autoria.
+    // Logs genéricos e o mecânico responsável não identificam quem mudou o status.
+    if(last && normalize(last.statusNovo)===current && (last.user || last.usuarioNome || last.usuarioId))return {
+      nome:last.user || last.usuarioNome || '',id:last.usuarioId || last.userId || '',dt:last.dt || '',
+      anterior:last.statusAnterior,novo:last.statusNovo,origem:last.origem || '',fonte:'timeline'};
+    return null;
+  }
+  function executionAuthorHTML(os,key,record=os?.execucaoItens?.[key] || {}) {
+    const audit=executionStatusAudit(os,key,record);
+    const dateText=value=>{const date=executionDate(value);return date?date.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'data não registrada';};
+    const name=(stored,id)=>stored || (W.J?.equipe || []).find(p=>String(p.id)===String(id))?.nome || (id?'Usuário '+id:'usuário não identificado');
+    if(audit){
+      const from=audit.anterior==null?'estado anterior não registrado':(labels[normalize(audit.anterior)] || audit.anterior);
+      return '<br><small class="exec-status-autor" style="color:var(--muted2);">Status alterado por: <b>'+esc(name(audit.nome,audit.id))+'</b> · '+esc(dateText(audit.dt))+
+        '<br>'+esc(from)+' → '+esc(labels[normalize(audit.novo)] || audit.novo)+'</small>';
+    }
+    if(!Object.keys(record).length)return '';
+    const lastName=record.atualizadoPor || record.atualizadoPorNome || record.usuario || record.registradoPor || '';
+    const lastId=record.atualizadoPorId || record.registradoPorId || '';
+    return '<br><small class="exec-status-autor" style="color:var(--muted2);">Autoria deste status não registrada.'+
+      (lastName || lastId?'<br>Última atualização registrada: '+esc(name(lastName,lastId))+' · '+esc(dateText(record.atualizadoEm || record.updatedAt || record.registradoEm)):'')+'</small>';
   }
   function validateState(value) {
     if (!Object.hasOwn(labels,value.status)) throw Error('Status de execução desconhecido.');
@@ -60,6 +114,8 @@
   async function saveExecution(ctx) {
     const {db,session,osId,rows} = ctx;
     if (!osId || !session.tid || !session.nome) throw Error('O.S. ou sessão não identificada.');
+    const who=actor(session);
+    if(!who.user || !who.usuarioId)throw Error('Usuário não identificado. Entre novamente antes de registrar a execução.');
     if (busy.has(osId)) return;
     const base = ctx.base || active?.base || {};
     const baseItems = items(base), drafts = new Map();
@@ -99,8 +155,8 @@
           if (equal(before,after)) continue;
           validateState(after);
           const resp=d.hasRespControl?{mecId:after.mecId,responsavelId:after.mecId,mecNome:ctx.resolveName?.(after.mecId)||((session.equipe||[]).find(m=>m.id===after.mecId)?.nome)||exec[d.key]?.mecNome||'',responsavelNome:ctx.resolveName?.(after.mecId)||((session.equipe||[]).find(m=>m.id===after.mecId)?.nome)||exec[d.key]?.responsavelNome||''}:{};
-          exec[d.key] = {...exec[d.key],...resp,key:d.key,tipo:item.tipo,itemDescricao:item.desc,itemIdentidade:identity(item),...after,atualizadoPorId:actor(session).usuarioId,atualizadoPor:session.nome,atualizadoPorTipo:session.role,atualizadoEm:new Date().toISOString()};
-          const execution=executionEvent(session,d.key,item,before,after);
+          const execution=executionEvent(session,d.key,item,before,after,who,ctx.kind || '');
+          exec[d.key] = executionRecord({...exec[d.key],...resp},d.key,item,before,after,who,execution);
           if(d.hasRespControl&&before.mecId!==after.mecId){execution.responsavelAnteriorId=before.mecId;execution.responsavelNovoId=after.mecId;execution.acao+=' | Responsável: '+(ctx.resolveName?.(before.mecId)||before.mecId||'(nenhum)')+' → '+(resp.mecNome||after.mecId||'(nenhum)');}
           events.push(execution);
         }
@@ -229,6 +285,8 @@
   async function resolve(id) {
     const ctx=active;
     if(!ctx || !manager(ctx.session))throw Error('Abra a O.S. no JARVIS com acesso de gestor.');
+    const who=actor(ctx.session);
+    if(!who.user || !who.usuarioId)throw Error('Usuário não identificado. Entre novamente antes de conferir a execução.');
     const ref=ctx.db.collection('chat_equipe').doc(id), snap=await ref.get({source:'server'}), message=snap.data();
     if(!message || message.tenantId!==ctx.session.tid || message.osId!==ctx.id || message.estado!=='pendente')throw Error('Aviso não está pendente nesta O.S.');
     const osRef=ctx.db.collection('ordens_servico').doc(ctx.id), osSnap=await osRef.get({source:'server'});
@@ -268,8 +326,9 @@
           const item=items(current).get(c.campo);
           if(!approved(current).has(c.campo) || !equal(c.identidade,identity(item)))throw Error('Item ou autorização mudaram. Corrija na ficha antes de executar.');
           const responsible=Object.hasOwn(c.valor,'mecId')?{responsavelId:c.valor.mecId,mecNome:(ctx.session.equipe||[]).find(m=>m.id===c.valor.mecId)?.nome||'',responsavelNome:(ctx.session.equipe||[]).find(m=>m.id===c.valor.mecId)?.nome||''}:{};
-          exec[c.campo]={...exec[c.campo],...responsible,...c.valor,atualizadoPor:ctx.session.nome,atualizadoPorId:actor(ctx.session).usuarioId,atualizadoEm:new Date().toISOString()};
-          patch.execucaoItens=exec; events.push(executionEvent(ctx.session,c.campo,item,before,c.valor));
+          const execution=executionEvent(ctx.session,c.campo,item,before,c.valor,who,'jarvis');
+          exec[c.campo]=executionRecord({...exec[c.campo],...responsible},c.campo,item,before,c.valor,who,execution);
+          patch.execucaoItens=exec; events.push(execution);
         }else if(message.tipoConflito!=='execucao' && !equal(before,c.valor))patch[c.campo]=c.valor;
         events.push(event(ctx.session,'conflito_resolvido','Conferiu '+c.rotulo+': '+printable(before)+' → '+printable(c.valor)+'. Motivo: '+reason.trim(),
           {conflitoId:id,campo:c.campo,valorAnterior:before ?? null,valorNovo:c.valor ?? null,decisao:c.decisao,propostoPor:message.senderName,motivo:reason.trim()}));
@@ -279,6 +338,6 @@
     });
     W.toast?.('Conferência salva e registrada na auditoria.','ok');
   }
-  W.OSOperacional={clone,equal,merge,normalize,labels,stateOf,saveExecution,batch,notice,conflictError,open,sync,receiveConflicts,resolve,
+  W.OSOperacional={clone,equal,merge,normalize,labels,stateOf,executionStatusAudit,executionAuthorHTML,saveExecution,batch,notice,conflictError,open,sync,receiveConflicts,resolve,
     base:id=>active?.id===id?clone(active.base):null,executionBase:id=>active?.id===id?clone(active.executionBase || active.base):null};
 })(window,document);

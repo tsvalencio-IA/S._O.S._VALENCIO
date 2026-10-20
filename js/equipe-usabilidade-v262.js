@@ -141,6 +141,7 @@
       <div class="equipe-tarefa-desc">
         <b>${esc(tipoLabel)}</b><br>${codigo}${esc(it.desc || '-')}${tempo}
         ${nomeMec ? `<br><small style="color:var(--muted2);">Responsável: ${esc(nomeMec)}</small>` : ''}
+        ${W.OSOperacional.executionAuthorHTML(os,it.key,registro)}
       </div>
       <div class="equipe-tarefa-controles">
         <input type="hidden" class="exec-mec" value="${esc(mecId)}">

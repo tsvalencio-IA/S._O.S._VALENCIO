@@ -8599,7 +8599,7 @@ window.aplicarMarcadoresAprovacaoOS = function(os) {
             ? `<select class="j-select exec-mec" style="font-size:.70rem;">${opcoesResponsavelServicoOS(mecIdItem)}</select>`
             : '<span></span>';
           return `<div class="execucao-aprovado-row" data-key="${escOS(it.key)}" data-tipo="${escOS(it.tipo)}" data-mec-id="${escOS(mecIdItem)}" data-status-inicial="${escOS(window.OSOperacional.normalize(exec[it.key]?.status))}" data-obs-inicial="${escOS(exec[it.key]?.obs || '')}" style="display:grid;grid-template-columns:minmax(230px,1fr) minmax(150px,190px) 180px minmax(200px,1fr);gap:7px;align-items:center;background:rgba(0,0,0,.16);border:1px solid rgba(255,255,255,.10);border-radius:3px;padding:8px;">
-            <div style="font-size:.75rem;color:var(--text);"><b>${escOS(it.labelTipo || it.tipo)}</b> ${it.codigo ? '[' + escOS(it.codigo) + '] ' : ''}${escOS(it.desc || '-')}${it.tempo ? `<br><small style="color:var(--muted);">TMO ${String(it.tempo).replace('.', ',')}h</small>` : ''}</div>
+            <div style="font-size:.75rem;color:var(--text);"><b>${escOS(it.labelTipo || it.tipo)}</b> ${it.codigo ? '[' + escOS(it.codigo) + '] ' : ''}${escOS(it.desc || '-')}${it.tempo ? `<br><small style="color:var(--muted);">TMO ${String(it.tempo).replace('.', ',')}h</small>` : ''}${window.OSOperacional.executionAuthorHTML(os,it.key,e)}</div>
             ${seletorMec}
             <select class="j-select exec-status" style="font-size:.72rem;">${statusOptionsExecOS(it.tipo, e.status || 'pendente')}</select>
             <input class="j-input exec-obs" value="${escOS(e.obs || '')}" placeholder="Observação interna: peça não encontrada, aguardando, executado...">

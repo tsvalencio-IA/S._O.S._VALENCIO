@@ -240,11 +240,11 @@
   function statusFinalizado(st) {
     return /^(executado|executado_obs|executado_com_observacao|trocada|nao_executado|nao_trocada|nao_encontrada|cancelado)$/i.test(String(W.OSOperacional.normalize(st)));
   }
-  function itemHTML(it, e) {
+  function itemHTML(it, e, os) {
     const st = e?.status || 'pendente';
     const finalizado = statusFinalizado(st);
     return `<div class="execucao-aprovado-row" data-key="${esc(it.key)}" data-tipo="${esc(it.tipo)}" data-status-inicial="${esc(W.OSOperacional.normalize(st))}" data-obs-inicial="${esc(e?.obs || '')}" style="display:grid;grid-template-columns:minmax(230px,1fr) 190px minmax(200px,1fr);gap:7px;align-items:center;background:${finalizado?'rgba(0,255,170,.045)':'rgba(0,0,0,.16)'};border:1px solid rgba(255,255,255,.10);border-radius:3px;padding:8px;">
-      <div style="font-size:.75rem;color:var(--text);"><b>${esc(it.labelTipo || it.tipo)}</b> ${it.codigo ? '[' + esc(it.codigo) + '] ' : ''}${esc(it.desc || '-')}${it.tempo ? `<br><small style="color:var(--muted);">TMO ${String(it.tempo).replace('.', ',')}h</small>` : ''}</div>
+      <div style="font-size:.75rem;color:var(--text);"><b>${esc(it.labelTipo || it.tipo)}</b> ${it.codigo ? '[' + esc(it.codigo) + '] ' : ''}${esc(it.desc || '-')}${it.tempo ? `<br><small style="color:var(--muted);">TMO ${String(it.tempo).replace('.', ',')}h</small>` : ''}${W.OSOperacional.executionAuthorHTML(os,it.key,e)}</div>
       <select class="j-select exec-status" style="font-size:.72rem;" onchange="window.reorganizarExecucaoAprovadosOS()">${statusOptions(it.tipo, st)}</select>
       <input class="j-input exec-obs" value="${esc(e?.obs || '')}" placeholder="Observacao interna obrigatoria quando houver excecao">
     </div>`;
@@ -298,9 +298,9 @@
         <div style="margin-top:14px;border-top:1px solid rgba(255,255,255,.12);padding-top:12px;">
           <div class="op-title">EXECUCAO INTERNA DOS ITENS APROVADOS</div>
           <div style="font-family:var(--fm);font-size:.60rem;color:var(--muted);margin-bottom:8px;">Ao marcar como executado/trocado/cancelado, o item sai da fila principal e vai para Finalizados. Cliente nao ve observacao interna.</div>
-          <div id="execPendentesOS" style="display:grid;gap:7px;">${pendentes.map(it => itemHTML(it, exec[it.key] || {})).join('')}</div>
+          <div id="execPendentesOS" style="display:grid;gap:7px;">${pendentes.map(it => itemHTML(it, exec[it.key] || {}, os)).join('')}</div>
           <div class="exec-finalizados" style="margin-top:10px;">
-            <details id="execFinalizadosOS"><summary>FINALIZADOS / OCULTOS (<span id="execFinalizadosCountOS">${finalizados.length}</span>)</summary><div id="execFinalizadosListaOS" style="display:grid;gap:7px;margin-top:8px;">${finalizados.map(it => itemHTML(it, exec[it.key] || {})).join('')}</div></details>
+            <details id="execFinalizadosOS"><summary>FINALIZADOS / OCULTOS (<span id="execFinalizadosCountOS">${finalizados.length}</span>)</summary><div id="execFinalizadosListaOS" style="display:grid;gap:7px;margin-top:8px;">${finalizados.map(it => itemHTML(it, exec[it.key] || {}, os)).join('')}</div></details>
           </div>
           <button type="button" class="btn-primary" style="margin-top:10px;" onclick="window.salvarExecucaoAprovadosOS('${esc(os?.id || '')}')">SALVAR EXECUCAO INTERNA</button>
         </div>`;

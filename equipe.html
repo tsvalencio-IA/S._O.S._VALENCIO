@@ -25,7 +25,7 @@ if ('serviceWorker' in navigator) {
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore-compat.js"></script>
 <script src="js/config.js?v=26.13.0"></script>
 <script src="js/os-utils.js?v=26.26.0"></script>
-<script src="js/os-operacional.js?v=20261020.1"></script>
+<script src="js/os-operacional.js?v=20261020.2-autor"></script>
 <script src="js/os-media-persist-v1.js?v=1.0.0"></script>
 <script src="js/links-publicos.js?v=26.24.0"></script>
 <script src="js/tenant-modules.js"></script>
@@ -2550,7 +2550,7 @@ function aplicarMarcadoresAprovacaoEquipe(os) {
             ? `<select class="j-select exec-mec" ${podeAlterarMec ? '' : 'disabled'} style="font-size:.70rem;">${opcoesMecanicoServicoEquipe(mecIdItem, os)}</select>`
             : '<span></span>';
           return `<div class="execucao-aprovado-row" data-key="${escExecEquipe(it.key)}" data-tipo="${escExecEquipe(it.tipo)}" data-mec-id="${escExecEquipe(mecIdItem)}" data-status-inicial="${escExecEquipe(e.status||'pendente')}" data-obs-inicial="${escExecEquipe(e.obs||'')}" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:7px;align-items:center;background:rgba(0,0,0,.16);border:1px solid rgba(255,255,255,.10);border-radius:3px;padding:8px;">
-            <div style="font-size:.75rem;color:var(--text);"><b>${escExecEquipe(it.labelTipo || it.tipo)}</b> ${it.codigo ? '[' + escExecEquipe(it.codigo) + '] ' : ''}${escExecEquipe(it.desc || '-')}${!keys.has(it.key)?' <small style="color:var(--warn)">(AGUARDANDO AUTORIZAÇÃO DE EXECUÇÃO)</small>':' <small style="color:var(--success)">(EXECUÇÃO AUTORIZADA)</small>'}${e.atualizadoPor ? `<br><small style="color:var(--muted2);">Última alteração: ${escExecEquipe(e.atualizadoPor)}${e.atualizadoEm ? ' · '+escExecEquipe(new Date(e.atualizadoEm).toLocaleString('pt-BR')) : ''}</small>` : ''}</div>
+            <div style="font-size:.75rem;color:var(--text);"><b>${escExecEquipe(it.labelTipo || it.tipo)}</b> ${it.codigo ? '[' + escExecEquipe(it.codigo) + '] ' : ''}${escExecEquipe(it.desc || '-')}${!keys.has(it.key)?' <small style="color:var(--warn)">(AGUARDANDO AUTORIZAÇÃO DE EXECUÇÃO)</small>':' <small style="color:var(--success)">(EXECUÇÃO AUTORIZADA)</small>'}${window.OSOperacional.executionAuthorHTML(os,it.key,e)}</div>
             ${seletorMec}
             <select class="j-select exec-status" ${keys.has(it.key)?'':'disabled aria-label="Aguardando autorização de execução"'} style="font-size:.72rem;">${statusOptionsExecEquipe(it.tipo, e.status || 'pendente')}</select>
             <input class="j-input exec-obs" ${keys.has(it.key)?'':'disabled aria-label="Aguardando autorização de execução"'} value="${escExecEquipe(e.obs || '')}" placeholder="${keys.has(it.key)?'Observação interna: peça não encontrada, aguardando, executado...':'Aguardando autorização do gestor ou cliente'}">
@@ -3617,7 +3617,7 @@ function aplicarSugestaoIA() {
 <script src="js/catalogos-ia.js?v=19.0.0"></script>
 <script src="js/uix-theme-fix.js"></script>
 <script src="js/equipe-comissoes-v21.js?v=26.1.0"></script>
-<script src="js/equipe-usabilidade-v262.js?v=20261020.1"></script>
+<script src="js/equipe-usabilidade-v262.js?v=20261020.2-autor"></script>
 <script src="js/equipe-firestore-economico-v265.js?v=26.24.2"></script>
 <script src="js/thia-firestore-runtime-v2612.js?v=26.13.0"></script>
 <script src="js/equipe-firestore-profissional-v2612.js?v=26.24.2"></script>
