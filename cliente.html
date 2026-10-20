@@ -183,6 +183,7 @@ body { overflow-y: auto; background: #060A14; color: #E8F4FF; font-family: 'Exo 
 .j-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--brand); border-right-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 6px; }
 </style>
+<script src="js/portal-eventos-publicos.js?v=20261020.1"></script>
 </head>
 <body>
 <div id="toastBox"></div>
@@ -650,20 +651,8 @@ function _renderPortalOS(osList) {
     
     const orcAlerta = isOrcamento ? `<div class="alerta-orcamento"><div style="font-family:var(--ff-display);font-size:1.2rem;font-weight:700;color:var(--warn);margin-bottom:6px">Orçamento Disponível</div>${resumoValoresHTML}<div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-success" style="flex:1;" onclick="_aprovarOrcamento('${os.id}')">✓ APROVAR</button><button class="btn btn-outline" style="flex:1;" onclick="_negociarOrcamento('${placaFormatada}')">💬 NEGOCIAR</button></div></div>` : '';
 
-    const timelinePublica = (os.timeline || []).filter(t => {
-      if (t?.interno === true || String(t?.tipo || t?.tipoEvento || '').toLowerCase() === 'observacao_equipe') return false;
-      if (t.tipo === 'status_os' || t.visivelCliente === true) return true;
-      const acao = String(t.acao || '').toLowerCase();
-      if (/interna|execu[cç][aã]o|pe[cç]as reais|financeiro|custo|margem|comiss|auditoria|estoque|nf\b|fornecedor/.test(acao)) return false;
-      return /status|abriu|or[cç]amento|aprov|recus|pronto|entreg|cliente|ve[ií]culo/.test(acao);
-    });
-    const textoTimelineCliente = tl => {
-      if (tl.tipo === 'status_os') {
-        const para = tl.statusNovo || '';
-        return `Status atualizado para ${para.replace('_', ' ')} por ${tl.user || tl.usuario || 'Sistema'}.`;
-      }
-      return String(tl.acao || '');
-    };
+    const timelinePublica = window.PortalEventosPublicos.list(os.timeline);
+    const textoTimelineCliente = tl => (window.JOS || window.JarvisOSUtils).escapeHtml(tl.texto);
     const timelineHtml = `
       <div class="timeline-box">
         <div class="timeline-box-title">⏱️ Histórico de Atualizações</div>
@@ -672,7 +661,7 @@ function _renderPortalOS(osList) {
             <div class="tl-item">
               <div class="tl-meta">
                 <span class="tl-date">${new Date(tl.dt).toLocaleString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
-                <span class="tl-user">👤 ${tl.user || tl.usuario || 'Sistema'}</span>
+                <span class="tl-user">👤 ${(window.JOS || window.JarvisOSUtils).escapeHtml(tl.user)}</span>
               </div>
               <div class="tl-action">${textoTimelineCliente(tl)}</div>
             </div>
@@ -699,7 +688,7 @@ function _renderPortalOS(osList) {
         if (servicos.length > 0) {
             financeiroDetalhe += `<div style="font-family:var(--ff-mono); font-size:0.65rem; color:var(--brand); margin-bottom:6px; letter-spacing:1px;">MÃO DE OBRA / SERVIÇOS</div>`;
             servicos.forEach(s => {
-                financeiroDetalhe += `<div class="detalhe-row"><span>${UOS.escapeHtml ? UOS.escapeHtml(s.desc) : s.desc}${badgeAprovacao(s)}<br><small style="color:var(--text-muted);font-family:var(--ff-mono);">${s.codigo ? 'Cód. '+(UOS.escapeHtml ? UOS.escapeHtml(s.codigo) : s.codigo)+' · ' : ''}${s.tempo ? String(s.tempo).replace('.', ',')+'h' : 'Sem hora informada'}</small></span><span class="detalhe-valor">${formatter.format(s.valorFinal || 0)}</span></div>`;
+                financeiroDetalhe += `<div class="detalhe-row"><span>${UOS.escapeHtml ? UOS.escapeHtml(s.desc) : s.desc}${badgeAprovacao(s)}<br><small style="color:var(--text-muted);font-family:var(--ff-mono);">${s.tempo ? String(s.tempo).replace('.', ',')+'h' : 'Sem hora informada'}</small></span><span class="detalhe-valor">${formatter.format(s.valorFinal || 0)}</span></div>`;
             });
         }
         if (pecas.length > 0) {

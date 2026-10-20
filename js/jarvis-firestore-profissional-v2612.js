@@ -60,6 +60,7 @@
 
   function applyTeamMessages(snap) {
     J().chatEquipeMsgs = RT().mergeLists(RT().docs(snap), fullTeamMessages).sort((a, b) => num(a.ts) - num(b.ts));
+    W.OSOperacional.receiveConflicts(J().chatEquipeMsgs);
     W.renderChatEquipeLista?.();
     if (J().chatEquipeAtivo) W.renderChatEquipeMsgs?.(J().chatEquipeAtivo);
   }

@@ -2618,6 +2618,7 @@ window.atualizarEquipeMecanicosOS = function() {
 
 
 window.prepOS = function(mode, id = null) {
+  window.OSOperacional.open(null);
   window._osSessaoReabertura = null;
   ['osId', 'osPlaca', 'osPlacaView', 'osPrefixo', 'osVeiculo', 'osCliente', 'osCelular', 'osCpf', 'osDiagnostico', 'osRelato', 'osDescricao', 'chkObs', 'osKm', 'osData', 'osPrisma'].forEach(f => { if ($(f)) $(f).value = ''; });
   // Limpa apenas os marcadores de vínculo da O.S. anterior. Eles serão definidos novamente
@@ -2844,6 +2845,7 @@ window.prepOS = function(mode, id = null) {
         window.renderTimelineOS();
     }
     window.renderObservacoesEquipeJarvisOS?.(o);
+    window.OSOperacional.open({db,session:J,kind:'jarvis',os:o,displayValue:(field,value)=>field==='status'?(STATUS_MAP_LEGACY[value]||value):value});
     
     if($('osMediaArray')) {
         $('osMediaArray').value = JSON.stringify(window.osFotos);
@@ -4492,7 +4494,8 @@ window.salvarOS = async function() {
   const osId = $v('osId');
   const osRefSalvar = osId ? db.collection('ordens_servico').doc(osId) : db.collection('ordens_servico').doc();
   const targetOsId = osRefSalvar.id;
-  const batchSalvarOS = db.batch();
+  const baseConcorrenciaOS = window.OSOperacional.base(osId) || window.OSOperacional.clone((J.os||[]).find(o=>o.id===osId)||{});
+  const batchSalvarOS = window.OSOperacional.batch(db,osRefSalvar,baseConcorrenciaOS,{session:J,kind:'jarvis',isSentinel:isFirestoreSentinelOS,prepare:os=>({comissoesCalculadas:['Pronto','Entregue','pronto','entregue','Concluido','Faturado','Pronto_Retirada'].includes(os.status)?calcularComissoesPorMecanicoOS(os,(OSU().buildBudgetItems(os,(J.clientes||[]).find(c=>c.id===os.clienteId))||[]).filter(i=>i.tipo==='peca').reduce((sum,i)=>sum+numBR(i.valorFinal),0)):[]}),confirm:os=>{const i=J.os.findIndex(o=>o.id===os.id);if(i>=0)J.os[i]=os;}});
   let operacoesBatchSalvarOS = 0;
   const auditoriasFinanceiroDepoisCommitOS = [];
   const queueFinanceiroAddOS = dados => {
@@ -4647,7 +4650,7 @@ window.salvarOS = async function() {
     return;
   }
 
-  const _oldOSProtecaoPecas = osId ? (window.J?.os || []).find(x => x.id === osId) : null;
+  const _oldOSProtecaoPecas = osId ? baseConcorrenciaOS : null;
   const _contextoProtecaoPecas = osContextoClienteAtualOS(_oldOSProtecaoPecas || {});
   const _protegerPecasReaisNoOrcamento = osClienteOficialSeguroOS(_contextoProtecaoPecas);
 
@@ -4970,7 +4973,7 @@ window.salvarOS = async function() {
   }
   // ───────────────────────────────────────────────────────────────────
 
-  const oldOSParaAprovacao = osId ? (J.os.find(x => x.id === osId) || {}) : {};
+  const oldOSParaAprovacao = osId ? baseConcorrenciaOS : {};
   const statusPedeAprovacao = ['Aprovado', 'Andamento'].includes(payload.status);
   const reabrindoParaEdicaoOS = !!(osId && statusReabreEdicaoOrcamentoOS(payload.status) &&
     !statusReabreEdicaoOrcamentoOS(oldOSParaAprovacao.status) &&
@@ -5008,7 +5011,7 @@ window.salvarOS = async function() {
       payload.totalAprovado = oldOSParaAprovacao.totalAprovado;
       payload.aprovacao = oldOSParaAprovacao.aprovacao;
       payload.itensAprovados = oldOSParaAprovacao.itensAprovados || oldOSParaAprovacao.aprovacao?.itens?.map(i => i.key) || [];
-      if (oldOSParaAprovacao.execucaoItens) payload.execucaoItens = oldOSParaAprovacao.execucaoItens;
+      // Execução é gravada exclusivamente pelo fluxo transacional dos itens.
       payload.aprovacaoAtiva = oldOSParaAprovacao.aprovacaoAtiva !== false;
   }
 
@@ -5051,6 +5054,7 @@ window.salvarOS = async function() {
       const atuais=new Map(baseDepois.map(i=>[i.key,i]));
       const aprovacaoAtual=payload.aprovacao||oldOSParaAprovacao.aprovacao||{};
       payload.totalAprovado=novoTotal;
+      payload.aprovacaoOriginal = oldOSParaAprovacao.aprovacaoOriginal || window.OSOperacional.clone(oldOSParaAprovacao.aprovacao);
       payload.aprovacao={...aprovacaoAtual,totalAprovado:novoTotal,
         itens:(aprovacaoAtual.itens||[]).map(i=>atuais.get(i.key)||i)};
     }
@@ -5060,6 +5064,7 @@ window.salvarOS = async function() {
   const funcUser = J.nome || 'Mecânico/Gestor';
   let tl = [];
   let dispararAvisoEntrega = false;
+  let dispararAvisoOrcamento = false;
   let dispararAvisoPronto = false;
   let motivoStatusSalvarOS = '';
   let finalizacaoSalvarOS = null;
@@ -5079,6 +5084,7 @@ window.salvarOS = async function() {
       usuarioNome: usuarioAuditoriaOS.nome,
       usuarioPerfil: usuarioAuditoriaOS.perfil,
       osId: targetOsId,
+      interno:true,visivelCliente:false,
       placa: payload.placa || _oldOSPreservar?.placa || ''
   }, extra || {});
   const preservarMetaLancamentoOS = (novo, antigo, tipo) => {
@@ -5098,12 +5104,13 @@ window.salvarOS = async function() {
   };
 
   if (osId) {
-      const oldOS = J.os.find(x => x.id === osId) || {};
+      const oldOS = baseConcorrenciaOS;
       tl = normalizarTimelineOS(oldOS.timeline && (Array.isArray(oldOS.timeline) || typeof oldOS.timeline === 'object') ? oldOS.timeline : $('osTimelineData')?.value);
       let registouAlgo = false;
       let alterouCampoAuditavel = false;
-      const addAuditoriaCampo = acao => {
+      const addAuditoriaCampo = (acao, extra = {}) => {
           auditoriaGeralOS.push(acao);
+          tl.push(eventoEstruturadoOS(extra.campo?'alteracao_campo_os':'alteracao_os',acao,{...extra,interno:true,visivelCliente:false}));
           alterouCampoAuditavel = true;
       };
       const fmtAudit = v => {
@@ -5115,7 +5122,7 @@ window.salvarOS = async function() {
       const auditCampoSeMudou = (key, label) => {
           if (!Object.prototype.hasOwnProperty.call(payload, key)) return;
           if (normAudit(oldOS[key]) !== normAudit(payload[key])) {
-              addAuditoriaCampo(`${label}: "${fmtAudit(oldOS[key])}" -> "${fmtAudit(payload[key])}"`);
+              addAuditoriaCampo(`${label}: "${fmtAudit(oldOS[key])}" -> "${fmtAudit(payload[key])}"`,{campo:key,rotulo:label,valorAnterior:oldOS[key]??null,valorNovo:payload[key]??null});
           }
       };
 
@@ -5141,12 +5148,7 @@ window.salvarOS = async function() {
           
           // No Jarvis, gestor/admin pode marcar Pronto e abrir WhatsApp ao cliente.
           // Nao gera mensagem fingindo origem do mecanico; equipe.html cuida desse aviso.
-          if (payload.status === 'Orcamento_Enviado' && oldOS.status !== 'Orcamento_Enviado') {
-              setTimeout(() => {
-                  window.registrarAvisoClienteCRMOS?.(osId, 'Orcamento_Enviado', { origem: 'salvar_os', osPatch: payload });
-                  if (usuarioPodeDispararWppProntoOS()) window.dispararAvisoEntregaAutomatico?.(osId, 'Orcamento_Enviado');
-              }, 500);
-          }
+          if (payload.status === 'Orcamento_Enviado' && oldOS.status !== 'Orcamento_Enviado') dispararAvisoOrcamento = true;
           if (payload.status === 'Pronto' && oldOS.status !== 'Pronto') {
               payload.prontoEm = new Date().toISOString();
               payload.prontoPor = funcUser;
@@ -5270,7 +5272,7 @@ window.salvarOS = async function() {
               registouAlgo = true;
           } else {
               if (numBR(oldP.qtd || 0) !== numBR(newP.qtd || 0) || numBR(oldP.venda || 0) !== numBR(newP.venda || 0)) {
-                  addAuditoriaCampo(`Alterou peca "${newP.desc}" para Qtd: ${newP.qtd} / Valor: R$ ${(newP.venda||0).toFixed(2).replace('.', ',')}`);
+                  addAuditoriaCampo(`Alterou peça "${newP.desc}" de Qtd: ${oldP.qtd} / Valor: R$ ${numBR(oldP.venda||0).toFixed(2).replace('.', ',')} para Qtd: ${newP.qtd} / Valor: R$ ${numBR(newP.venda||0).toFixed(2).replace('.', ',')}`);
               }
           }
       });
@@ -5334,7 +5336,7 @@ window.salvarOS = async function() {
                   if ((newS[k] == null || newS[k] === '') && oldS[k] != null && oldS[k] !== '') newS[k] = oldS[k];
               });
               if (numBR(oldS.valor || 0) !== numBR(newS.valor || 0)) {
-                  addAuditoriaCampo(`Alterou valor do servico "${newS.desc}" para R$ ${(newS.valor||0).toFixed(2).replace('.', ',')}`);
+                  addAuditoriaCampo(`Alterou valor do serviço "${newS.desc}" de R$ ${numBR(oldS.valor||0).toFixed(2).replace('.', ',')} para R$ ${numBR(newS.valor||0).toFixed(2).replace('.', ',')}`);
               }
               if (numBR(oldS.tempo || 0) !== numBR(newS.tempo || 0)) {
                   addAuditoriaCampo(`Alterou horas/TMO do servico "${newS.desc}" de ${String(oldS.tempo || 0).replace('.', ',')}h para ${String(newS.tempo || 0).replace('.', ',')}h`);
@@ -5394,12 +5396,8 @@ window.salvarOS = async function() {
       // O evento de foto/vídeo excluído é gravado junto com a OS no commit,
       // após conferir o anexo exato no documento atual do Firestore.
 
-      // Fallback operacional: se nada entrou no histórico da OS e também não foi
-      // alteração de campo auditável, mantém um registro mínimo de edição.
-      if (!registouAlgo && !alterouCampoAuditavel) {
-          tl.push({ dt: new Date().toISOString(), user: funcUser, acao: `Atualizou os detalhes gerais da Ordem de Serviço.` });
-      }
-      
+      // Não criar uma ação genérica quando não houve alteração auditável.
+
   } else {
       // Criação de Nova O.S. — preserva o evento legado e acrescenta auditoria estruturada dos dados iniciais.
       tl = normalizarTimelineOS($('osTimelineData')?.value);
@@ -5951,7 +5949,7 @@ window.salvarOS = async function() {
   else batchSalvarOS.set(osRefSalvar, payloadFirestore);
   operacoesBatchSalvarOS += 1;
 
-  await batchSalvarOS.commit();
+  try { const resultado=await batchSalvarOS.commit();Object.assign(payload,resultado.os); } catch(e) { window.toast?.('O.S. não salva: '+e.message,'err'); return; }
   // Só limpa após persistência confirmada; falha de gravação não perde contexto.
   if (window._osSessaoReabertura?.osId === osId) window._osSessaoReabertura = null;
   const savedOsId = targetOsId;
@@ -5966,7 +5964,7 @@ window.salvarOS = async function() {
   }
 
   const tarefasPosGravacaoOS = [
-    reconciliarComissoesOS(savedOsId, payload, comissoesOSCalculadas)
+    reconciliarComissoesOS(savedOsId, payload, payload.comissoesCalculadas || comissoesOSCalculadas)
   ];
   if (auditoriasFinanceiroDepoisCommitOS.length) {
     tarefasPosGravacaoOS.push(Promise.allSettled(
@@ -5998,6 +5996,10 @@ window.salvarOS = async function() {
     window._salvarContinuarOSAtivo = false;
   }
 
+  if (dispararAvisoOrcamento && savedOsId) {
+    window.registrarAvisoClienteCRMOS?.(savedOsId, 'Orcamento_Enviado', { origem:'salvar_os',osPatch:payload });
+    if(usuarioPodeDispararWppProntoOS())window.dispararAvisoEntregaAutomatico?.(savedOsId,'Orcamento_Enviado');
+  }
   // Disparo de WhatsApp quando o gestor/admin confirmar que esta pronto.
   if (dispararAvisoPronto && savedOsId) {
       setTimeout(() => {
@@ -6560,7 +6562,7 @@ window.renderTimelineOS = function() {
   if(!$('osTimeline')) return;
   const tl = normalizarTimelineOS($('osTimelineData')?.value);
   const visiveis = osSegredo177AtivoOS() ? tl : tl.filter(e => !osEventoPecaRealProtegidoOS(e));
-  $('osTimeline').innerHTML = [...visiveis].reverse().map(e => `<div class="tl-item"><div class="tl-date">${dtHrBr(e.dt)}</div><div class="tl-user">${e.user}</div><div class="tl-action">${e.acao}</div></div>`).join('');
+  $('osTimeline').innerHTML = [...visiveis].reverse().map(e => `<div class="tl-item"><div class="tl-date">${dtHrBr(e.dt)}</div><div class="tl-user">${escOS(e.user)}</div><div class="tl-action">${escOS(e.acao)}</div></div>`).join('');
 };
 
 
@@ -8193,58 +8195,19 @@ window.baixarEstoquePecasReais = async function(osId, antigas, novas) {
 };
 
 function statusOptionsExecOS(tipo, atual) {
-  const opts = tipo === 'peca'
-    ? [
-        ['pendente', 'Pendente'],
-        ['trocada', 'Peça trocada/executada'],
-        ['nao_encontrada', 'Peça não encontrada'],
-        ['nao_trocada', 'Não trocada']
-      ]
-    : [
-        ['pendente', 'Pendente'],
-        ['em_execucao', 'Em execução'],
-        ['executado', 'Serviço executado'],
-        ['nao_executado', 'Não executado']
-      ];
-  return opts.map(([value, label]) => `<option value="${value}" ${value === atual ? 'selected' : ''}>${label}</option>`).join('');
+  const O=window.OSOperacional;
+  return Object.entries(O.labels).filter(([st])=>tipo==='peca'||!['trocada','nao_encontrada','nao_trocada'].includes(st))
+    .map(([value,label])=>`<option value="${value}" ${value===O.normalize(atual)?'selected':''}>${label}</option>`).join('');
 }
 
 window.salvarExecucaoAprovadosOS = async function(osId) {
-  if (!osId) { window.toast?.('Salve a O.S. antes de marcar execução.', 'warn'); return; }
-  const osAtual = (window.J?.os || []).find(o => o.id === osId) || {};
-  const execucaoItens = { ...(osAtual.execucaoItens || {}) };
-  const rows = document.querySelectorAll('#resumoAprovacaoOS .execucao-aprovado-row');
-  rows.forEach(row => {
-    const key = row.dataset.key;
-    if (!key) return;
-    const mecIdExecucao = row.querySelector('.exec-mec')?.value || row.dataset.mecId || '';
-    const mecExecucao = snapshotMecanicoOS(mecIdExecucao);
-    execucaoItens[key] = {
-      key,
-      tipo: row.dataset.tipo || '',
-      status: row.querySelector('.exec-status')?.value || 'pendente',
-      obs: row.querySelector('.exec-obs')?.value?.trim() || '',
-      mecId: mecIdExecucao,
-      mecNome: mecExecucao.nome || '',
-      responsavelId: mecIdExecucao,
-      responsavelNome: mecExecucao.nome || '',
-      usuario: window.J?.nome || 'Gestor',
-      atualizadoPorId: window.J?.fid || window.J?.uid || '',
-      updatedAt: new Date().toISOString()
-    };
-  });
-  const timeline = Array.isArray(osAtual.timeline) ? osAtual.timeline.slice() : [];
-  timeline.push({
-    dt: new Date().toISOString(),
-    user: window.J?.nome || 'Gestor',
-    acao: `Atualizou execução interna de ${rows.length} item(ns) aprovado(s).`
-  });
-  await db.collection('ordens_servico').doc(osId).update(limparUndefinedFirestoreOS({
-    execucaoItens,
-    timeline,
-    updatedAt: new Date().toISOString()
-  }));
-  window.toast?.('Execução interna salva.', 'ok');
+  try {
+    return await window.OSOperacional.saveExecution({db,session:J,osId,kind:'jarvis',
+      base:window.OSOperacional.executionBase(osId)||(J.os||[]).find(o=>o.id===osId),
+      resolveName:id=>snapshotMecanicoOS(id).nome||'',
+      rows:[...document.querySelectorAll('#resumoAprovacaoOS .execucao-aprovado-row')],
+      confirm:os=>{const i=J.os.findIndex(o=>o.id===osId);if(i>=0)J.os[i]=os;window.aplicarMarcadoresAprovacaoOS(os);}});
+  }catch(e){window.toast?.('Execução não salva: '+e.message,'err');}
 };
 
 function cotacoesOSMap(os) {
@@ -8635,7 +8598,7 @@ window.aplicarMarcadoresAprovacaoOS = function(os) {
           const seletorMec = String(it.tipo || '').toLowerCase().includes('serv')
             ? `<select class="j-select exec-mec" style="font-size:.70rem;">${opcoesResponsavelServicoOS(mecIdItem)}</select>`
             : '<span></span>';
-          return `<div class="execucao-aprovado-row" data-key="${escOS(it.key)}" data-tipo="${escOS(it.tipo)}" data-mec-id="${escOS(mecIdItem)}" style="display:grid;grid-template-columns:minmax(230px,1fr) minmax(150px,190px) 180px minmax(200px,1fr);gap:7px;align-items:center;background:rgba(0,0,0,.16);border:1px solid rgba(255,255,255,.10);border-radius:3px;padding:8px;">
+          return `<div class="execucao-aprovado-row" data-key="${escOS(it.key)}" data-tipo="${escOS(it.tipo)}" data-mec-id="${escOS(mecIdItem)}" data-status-inicial="${escOS(window.OSOperacional.normalize(exec[it.key]?.status))}" data-obs-inicial="${escOS(exec[it.key]?.obs || '')}" style="display:grid;grid-template-columns:minmax(230px,1fr) minmax(150px,190px) 180px minmax(200px,1fr);gap:7px;align-items:center;background:rgba(0,0,0,.16);border:1px solid rgba(255,255,255,.10);border-radius:3px;padding:8px;">
             <div style="font-size:.75rem;color:var(--text);"><b>${escOS(it.labelTipo || it.tipo)}</b> ${it.codigo ? '[' + escOS(it.codigo) + '] ' : ''}${escOS(it.desc || '-')}${it.tempo ? `<br><small style="color:var(--muted);">TMO ${String(it.tempo).replace('.', ',')}h</small>` : ''}</div>
             ${seletorMec}
             <select class="j-select exec-status" style="font-size:.72rem;">${statusOptionsExecOS(it.tipo, e.status || 'pendente')}</select>

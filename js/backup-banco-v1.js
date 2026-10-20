@@ -1,4 +1,4 @@
-/* S.O.S. VALÊNCIO — BACKUP FIRESTORE V1
+/* S.O.S. VALÊNCIO — BACKUP FIRESTORE V1 / V2
  * Escopo independente. Nunca altera coleções no modo exportar/analisar.
  * Restaurar: upsert por ID via transações e merge, sem delete.
  */
@@ -58,6 +58,8 @@ function disable(flag){
  $('btnAnalisar').disabled=flag||!db;
  refreshRestoreButton();
  $('btnCancelar').disabled=flag;
+ if($('btnRetomar'))$('btnRetomar').disabled=flag||!db;
+ if($('btnPausar'))$('btnPausar').disabled=!flag;
 }
 function report(data){
  $('resultado').hidden=false;
@@ -280,9 +282,12 @@ async function preview(){
  plan=null;$('previsao').hidden=true;$('resultado').hidden=true;
  const file=$('arquivo').files?.[0],password=$('senhaImportar').value;
  if(!file)throw Error('Selecione um arquivo de backup.');
- if(file.size<=0||file.size>FILE_LIMIT)throw Error('Arquivo vazio ou acima de 160 MB. Nenhum dado foi alterado.');
+ if(file.size<=0||file.size>V2_FILE_LIMIT)throw Error('Arquivo vazio ou acima de 2 GB. Nenhum dado foi alterado.');
  if(!password)throw Error('Informe a senha do arquivo.');
  progress(2,'Abrindo arquivo criptografado…');
+ const first=await file.slice(0,4096).text();
+ if(/"version"\s*:\s*2(?:,|})/.test(first.split('\n')[0])){await previewV2(file,password);$('senhaImportar').value='';return;}
+ if(file.size>FILE_LIMIT)throw Error('Backup V1 acima de 160 MB. Use um backup novo V2.');
  const wrapper=JSON.parse(await file.text());
  const backup=await decrypt(wrapper,password);
  canPrepare(backup);
@@ -348,23 +353,27 @@ async function restore(){
  if(source.tenantId!==tenant||source.projectId!==db.app.options.projectId)throw Error('Backup de outra oficina/projeto.');
  const items=plan.writeOps;
  const result={criados:0,atualizados:0,inalterados:plan.summary.igual,protegidos:plan.summary.protegido,conflitos:0,falhas:0,detalhes:[]};
- const processed=await workers(items,3,async item=>{
+ const restoreItem=async item=>{
   try{
    const ref=db.doc(item.path);
-   const decoded=decode(item.data);
+   const encoded=item.data || (await importBlock(item.block))[item.index].data;
+   const decoded=decode(encoded);
    ensureTenant(item.path,decoded);
    const outcome=await db.runTransaction(async tx=>{
     const current=await tx.get(ref);
-    if(current.exists&&current.data()?.tenantId!==tenant)return 'bloqueado';
+    if(item.path.split('/').length===4){const parent=await tx.get(db.doc(item.path.split('/').slice(0,2).join('/')));if(!parent.exists||parent.data()?.tenantId!==tenant)return 'bloqueado';}
+    if(current.exists && ((item.path.split('/').length===2&&current.data()?.tenantId!==tenant)||(current.data()?.tenantId!=null&&current.data().tenantId!==tenant)))return 'bloqueado';
     if(item.estado==='novo'&&current.exists)return 'conflito';
-    if(item.estado==='atualizar'&&(!current.exists||fingerprint(encode(current.data()))!==item.before))return 'conflito';
+    if(item.estado==='atualizar'&&(!current.exists||(item.hashBefore?await hashData(encode(current.data())):fingerprint(encode(current.data())))!==item.before))return 'conflito';
     if(isImmutable(item.path)&&current.exists)return 'bloqueado';
     tx.set(ref,decoded,{merge:true});
     return item.estado;
    });
    return {path:item.path,status:outcome};
   }catch(e){return {path:item.path,status:'falha',error:msg(e)};}
- });
+ };
+ const roots=items.filter(i=>i.path.split('/').length===2),children=items.filter(i=>i.path.split('/').length===4);
+ const processed=[...await workers(roots,3,restoreItem),...await workers(children,3,restoreItem)];
  for(const p of processed){
   if(p.error||p.status==='falha'){result.falhas++;result.detalhes.push(p.path+' — '+(p.error||'Falha na escrita'));}
   else if(p.status==='conflito'||p.status==='bloqueado'){result.conflitos++;result.detalhes.push(p.path+' — alterado após a prévia, ou bloqueado');}
@@ -374,7 +383,7 @@ async function restore(){
  progress(100,'Restauração concluída: '+result.criados+' novos, '+result.atualizados+' atualizados, '+result.falhas+' falhas, '+result.conflitos+' conflitos.');
  report({resultado:result.falhas||result.conflitos?'RESTAURAÇÃO PARCIAL — confira os registros não aplicados':'RESTAURAÇÃO FINALIZADA — sem exclusões',...result,
   aviso:'Nenhum documento ausente do backup foi excluído. Documentos atuais com alteração posterior à prévia foram preservados.'});
- plan=null;source=null;$('previsao').hidden=true;$('confirmar').value='';$('arquivo').value='';
+ plan=null;source=null;importV2=null;$('previsao').hidden=true;$('confirmar').value='';$('arquivo').value='';
 }
 async function operation(fn){
  if(busy)return;
@@ -382,6 +391,236 @@ async function operation(fn){
  catch(e){setStatus(msg(e),true);report('Operação interrompida: '+msg(e));}
  finally{disable(false);}
 }
+// V2: páginas pequenas, blocos autenticados, checkpoint criptografado e leitura em fluxo.
+// Os checkpoints são locais ao navegador. A senha/chave nunca é gravada no IndexedDB.
+const V2_PAGE=50,V2_BLOCK=768*1024,V2_FILE_LIMIT=2*1024*1024*1024,V2_DOC_LIMIT=1000000;
+let pauseRequested=false,checkpointDB=null,importV2=null;
+const runKey=()=>db.app.options.projectId+':'+tenant;
+async function localDB(){
+ if(checkpointDB)return checkpointDB;
+ if(!window.indexedDB)throw Error('O navegador não oferece armazenamento local para retomar o backup.');
+ checkpointDB=await new Promise((resolve,reject)=>{
+  const r=indexedDB.open('sos-backup-checkpoints-v2',1);
+  r.onupgradeneeded=()=>{r.result.createObjectStore('runs');r.result.createObjectStore('blocks');};
+  r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);
+ });
+ return checkpointDB;
+}
+async function localGet(store,key){const d=await localDB();return new Promise((resolve,reject)=>{const r=d.transaction(store,'readonly').objectStore(store).get(key);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
+async function localCommit(key,state,frames){
+ const d=await localDB();await new Promise((resolve,reject)=>{
+  const tx=d.transaction(['runs','blocks'],'readwrite');
+  for(const f of frames)tx.objectStore('blocks').put(f,state.id+':'+String(f.n).padStart(9,'0'));
+  tx.objectStore('runs').put(state,key);
+  tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('Falha no checkpoint; a página não foi marcada como concluída.'));
+ });
+}
+async function localDiscard(key){
+ const state=await localGet('runs',key);if(!state)return;
+ const d=await localDB();await new Promise((resolve,reject)=>{
+  const tx=d.transaction(['runs','blocks'],'readwrite');tx.objectStore('runs').delete(key);
+  const range=IDBKeyRange.bound(state.id+':',state.id+':\uffff');tx.objectStore('blocks').delete(range);
+  tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);
+ });
+}
+const hash=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),n=>n.toString(16).padStart(2,'0')).join('');
+const hashData=encoded=>hash(new TextEncoder().encode(fingerprint(encoded)));
+async function transformBytes(bytes,compress){
+ const C=compress?window.CompressionStream:window.DecompressionStream;
+ if(!C)throw Error('Este navegador não consegue '+(compress?'compactar':'abrir a compactação deste backup')+'.');
+ const reader=new Blob([bytes]).stream().pipeThrough(new C('gzip')).getReader(),parts=[];let length=0;
+ try{while(true){const r=await reader.read();if(r.done)break;length+=r.value.length;if(length>4*1024*1024)throw Error('Bloco descompactado excede o limite seguro.');parts.push(r.value);}}
+ catch(e){await reader.cancel().catch(()=>{});throw e;}
+ const out=new Uint8Array(length);let at=0;for(const p of parts){out.set(p,at);at+=p.length;}return out;
+}
+const aad=(header,type,n)=>new TextEncoder().encode(JSON.stringify(header)+'|'+type+'|'+n);
+async function sealV2(data,key,header,type,n){
+ let bytes=new TextEncoder().encode(JSON.stringify(data));
+ if(header.compression==='gzip')bytes=await transformBytes(bytes,true);
+ const iv=crypto.getRandomValues(new Uint8Array(12));
+ const cipher=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:aad(header,type,n)},key,bytes));
+ return {type,n,iv:toB64(iv),ciphertext:toB64(cipher),sha256:await hash(cipher)};
+}
+async function openV2(frame,key,header){
+ if(!frame||!['block','manifest'].includes(frame.type)||!Number.isInteger(frame.n)||typeof frame.ciphertext!=='string'||frame.ciphertext.length>6*1024*1024)throw Error('Bloco de backup inválido.');
+ const cipher=fromB64(frame.ciphertext),iv=fromB64(frame.iv);
+ if(iv.length!==12||await hash(cipher)!==frame.sha256)throw Error('Verificação de integridade falhou no bloco '+frame.n+'.');
+ let bytes;
+ try{bytes=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv,additionalData:aad(header,frame.type,frame.n)},key,cipher));}
+ catch(e){throw Error('Senha incorreta ou bloco adulterado: '+frame.n+'.');}
+ if(header.compression==='gzip')bytes=await transformBytes(bytes,false);
+ if(bytes.length>4*1024*1024)throw Error('Bloco acima do tamanho seguro.');
+ return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+}
+async function readServer(target,label){
+ for(let attempt=0;attempt<3;attempt++){
+  let timer;
+  try{return await Promise.race([target.get({source:'server'}),new Promise((_,reject)=>{timer=setTimeout(()=>{const e=Error('A leitura demorou demais em '+label+'. O checkpoint anterior foi preservado para retomar.');e.code='backup-timeout';reject(e);},45000);})]);}
+  catch(e){if(!['unavailable','resource-exhausted','aborted'].includes(String(e.code||'').replace('firestore/',''))||attempt===2)throw e;await new Promise(r=>setTimeout(r,500*(attempt+1)));}
+  finally{clearTimeout(timer);}
+ }
+}
+function queryTask(path,filterTenant,cursor=null){return {path,filterTenant,cursor};}
+async function readTask(task){
+ if(task.document){const snap=await readServer(db.doc(task.path),task.path);return {docs:snap.exists?[snap]:[],next:[]};}
+ let q=db.collection(task.path);if(task.filterTenant)q=q.where('tenantId','==',tenant);
+ q=q.orderBy(firebase.firestore.FieldPath.documentId()).limit(V2_PAGE);if(task.cursor)q=q.startAfter(task.cursor);
+ const snap=await readServer(q,task.path),next=[];
+ if(snap.size===V2_PAGE)next.push(queryTask(task.path,task.filterTenant,snap.docs.at(-1).id));
+ if(task.path.split('/').length===1)for(const d of snap.docs)for(const name of SUBCOLLECTIONS[task.path]||[])next.push(queryTask(d.ref.path+'/'+name,CHILD_TENANT_FILTER.has(name)));
+ return {docs:snap.docs,next};
+}
+async function downloadV2(state,key){
+ const manifest=state.manifest;
+ if(!manifest||!state.finished)throw Error('Backup ainda incompleto. Use retomar.');
+ // Blob recebe os blocos individualmente, sem criar uma string gigante.
+ const parts=[JSON.stringify(state.header)+'\n'];
+ for(let n=0;n<state.blocks;n++){
+  const f=await localGet('blocks',state.id+':'+String(n).padStart(9,'0'));if(!f)throw Error('Checkpoint incompleto: falta bloco '+n+'.');
+  const cipher=fromB64(f.ciphertext);if(await hash(cipher)!==f.sha256)throw Error('Bloco local danificado: '+n+'.');
+  parts.push(JSON.stringify(f)+'\n');if(n%20===0){progress(96,'Preparando arquivo • bloco '+(n+1)+'/'+state.blocks);await sleep();}
+ }
+ parts.push(JSON.stringify(manifest)+'\n');
+ const blob=new Blob(parts,{type:'application/x-ndjson'});
+ if(blob.size>V2_FILE_LIMIT)throw Error('Arquivo excede 2 GB; use uma exportação administrativa no servidor. O checkpoint foi preservado.');
+ if(lastDownloadURL)URL.revokeObjectURL(lastDownloadURL);lastDownloadURL=URL.createObjectURL(blob);
+ const holder=$('downloadHolder');holder.replaceChildren();const a=document.createElement('a');
+ a.download='SOS_VALENCIO_BACKUP_'+state.header.startedAt.replace(/[:.]/g,'-')+'.sosbackup';a.href=lastDownloadURL;a.textContent='⬇ BAIXAR BACKUP GERADO';
+ a.style.cssText='display:block;margin-top:14px;padding:13px;text-align:center;background:#17566f;border:1px solid #28c69e;color:white;border-radius:10px;font-weight:800;text-decoration:none';holder.appendChild(a);a.click();
+ progress(100,'Backup preparado: '+numFmt(state.count)+' documentos • '+state.blocks+' blocos • '+numFmt(blob.size)+' bytes.');
+ report({resultado:'Backup completo do inventário preparado; confirme o download no aparelho.',versao:2,documentos:state.count,blocos:state.blocks,colecoes:state.counts,inicio:state.header.startedAt,fim:state.finished,
+  observacoes:['Exportação por páginas durante o intervalo informado; não é uma fotografia atômica do banco.','Não inclui arquivos externos/Storage nem contas Authentication.','Cópia local criptografada mantida para baixar novamente; a senha não é armazenada.']});
+}
+async function exportV2(resume=false){
+ const password=$('senhaExportar').value,password2=$('senhaExportar2').value;
+ if(!/^[0-9]{4}$/.test(password)||password!==password2)throw Error('Informe os 4 dígitos e confirme a mesma senha. Para retomar, use a senha do backup iniciado.');
+ pauseRequested=false;let state=await localGet('runs',runKey()),key;
+ if(resume){
+  if(!state)throw Error('Não existe backup local para retomar neste navegador.');
+  key=await derive(password,fromB64(state.header.salt),KDF_ITERATIONS);
+  const check=await openV2(state.verifier,key,state.header);if(check.runId!==state.id)throw Error('Checkpoint inválido.');
+ }else{
+  if(state&&!confirm('Existe um backup local '+(state.finished?'concluído':'incompleto')+'. Iniciar outro substitui esse checkpoint. Continuar?'))return;
+  if(state)await localDiscard(runKey());
+  const salt=crypto.getRandomValues(new Uint8Array(16));key=await derive(password,salt,KDF_ITERATIONS);
+  const id=crypto.randomUUID();const header={format:'SOS_VALENCIO_BACKUP_ENCRYPTED',version:2,scope:'TENANT_ONLY',projectId:db.app.options.projectId,tenantId:tenant,
+   alg:'AES-256-GCM',kdf:'PBKDF2-SHA256',iterations:KDF_ITERATIONS,salt:toB64(salt),runId:id,startedAt:new Date().toISOString(),compression:window.CompressionStream?'gzip':'none'};
+  const queue=[...COLLECTIONS.map(c=>queryTask(c,true)),{path:'oficinas/'+tenant,document:true}].reverse();
+  state={id,header,queue,count:0,counts:{},blocks:0,chain:'',reads:0};
+  state.verifier=await sealV2({runId:id},key,header,'manifest',-1);await localCommit(runKey(),state,[]);
+ }
+ if(state.header.projectId!==db.app.options.projectId||state.header.tenantId!==tenant)throw Error('Checkpoint de outra oficina/projeto.');
+ $('btnPausar').disabled=false;
+ while(state.queue.length){
+  if(pauseRequested){setStatus('Backup pausado com '+numFmt(state.count)+' documentos confirmados. Use Retomar neste navegador.');return;}
+  const taken=state.queue.slice(-2),rest=state.queue.slice(0,-taken.length);
+  progress(Math.min(94,Math.floor(94*state.count/(state.count+state.queue.length*V2_PAGE+1))),
+   'Lendo '+taken.map(t=>t.path).join(' · ')+' • '+numFmt(state.count)+' documentos • '+state.blocks+' blocos confirmados');
+  const results=await Promise.all(taken.map(readTask));
+  const next={...state,queue:rest,counts:{...state.counts},reads:state.reads+taken.length},frames=[];let pending=[],size=2;
+  async function flush(){if(!pending.length)return;const frame=await sealV2({documents:pending},key,state.header,'block',next.blocks);frames.push(frame);next.blocks++;next.chain=await hash(new TextEncoder().encode(next.chain+frame.sha256));pending=[];size=2;}
+  for(const result of results){
+   next.queue.push(...result.next);
+   for(const d of result.docs){
+    const value=d.data();ensureTenant(d.ref.path,value);const item={path:d.ref.path,data:encode(value)},length=new TextEncoder().encode(JSON.stringify(item)).length;
+    if(length>3*1024*1024)throw Error('Documento grande demais para um bloco: '+d.ref.path);
+    if(pending.length&&(size+length>V2_BLOCK||pending.length>=50))await flush();pending.push(item);size+=length;
+    next.count++;if(next.count>V2_DOC_LIMIT)throw Error('Limite de um milhão de registros atingido. Checkpoint mantido.');
+    const group=d.ref.path.split('/').filter((_,i)=>i%2===0).join('/');next.counts[group]=(next.counts[group]||0)+1;
+   }
+  }
+  await flush();await localCommit(runKey(),next,frames);state=next;await sleep();
+ }
+ if(!state.count)throw Error('Nenhum documento encontrado; backup não concluído.');
+ if(!state.finished){
+  state={...state,finished:new Date().toISOString()};
+  state.manifest=await sealV2({count:state.count,blocks:state.blocks,chain:state.chain,counts:state.counts,inventory:[...COLLECTIONS,'oficinas'],subcollections:SUBCOLLECTIONS,
+   startedAt:state.header.startedAt,finishedAt:state.finished},key,state.header,'manifest',state.blocks);
+  await localCommit(runKey(),state,[]);
+ }
+ await downloadV2(state,key);$('senhaExportar').value='';$('senhaExportar2').value='';
+}
+async function* fileLines(file){
+ const reader=file.stream().getReader(),decoder=new TextDecoder('utf-8',{fatal:true});let pending='';
+ try{
+  while(true){const r=await reader.read();pending+=r.done?decoder.decode():decoder.decode(r.value,{stream:true});
+   let at;while((at=pending.indexOf('\n'))>=0){const line=pending.slice(0,at);pending=pending.slice(at+1);if(line.length>8*1024*1024)throw Error('Bloco de arquivo excessivamente grande.');if(line.trim())yield line;}
+   if(pending.length>8*1024*1024)throw Error('Linha de backup excessivamente grande.');if(r.done)break;
+  }
+  if(pending.trim())yield pending;
+ }finally{await reader.cancel().catch(()=>{});}
+}
+function validateHeaderV2(h){
+ if(h?.format!=='SOS_VALENCIO_BACKUP_ENCRYPTED'||h.version!==2||h.scope!=='TENANT_ONLY'||h.alg!=='AES-256-GCM'||h.kdf!=='PBKDF2-SHA256'||h.iterations!==KDF_ITERATIONS||!['gzip','none'].includes(h.compression)||typeof h.runId!=='string'||fromB64(h.salt).length!==16)throw Error('Cabeçalho V2 inválido.');
+ if(h.tenantId!==tenant||h.projectId!==db.app.options.projectId)throw Error('Backup de outra oficina/projeto.');
+}
+async function importBlock(n){
+ if(!importV2)throw Error('Arquivo V2 não está aberto. Analise novamente.');
+ if(importV2.cache.has(n))return importV2.cache.get(n);
+ const task=(async()=>{const frame=await localGet('blocks',importV2.id+':'+String(n).padStart(9,'0'));if(!frame)throw Error('Bloco importado ausente.');return (await openV2(frame,importV2.key,importV2.header)).documents;})();
+ importV2.cache.set(n,task);while(importV2.cache.size>6)importV2.cache.delete(importV2.cache.keys().next().value);return task;
+}
+async function previewV2(file,password){
+ if(file.size>V2_FILE_LIMIT)throw Error('Arquivo acima de 2 GB. Nenhum dado alterado.');
+ await localDiscard('import:'+runKey());
+ let header,key,seq=0,count=0,chain='',manifest=null;const paths=new Set(),counts={};
+ const id='import-'+crypto.randomUUID();
+ for await(const line of fileLines(file)){
+  const frame=JSON.parse(line);
+  if(!header){header=frame;validateHeaderV2(header);key=await derive(password,fromB64(header.salt),KDF_ITERATIONS);continue;}
+  if(manifest)throw Error('Há dados extras após o manifesto.');
+  if(frame.n!==seq)throw Error('Sequência incompleta ou duplicada no backup.');
+  const payload=await openV2(frame,key,header);
+  if(frame.type==='manifest'){manifest=payload;continue;}
+  if(!Array.isArray(payload.documents)||!payload.documents.length||payload.documents.length>50)throw Error('Contagem do bloco inválida.');
+  for(const item of payload.documents){
+   if(!item||paths.has(item.path))throw Error('Documento duplicado no backup.');ensureTenant(item.path,decode(item.data));paths.add(item.path);count++;
+   if(count>V2_DOC_LIMIT)throw Error('Limite de registros excedido.');const group=item.path.split('/').filter((_,i)=>i%2===0).join('/');counts[group]=(counts[group]||0)+1;
+  }
+  chain=await hash(new TextEncoder().encode(chain+frame.sha256));
+  await localCommit('import:'+runKey(),{id,blocks:seq+1},[frame]);seq++;
+  progress(2,'Autenticando arquivo • '+numFmt(count)+' documentos em '+seq+' blocos');await sleep();
+ }
+ if(!manifest||manifest.blocks!==seq||manifest.count!==count||manifest.chain!==chain||fingerprint(manifest.counts)!==fingerprint(counts))throw Error('Manifesto, contagem ou integridade não conferem. Nenhum dado alterado.');
+ if(fingerprint(manifest.inventory)!==fingerprint([...COLLECTIONS,'oficinas'])||fingerprint(manifest.subcollections)!==fingerprint(SUBCOLLECTIONS))throw Error('Inventário incompatível.');
+ importV2={id,header,key,cache:new Map()};
+ source={version:2,tenantId:tenant,projectId:header.projectId,createdAt:manifest.startedAt,finishedAt:manifest.finishedAt,count,paths};
+ const summary=counters(),byColl=new Map(),writeOps=[];let done=0;
+ for(let n=0;n<seq;n++){
+  const documents=await importBlock(n);
+  const results=await workers(documents,4,async(item,index)=>{
+   ensureTenant(item.path,decode(item.data));
+   if(isProtected(item.path))return {path:item.path,estado:'protegido'};
+   const snap=await readServer(db.doc(item.path),item.path);
+   if(snap.exists){
+    if(item.path.split('/').length===2&&snap.data()?.tenantId!==tenant)throw Error('Documento de outra oficina.');
+    if(isImmutable(item.path))return {path:item.path,estado:'protegido'};
+    const before=await hashData(encode(snap.data())),after=await hashData(item.data);
+    return {path:item.path,estado:before===after?'igual':'atualizar',before,hashBefore:true,block:n,index};
+   }
+   if(item.path.split('/').length===4){
+    const parentPath=item.path.split('/').slice(0,2).join('/'),parent=await readServer(db.doc(parentPath),parentPath);
+    if(parent.exists&&parent.data()?.tenantId!==tenant)throw Error('Documento pai de outra oficina.');
+    if(!parent.exists&&!paths.has(parentPath))throw Error('Documento pai ausente da oficina e do backup.');
+   }
+   return {path:item.path,estado:'novo',before:null,hashBefore:true,block:n,index};
+  });
+  const failed=results.filter(x=>x.error);if(failed.length)throw Error('Prévia interrompida: '+failed.slice(0,3).map(x=>x.path+' — '+x.error).join(' | '));
+  for(const r of results){summary[r.estado]++;const col=r.path.split('/').filter((_,i)=>i%2===0).join('/');if(!byColl.has(col))byColl.set(col,counters());byColl.get(col)[r.estado]++;if(['novo','atualizar'].includes(r.estado))writeOps.push(r);}
+  done+=documents.length;progress(4+90*done/count,'Conferindo '+numFmt(done)+' / '+numFmt(count)+' documentos');await sleep();
+ }
+ plan={writeOps,alteracoes:summary.novo+summary.atualizar,summary,byColl,previewAt:new Date().toISOString()};showPreview();
+}
+function showPreview(){
+ const {summary,byColl,alteracoes:changes}=plan;
+ $('origem').textContent='Oficina: '+tenant+' · Firebase: '+source.projectId+' · Criado em: '+source.createdAt+' · '+numFmt(source.count)+' documentos'+(source.finishedAt?' · término: '+source.finishedAt:'');
+ $('resumo').replaceChildren();for(const [key,label] of [['novo','Criar'],['atualizar','Atualizar'],['igual','Sem mudanças'],['protegido','Protegidos']]){const box=document.createElement('div');box.className='stat';const strong=document.createElement('strong');strong.textContent=numFmt(summary[key]);const sub=document.createElement('span');sub.textContent=label;box.append(strong,sub);$('resumo').appendChild(box);}
+ $('comparacao').replaceChildren();for(const [name,c] of byColl){const tr=document.createElement('tr');for(const x of [name,c.novo,c.atualizar,c.igual,c.protegido]){const td=document.createElement('td');td.textContent=String(x);tr.appendChild(td);}$('comparacao').appendChild(tr);}
+ $('avisos').textContent='Não haverá exclusões. '+summary.protegido+' documento(s) protegido(s) serão preservados. Registros alterados depois desta prévia serão bloqueados. Confira a origem e os totais antes de restaurar.';
+ $('fraseConfirmar').textContent='RESTAURAR '+changes;$('confirmar').value='';$('previsao').hidden=false;$('btnRestaurar').disabled=true;
+ progress(100,'Arquivo autenticado e prévia pronta. Nenhum documento foi gravado.');
+}
+
 function setup(){
  try{
   access();db=window.initFirebase();
@@ -394,12 +633,14 @@ function setup(){
   $('colecoes').textContent='Acesso indisponível.';
   return;
  }
- $('btnExportar').addEventListener('click',()=>operation(exportDB));
+ $('btnExportar').addEventListener('click',()=>operation(()=>exportV2(false)));
+ $('btnRetomar').addEventListener('click',()=>operation(()=>exportV2(true)));
+ $('btnPausar').addEventListener('click',()=>{pauseRequested=true;$('btnPausar').disabled=true;setStatus('Pausando após confirmar a página em andamento…');});
  $('btnAnalisar').addEventListener('click',()=>operation(preview));
  $('btnRestaurar').addEventListener('click',()=>operation(restore));
  $('confirmar').addEventListener('input',refreshRestoreButton);
  $('btnCancelar').addEventListener('click',()=>{plan=null;source=null;$('confirmar').value='';$('previsao').hidden=true;disable(false);setStatus('Importação cancelada. Nenhum documento foi alterado.');});
- $('arquivo').addEventListener('change',()=>{plan=null;source=null;$('previsao').hidden=true;disable(false);});
+ $('arquivo').addEventListener('change',()=>{plan=null;source=null;importV2=null;$('previsao').hidden=true;disable(false);});
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup();
 })();

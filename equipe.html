@@ -25,6 +25,7 @@ if ('serviceWorker' in navigator) {
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore-compat.js"></script>
 <script src="js/config.js?v=26.13.0"></script>
 <script src="js/os-utils.js?v=26.26.0"></script>
+<script src="js/os-operacional.js?v=20261020.1"></script>
 <script src="js/os-media-persist-v1.js?v=1.0.0"></script>
 <script src="js/links-publicos.js?v=26.24.0"></script>
 <script src="js/tenant-modules.js"></script>
@@ -1158,6 +1159,7 @@ function abrirModal(id){
 function fecharModal(id){
   if(id==='modalOS'){
     if(typeof _equipePararAvisosInternos==='function')_equipePararAvisosInternos();
+    window.OSOperacional?.open(null);
   }
   $(id)?.classList.remove('open');
   // Modal fechado manualmente não deve reaparecer ao voltar.
@@ -2277,6 +2279,7 @@ function _equipeAcompanharAvisosInternos(osId){
     if(!snap.exists||String(document.getElementById('osId')?.value||'')!==_equipeAvisoId)return;
     if(String(snap.data()?.tenantId||'')!==String(J.tid))return;
     renderObservacoesEquipeOS({observacoesEquipe:snap.data().observacoesEquipe||[]});
+    window.OSOperacional.sync({id:snap.id,...snap.data()});
   },err=>console.warn('[Equipe avisos internos]',err?.message||err));
 }
 function renderObservacoesEquipeOS(os){
@@ -2339,6 +2342,7 @@ async function salvarCadastroRapidoVeiculoEquipe(){
 
 function prepOS(mode,id=null){
   _equipePararAvisosInternos();
+  window.OSOperacional.open(null);
   window._equipeOSAtual = null;
   ['osId','osDesc','osDiag','osKm','osPrisma'].forEach(f=>{if($(f))$(f).value='';});
   $('osMO').value='0'; $('osTipo').value='carro'; _atualizarStatusVisualEquipe('Aguardando');
@@ -2363,7 +2367,7 @@ function prepOS(mode,id=null){
     const roleAtual=String(J.role||'').toLowerCase();
     const podeVerTodas=['gerente','gestor','admin','superadmin','dono'].includes(roleAtual);
     if(!podeVerTodas && !osAtribuidaAoUsuarioEquipe(os)) { toast('Esta O.S. não está vinculada ao seu usuário.','warn'); return; }
-    window._equipeOSAtual = os;
+    window._equipeOSAtual = window.OSOperacional.clone(os);
     atualizarValoresLiberadosEquipe(os);
     $('osId').value=os.id; $('osIdBadge').innerText='OS#'+os.id.slice(-5).toUpperCase();
     $('osTipo').value=os.tipoVeiculo||'carro';
@@ -2390,6 +2394,7 @@ function prepOS(mode,id=null){
     });
     aplicarMarcadoresAprovacaoEquipe(os);
     renderObservacoesEquipeOS(os);
+    window.OSOperacional.open({db,session:J,kind:'equipe',os});
     _equipeAcompanharAvisosInternos(os.id);
   }
 }
@@ -2406,6 +2411,8 @@ function statusOptionsExecEquipe(tipo, atual) {
     ['em_execucao', 'Em execução'],
     ['executado', 'Executado'],
     ['trocada', 'Trocado / Aplicado'],
+    ['nao_encontrada', 'Peça não encontrada'],
+    ['nao_trocada', 'Peça não aplicada'],
     ['executado_obs', 'Executado com observação'],
     ['nao_executado', 'Não executado'],
     ['cancelado', 'Cancelado']
@@ -2417,114 +2424,22 @@ function statusOptionsExecEquipe(tipo, atual) {
     ['nao_executado', 'Não executado'],
     ['cancelado', 'Cancelado']
   ];
-  return opts.map(([value, label]) => `<option value="${value}" ${String(atual || 'pendente') === value ? 'selected' : ''}>${label}</option>`).join('');
+  return opts.map(([value, label]) => `<option value="${value}" ${window.OSOperacional.normalize(atual) === value ? 'selected' : ''}>${label}</option>`).join('');
 }
 
 async function salvarExecucaoAprovadosEquipe(osId) {
-  const U=window.JOS||window.JarvisOSUtils||{};
-  const osLocal=dbOS.find(x=>String(x.id)===String(osId));
-  const autorizado=['gerente','gestor','admin','superadmin','dono'].includes(String(J.role||'').toLowerCase())||
-    osAtribuidaAoUsuarioEquipe(osLocal);
-  if(!osLocal||!J.tid||!J.fid||!String(J.nome||'').trim()||!autorizado){
-    toast('O.S. ou profissional não autorizado para registrar execução.','warn');return;
-  }
-  const chavesAntes=equipeTemOrcamentoAprovado(osLocal)?(U.getApprovedKeys?.(osLocal)||new Set()):new Set();
-  const clienteLocal=(dbClientes||[]).find(c=>String(c.id)===String(osLocal.clienteId));
-  const todosLocais=new Map(equipeItensOperacionaisOS(osLocal,clienteLocal).map(it=>[it.key,it]));
-  const alterados=[],validos=new Set(['pendente','em_execucao','executado','trocada','executado_obs','nao_executado','cancelado']);
-  for(const row of document.querySelectorAll('#containerServicos .execucao-aprovado-row, #containerPecas .execucao-aprovado-row, #resumoAprovacaoEquipe .execucao-aprovado-row')){
-    const chave=String(row.dataset.key||''),tipo=String(row.dataset.tipo||'');
-    const estado=String(row.querySelector('.exec-status')?.value||'pendente');
-    const observacao=String(row.querySelector('.exec-obs')?.value||'').trim();
-    const estadoAntes=String(row.dataset.statusInicial||'pendente');
-    const observacaoAntes=String(row.dataset.obsInicial||'');
-    if(!todosLocais.has(chave)||todosLocais.get(chave).tipo!==tipo||!validos.has(estado)||
-       (tipo==='servico'&&estado==='trocada')){
-      toast('Item ou situação inválida para execução aprovada.','warn');return;
-    }
-    if(['executado_obs','nao_executado','cancelado'].includes(estado)&&!observacao){
-      toast('Informe a observação deste item para continuar.','warn');return;
-    }
-    if(estado!==estadoAntes||observacao!==observacaoAntes){
-      if(!chavesAntes.has(chave)){
-        toast('Este serviço ou peça ainda não foi autorizado pelo gestor ou cliente.','warn');return;
-      }
-      alterados.push({chave,tipo,estado,observacao,estadoAntes,observacaoAntes,descInicial:todosLocais.get(chave).desc});
-    }
-  }
-  if(!alterados.length){toast('Nenhuma alteração a registrar.','warn');return;}
-  const botao=document.getElementById('eqSalvarExecucaoAprovada');
-  if(botao?.disabled)return;
-  if(botao)botao.disabled=true;
-  try{
-    const ref=db.collection('ordens_servico').doc(osId);
-    const resultado=await db.runTransaction(async trx=>{
-      const snap=await trx.get(ref);
-      if(!snap.exists)throw Error('A O.S. não foi encontrada.');
-      const os=snap.data()||{};
-      if(String(os.tenantId||'')!==String(J.tid))throw Error('Oficina não autorizada.');
-      if(!(['gerente','gestor','admin','superadmin','dono'].includes(String(J.role||'').toLowerCase())||
-            osAtribuidaAoUsuarioEquipe(os)))throw Error('O profissional não está vinculado à OS.');
-      const chaves=equipeTemOrcamentoAprovado(os)?(U.getApprovedKeys?.(os)||new Set()):new Set();
-      if(chaves.size!==chavesAntes.size||[...chavesAntes].some(k=>!chaves.has(k)))
-        throw Error('A aprovação foi alterada. Reabra a O.S.');
-      const cli=dbClientes.find(c=>c.id===os.clienteId);
-      const publicos=new Map(equipeItensOperacionaisOS(os,cli).map(item=>[item.key,item]));
-      const exec={...(os.execucaoItens||{})},eventos=[],agora=new Date().toISOString();
-      for(const alteracao of alterados){
-        const item=publicos.get(alteracao.chave);
-        if(!chaves.has(alteracao.chave))
-          throw Error('Item sem autorização de execução. Solicite aprovação no JARVIS ou pelo cliente.');
-        if(!item||item.tipo!==alteracao.tipo||item.desc!==alteracao.descInicial)
-          throw Error('Item alterado por outro profissional. Reabra a OS: '+alteracao.chave);
-        const anterior=exec[alteracao.chave]||{};
-        const stAnterior=String(anterior.status||'pendente'),obsAnterior=String(anterior.obs||'');
-        if(stAnterior!==alteracao.estadoAntes||obsAnterior!==alteracao.observacaoAntes)
-          throw Error('Outro profissional atualizou '+(item.desc||alteracao.chave)+'. Reabra a O.S.');
-        const autor=String(J.nome).trim();
-        exec[alteracao.chave]={
-          ...anterior,key:alteracao.chave,tipo:alteracao.tipo,
-          status:alteracao.estado,obs:alteracao.observacao,
-          registradoPorId:J.fid,registradoPor:autor,
-          atualizadoPorId:J.fid,atualizadoPor:autor,
-          atualizadoPorTipo:J.role||'equipe',atualizadoEm:agora
-        };
-        const descricao=String(item.desc||alteracao.chave);
-        eventos.push({
-          dt:agora,user:autor,usuarioId:J.fid,perfil:J.role||'equipe',
-          tipo:'execucao_item_os',itemKey:alteracao.chave,itemTipo:alteracao.tipo,
-          itemDescricao:descricao,statusAnterior:stAnterior,statusNovo:alteracao.estado,
-          observacaoAnterior:obsAnterior,observacaoNova:alteracao.observacao,
-          aprovadoFinanceiramente:chaves.has(alteracao.chave),
-          interno:true,visivelCliente:false,
-          acao:(alteracao.tipo==='peca'?'Peça':'Serviço')+' '+descricao+': '+stAnterior+' → '+
-            alteracao.estado+(obsAnterior!==alteracao.observacao?' | OBS: '+alteracao.observacao:'')+
-            ' — registrado por '+autor
-        });
-      }
-      trx.update(ref,{
-        execucaoItens:exec,
-        timeline:firebase.firestore.FieldValue.arrayUnion(...eventos),
-        updatedAt:agora
-      });
-      return {execucaoItens:exec,updatedAt:agora,eventos};
-    });
-    const pos=dbOS.findIndex(o=>String(o.id)===String(osId));
-    if(pos>=0){
-      dbOS[pos]={...dbOS[pos],execucaoItens:resultado.execucaoItens,updatedAt:resultado.updatedAt,
-        timeline:[...(dbOS[pos].timeline||[]),...resultado.eventos]};
-      window._equipeOSAtual=dbOS[pos];
-      aplicarMarcadoresAprovacaoEquipe(dbOS[pos]);
-    }
-    toast('✓ '+resultado.eventos.length+' atualização(ões) registrada(s) com identificação do profissional.','ok');
-  }catch(err){
-    console.error('[Equipe execução aprovada]',err);
-    const causa=String(err?.code||'');
-    const texto=causa==='permission-denied'
-      ?'O Firestore recusou a gravação para esta sessão. Nenhum status foi salvo. Confirme a permissão do profissional no Firebase.'
-      :'Não foi possível registrar execução: '+(err.message||err);
-    toast(texto,'err');
-  }finally{if(botao)botao.disabled=false;}
+  const O=window.OSOperacional;
+  try {
+    return await O.saveExecution({db,session:J,osId,kind:'equipe',
+      base:O.executionBase(osId)||window._equipeOSAtual,
+      resolveName:id=>mecanicosEquipeDaOS(window._equipeOSAtual||{}).find(m=>String(m.id)===String(id))?.nome||'',
+      rows:[...document.querySelectorAll('#resumoAprovacaoEquipe .execucao-aprovado-row, #containerServicos .execucao-aprovado-row, #containerPecas .execucao-aprovado-row')],
+      linked:osAtribuidaAoUsuarioEquipe,
+      confirm:os=>{
+        const pos=dbOS.findIndex(x=>x.id===osId);if(pos>=0)dbOS[pos]=os;
+        window.aplicarMarcadoresAprovacaoEquipe(os);
+      }});
+  } catch(e) { toast('Execução não salva: '+e.message,'err'); }
 }
 
 
@@ -2547,7 +2462,7 @@ function equipeReorganizarItensExecutados(){
     const rows=[...container.children].filter(el=>el.tagName==='DIV'&&el.querySelector('.exec-status'));
     const completos=rows.filter(row=>{
       const ctrl=row.querySelector('.execucao-aprovado-row');
-      const done=!!ctrl&&equipeItemFoiExecutado(ctrl.querySelector('.exec-status')?.value,ctrl.dataset.tipo);
+      const done=!!ctrl&&equipeItemFoiExecutado(ctrl.dataset.statusInicial,ctrl.dataset.tipo);
       row.classList.toggle('equipe-item-executado',done);
       return done;
     });
@@ -2777,7 +2692,7 @@ async function salvarOS(){
     return;
   }
   if(!$v('osCliente')||!$v('osVeiculo')){toast('⚠ Cliente e veículo obrigatórios','warn');return;}
-  const osAtualPreservar = window._equipeOSAtual || {};
+  const osAtualPreservar = window.OSOperacional.base($v('osId')) || window._equipeOSAtual || {};
   const id = $v('osId');
   const osBaseEquipe = id ? (dbOS.find(x => x.id === id) || osAtualPreservar || {}) : {};
   // A equipe não altera status: em edição preserva exatamente o status salvo pelo Jarvis; em nova O.S. inicia em Triagem.
@@ -2862,7 +2777,7 @@ async function salvarOS(){
 
   // --- INÍCIO: DEEP DIFF (AUDITORIA GRANULAR) ---
   if (id) {
-      const oldOS = dbOS.find(x => x.id === id) || {};
+      const oldOS = osAtualPreservar;
       const oldMediaCountStatus = (oldOS.media || oldOS.fotos || []).length;
       const newMediaCountStatus = (JSON.parse($('mediaArray').value || '[]')).length;
       if (newMediaCountStatus > oldMediaCountStatus && isTriagemEquipe(statusPreservadoEquipe) && !isTriagemEquipe(oldOS.status)) {
@@ -3079,24 +2994,26 @@ async function salvarOS(){
     // A transação recusa uma edição baseada em O.S. que mudou de status/aprovação
     // entre a abertura e o salvamento, evitando perda de mudanças simultâneas.
     const ref=db.collection('ordens_servico').doc(id);
-    const ultimoStatus=String(osBaseEquipe.status||'Aguardando');
-    const aprovacaoAnterior=JSON.stringify({aprovacao:osBaseEquipe.aprovacao||null,itensAprovados:osBaseEquipe.itensAprovados||[]});
-    const eventosNovos=tl.slice((osBaseEquipe.timeline||[]).length);
+    const eventosNovos=tl.slice((osAtualPreservar.timeline||[]).length);
     const obsNova=($v('osObsEquipeNova')||'').trim();
     delete p.status; // A equipe nunca grava o status de uma O.S. já existente.
     delete p.timeline;
     delete p.observacoesEquipe;
+    for(const key of ['execucaoItens','aprovacao','itensAprovados','totalAprovado','aprovacaoAtiva','mecId','mecIds','mecanicos','mecNome'])delete p[key];
+    const avisoConflito=db.collection('chat_equipe').doc();
     try {
-      await db.runTransaction(async trx=>{
+      const resultadoSalvar=await db.runTransaction(async trx=>{
         const snap=await trx.get(ref);
         if(!snap.exists)throw new Error('O.S. não encontrada.');
         const atual=snap.data()||{};
-        if((osAtualPreservar.updatedAt && String(atual.updatedAt||'')!==String(osAtualPreservar.updatedAt)) ||
-           String(atual.status||'Aguardando')!==ultimoStatus ||
-           JSON.stringify({aprovacao:atual.aprovacao||null,itensAprovados:atual.itensAprovados||[]})!==aprovacaoAnterior){
-          throw new Error('O gestor atualizou o status/aprovação desta O.S. Reabra a ficha para editar sem sobrescrever dados recentes.');
+        if(atual.tenantId!==J.tid || (!['gerente','gestor','admin','superadmin','dono'].includes(String(J.role||'').toLowerCase()) && !osAtribuidaAoUsuarioEquipe(atual)))throw Error('Usuário sem vínculo autorizado com esta O.S.');
+        const mescla=window.OSOperacional.merge(osAtualPreservar,atual,p,['pecas','servicos','media','maoObra','total']);
+        if(mescla.conflicts.length){
+          window.OSOperacional.notice(trx,avisoConflito,{session:J,kind:'equipe'},id,mescla.conflicts,'ficha');
+          return {conflito:true};
         }
-        const mudanca={...p};
+        const mudanca={...mescla.patch,pecas:p.pecas,servicos:p.servicos,media:p.media,updatedAt:p.updatedAt};
+        const eventosTransacao=[...eventosNovos];
         // EQUIPE SOMENTE ACRESCENTA: o Firestore é a fonte de verdade.
         // Nenhum item existente pode ser apagado, substituído ou ter seus
         // dados anteriores alterados pelo salvamento de uma ficha do mecânico.
@@ -3117,10 +3034,10 @@ async function salvarOS(){
           if(complementos.length){
             mudanca.pendenciasAprovacao=[...new Set([...(Array.isArray(atual.pendenciasAprovacao)?atual.pendenciasAprovacao:[]),...complementos])];
             const dt=new Date().toISOString();
-            for(const key of complementos)eventosNovos.push({
+            for(const key of complementos)eventosTransacao.push({
               dt,user:J.nome||'Equipe',usuarioId:J.fid||'',
               tipo:'complemento_orcamento_pendente',itemKey:key,
-              interno:true,visivelCliente:true,
+              interno:true,visivelCliente:false,
               acao:'Item '+key+' incluído após aprovação; aguarda aprovação complementar do gestor ou cliente.'
             });
           }
@@ -3143,12 +3060,14 @@ async function salvarOS(){
           if((mudanca[campo]===null||mudanca[campo]===undefined||String(mudanca[campo]).trim()==='')&&atual[campo])
             mudanca[campo]=atual[campo];
         }
-        mudanca.total=atual.total ?? mudanca.total;
-        mudanca.maoObra=atual.maoObra ?? mudanca.maoObra;
-        if(eventosNovos.length)mudanca.timeline=firebase.firestore.FieldValue.arrayUnion(...eventosNovos);
+        mudanca.total=atual.total ?? p.total;
+        mudanca.maoObra=atual.maoObra ?? p.maoObra;
+        if(eventosTransacao.length)mudanca.timeline=firebase.firestore.FieldValue.arrayUnion(...eventosTransacao);
         if(obsNova)mudanca.observacoesEquipe=firebase.firestore.FieldValue.arrayUnion({dt:p.updatedAt,usuario:J.nome||'Equipe',usuarioId:J.fid||'',perfil:J.role||'equipe',interno:true,visivelCliente:false,texto:obsNova});
         trx.update(ref,mudanca);
+        return {conflito:false};
       });
+      if(resultadoSalvar.conflito)throw window.OSOperacional.conflictError();
     }catch(e){toast('O.S. não salva: '+(e?.message||e),'err');return;}
   } else {
     p.createdAt=new Date().toISOString();
@@ -3698,7 +3617,7 @@ function aplicarSugestaoIA() {
 <script src="js/catalogos-ia.js?v=19.0.0"></script>
 <script src="js/uix-theme-fix.js"></script>
 <script src="js/equipe-comissoes-v21.js?v=26.1.0"></script>
-<script src="js/equipe-usabilidade-v262.js?v=26.2.1-equipe-permissoes"></script>
+<script src="js/equipe-usabilidade-v262.js?v=20261020.1"></script>
 <script src="js/equipe-firestore-economico-v265.js?v=26.24.2"></script>
 <script src="js/thia-firestore-runtime-v2612.js?v=26.13.0"></script>
 <script src="js/equipe-firestore-profissional-v2612.js?v=26.24.2"></script>

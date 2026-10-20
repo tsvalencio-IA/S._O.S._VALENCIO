@@ -196,6 +196,7 @@ body{background:var(--bg0);color:var(--text);font-family:var(--ff);min-height:10
   .stat-val{font-size:1.1rem}
 }
 </style>
+<script src="js/portal-eventos-publicos.js?v=20261020.1"></script>
 </head>
 <body>
 <div id="toastBox"></div>
@@ -268,16 +269,16 @@ body{background:var(--bg0);color:var(--text);font-family:var(--ff);min-height:10
         <div style="padding:14px 18px;border-bottom:1px solid var(--border);font-family:var(--disp);font-weight:700;font-size:1rem;color:var(--gov)">Tabela Tempária - Consulta do Fiscal</div>
         <div style="padding:14px 18px;display:grid;grid-template-columns:minmax(220px,1fr) 150px;gap:10px;align-items:end">
           <div>
-            <label style="display:block;font-family:var(--mono);font-size:.62rem;color:var(--muted);margin-bottom:4px">SERVIÇO, SISTEMA OU CÓDIGO</label>
-            <input class="j-input" id="tempaOficialBusca" placeholder="Ex.: ALM001, freio, suspensão..." oninput="renderTempaOficial()">
+            <label style="display:block;font-family:var(--mono);font-size:.62rem;color:var(--muted);margin-bottom:4px">SERVIÇO OU SISTEMA</label>
+            <input class="j-input" id="tempaOficialBusca" placeholder="Ex.: freio, suspensão..." oninput="renderTempaOficial()">
           </div>
           <button class="btn-gov" onclick="renderTempaOficial()">PESQUISAR</button>
         </div>
         <div id="tempaOficialStatus" style="padding:0 18px 10px;color:var(--muted);font-family:var(--mono);font-size:.66rem"></div>
         <div style="overflow-x:auto">
           <table class="t">
-            <thead><tr><th>Código Interno</th><th>SIAFÍSICO</th><th>Sistema</th><th>Operação / Serviço</th><th style="text-align:right">Tempo</th></tr></thead>
-            <tbody id="tempaOficialBody"><tr><td colspan="5" class="empty">Digite para pesquisar.</td></tr></tbody>
+            <thead><tr><th>Sistema</th><th>Operação / Serviço</th><th style="text-align:right">Tempo</th></tr></thead>
+            <tbody id="tempaOficialBody"><tr><td colspan="3" class="empty">Digite para pesquisar.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -597,7 +598,6 @@ function _kpisSecaoOSHtml(os){
     <div class="secao-kpi-lbl">${esc(secao)}</div>
     <div class="secao-kpi-val">${moeda(item.total)}</div>
     <div class="secao-kpi-meta">${item.horas.toFixed(2).replace('.',',')}h por ${item.qtd} servico(s)</div>
-    ${codigos?`<div class="secao-kpi-meta" style="color:var(--gov)">Cód.: ${esc(codigos)}</div>`:''}
     ${tipos?`<div class="secao-kpi-meta">Tipo veículo: ${esc(tipos)}</div>`:''}
     ${sistemas?`<div class="secao-kpi-meta">Sistema: ${esc(sistemas)}</div>`:''}
   </div>`;
@@ -875,12 +875,7 @@ function _buildOSCard(os){
     const vf=+(vBruto*(1-pctDescMO)).toFixed(2);
     totalMO+=vf; totalTMO+=t;
     const codServico=_codigoServicoOficial(s);
-    const codigoHtml=codServico.interno
-      ? `<code style="font-size:.7rem;color:var(--gov)">CÓD. INTERNO: ${esc(codServico.interno)}</code> `
-      : (codServico.siafisico||s.codigo?`<code style="font-size:.7rem;color:var(--gov)">CÓD.: ${esc(codServico.siafisico||s.codigo)}</code> `:'');
-    const metaCodigo=codServico.siafisico && (!codServico.interno || _normTempaOficial(codServico.siafisico)!==_normTempaOficial(codServico.interno))
-      ? `CÓD. SIAFÍSICO: ${esc(codServico.siafisico)} · `
-      : '';
+    const codigoHtml='',metaCodigo='';
     const riscado=pctDescMO>0?`<span style="color:var(--muted);text-decoration:line-through;font-size:.75rem">${moeda(vBruto)}</span> <span style="color:var(--ok);font-size:.7rem">-${(pctDescMO*100).toFixed(0)}%</span> `:'';
     return `<div class="detalhe-row"><span>${codigoHtml}${esc(s.desc||'—')}${badgeAprovacao('servico-'+idx)}<br><small style="color:var(--muted)">${metaCodigo}${esc(secao)}${tipoVeic?` · Tipo veículo: ${esc(tipoVeic)}`:''}${t?` · ${String(t).replace('.',',')}h`:''}${valorHora?` · ${moeda(valorHora)}/h`:''}</small></span><span class="detalhe-val" style="text-align:right">${riscado}${moeda(vf)}</span></div>`;
   }).join('');
@@ -897,19 +892,8 @@ function _buildOSCard(os){
   const fotosHtml=window.sosPortalGallery.render(os);
 
   // Linha do tempo: apenas mudanças de status (filtra logs de auditoria técnica)
-  const tlFiltrado=(os.timeline||[]).filter(t=>{
-    if(_eventoPecaRealOficial(t)||t.interno===true||String(t?.tipo||t?.tipoEvento||'').toLowerCase()==='observacao_equipe') return false;
-    if(t.tipo==='status_os'||t.visivelCliente===true) return true;
-    const a=(t.acao||'').toLowerCase();
-    return a.includes('status alterado')||a.includes('abriu a o.s')||a.includes('aprovou')||a.includes('recusou')||a.includes('entregue')||a.includes('aprovado');
-  });
-  const tlParaExibir=tlFiltrado.length>0?tlFiltrado:(os.timeline||[]).filter(t=>!_eventoPecaRealOficial(t)&&t.interno!==true&&String(t?.tipo||t?.tipoEvento||'').toLowerCase()!=='observacao_equipe'&&(t.acao||'').toLowerCase().includes('status'));
-  const textoTimelineOficial=t=>{
-    if(t.tipo==='status_os'){
-      return `Status atualizado para ${String(t.statusNovo||'').replace('_',' ')} por ${t.user||t.usuario||'Sistema'}.`;
-    }
-    return (t.acao||'').replace(/^Status alterado para:\s*/i,'').replace(/^Abriu a O\.S\.\s*/i,'Entrada na oficina — ');
-  };
+  const tlParaExibir=window.PortalEventosPublicos.list(os.timeline);
+  const textoTimelineOficial=t=>t.texto;
 
   const tlHtml=`<div class="timeline-box">
     <div class="tl-title">📍 Histórico de Status</div>
@@ -1209,14 +1193,14 @@ async function renderTempaOficial(){
   const status=document.getElementById('tempaOficialStatus');
   if(!tbody) return;
   if(!tempaOficialLiberada()){
-    tbody.innerHTML='<tr><td colspan="5" class="empty">Consulta não liberada para este portal.</td></tr>';
+    tbody.innerHTML='<tr><td colspan="3" class="empty">Consulta não liberada para este portal.</td></tr>';
     if(status) status.textContent='';
     return;
   }
   try{
     if(typeof window.tempaCarregar==='function') await window.tempaCarregar();
   }catch(e){
-    tbody.innerHTML='<tr><td colspan="5" class="empty">Não foi possível carregar a Tabela Tempária.</td></tr>';
+    tbody.innerHTML='<tr><td colspan="3" class="empty">Não foi possível carregar a Tabela Tempária.</td></tr>';
     if(status) status.textContent=e.message||String(e);
     return;
   }
@@ -1226,14 +1210,12 @@ async function renderTempaOficial(){
     : (window._tabelaTempa?.dados?.itens||[]).slice(0,50);
   if(status) status.textContent=termo ? `${lista.length} resultado(s). Consulta somente leitura.` : 'Mostrando primeiros 50 itens. Digite para filtrar.';
   if(!lista.length){
-    tbody.innerHTML='<tr><td colspan="5" class="empty">Nenhum item encontrado.</td></tr>';
+    tbody.innerHTML='<tr><td colspan="3" class="empty">Nenhum item encontrado.</td></tr>';
     return;
   }
   tbody.innerHTML=lista.map(it=>{
     const tempo=Number(it.tempo||0);
     return `<tr>
-      <td><code style="font-size:.7rem;color:var(--gov)">${esc(it.codigoInterno||'-')}</code></td>
-      <td><code style="font-size:.7rem;color:var(--muted)">${esc(it.codigo||'-')}</code></td>
       <td>${esc(it.sistema||'-')}</td>
       <td><b>${esc(it.operacao||'')}</b> ${esc(it.item||'')}</td>
       <td style="text-align:right;font-family:var(--mono);color:var(--ok)">${tempo.toFixed(2).replace('.',',')}h</td>

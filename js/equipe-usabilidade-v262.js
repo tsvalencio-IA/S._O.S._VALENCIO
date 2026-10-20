@@ -52,7 +52,7 @@
       ['nao_executado', 'Não executado'],
       ['cancelado', 'Cancelado']
     ];
-    const valorAtual = String(atual || 'pendente');
+    const valorAtual = W.OSOperacional.normalize(atual);
     return opts.map(([v, l]) => `<option value="${v}" ${valorAtual === v ? 'selected' : ''}>${l}</option>`).join('');
   }
 
@@ -137,7 +137,7 @@
     const acaoRapida = finalizado
       ? `<button type="button" class="btn-outline" onclick="window.reabrirItemEquipeV262(this)">↩ REABRIR</button>`
       : `<button type="button" class="btn-success" onclick="window.concluirItemEquipeV262(this)">✓ CONCLUIR</button>`;
-    return `<div class="execucao-aprovado-row equipe-tarefa-row ${finalizado ? 'finalizada' : ''}" data-key="${esc(it.key)}" data-tipo="${esc(it.tipo)}" data-mec-id="${esc(mecId)}">
+    return `<div class="execucao-aprovado-row equipe-tarefa-row ${finalizado ? 'finalizada' : ''}" data-key="${esc(it.key)}" data-tipo="${esc(it.tipo)}" data-mec-id="${esc(mecId)}" data-status-inicial="${esc(W.OSOperacional.normalize(registro?.status))}" data-obs-inicial="${esc(registro?.obs || '')}">
       <div class="equipe-tarefa-desc">
         <b>${esc(tipoLabel)}</b><br>${codigo}${esc(it.desc || '-')}${tempo}
         ${nomeMec ? `<br><small style="color:var(--muted2);">Responsável: ${esc(nomeMec)}</small>` : ''}
@@ -159,7 +159,7 @@
     const fin = D.getElementById('execFinalizadosListaEquipeV262');
     if (!pend || !fin) return;
     D.querySelectorAll('#resumoAprovacaoEquipe .execucao-aprovado-row').forEach(row => {
-      const st = row.querySelector('.exec-status')?.value || 'pendente';
+      const st = row.dataset.statusInicial || 'pendente';
       const destino = statusFinalizado(st) ? fin : pend;
       destino.appendChild(row);
       row.classList.toggle('finalizada', statusFinalizado(st));
@@ -214,16 +214,17 @@
 
     // Mantém os badges e todas as regras existentes; troca apenas a apresentação da área de execução.
     if (typeof originalApply === 'function') originalApply(os);
-    D.getElementById('resumoAprovacaoEquipe')?.remove();
 
     const U = W.JOS || W.JarvisOSUtils || {};
     const chaves=U.getApprovedKeys?.(os)||new Set();
     const aprovadaAtiva=U.hasApproval?.(os)&&os?.aprovacaoAtiva!==false&&chaves.size>0;
-    const prontaSemAprovacao=/^(pronto|pronto_retirada|concluido|faturado)$/i.test(String(os?.status||''))&&!aprovadaAtiva;
-    if(!aprovadaAtiva&&!prontaSemAprovacao){
+    if(!aprovadaAtiva){
       caixasOrcamento().forEach(el => { el.style.display = ''; });
       return;
     }
+
+    D.getElementById('resumoAprovacaoEquipe')?.remove();
+    D.querySelectorAll('#containerServicos .execucao-aprovado-row, #containerPecas .execucao-aprovado-row, #eqSalvarExecucaoAprovada').forEach(el=>el.remove());
 
     if (W._equipeOrcamentoOsIdV262 !== String(os?.id || '')) {
       W._equipeOrcamentoOsIdV262 = String(os?.id || '');
@@ -233,13 +234,7 @@
     const keys = U.getApprovedKeys?.(os) || new Set();
     const cliente = (typeof dbClientes !== 'undefined' ? dbClientes : []).find(c => String(c.id) === String(os?.clienteId || ''));
     const todos = U.buildBudgetItems?.(os, cliente) || [];
-    const itens = todos.filter(it => {
-      if (String(it.tipo || '').toLowerCase().includes('serv')) {
-        return W.equipeServicoPertenceAoUsuarioV22?.((os?.servicos || [])[it.index], os) !== false;
-      }
-      return true;
-    });
-    if(prontaSemAprovacao)itens.forEach(it=>keys.add(it.key));
+    const itens = todos; // O vínculo é validado na OS; auxiliares acompanham todos os itens.
     const aprovados = itens.filter(it => keys.has(it.key));
     const naoAprovados = itens.filter(it => !keys.has(it.key));
     const exec = os?.execucaoItens || {};
@@ -282,76 +277,8 @@
     W.reorganizarExecucaoEquipeV262();
   };
 
-  W.salvarExecucaoAprovadosEquipe = async function (osId) {
-    if (ehGestor() && typeof originalSave === 'function') return originalSave(osId);
-    if (!osId) { W.toast?.('Salve a O.S. antes de marcar execução.', 'warn'); return; }
-
-    const osAtual = (typeof dbOS !== 'undefined' ? dbOS : []).find(x => String(x.id) === String(osId)) || W._equipeOSAtual || {};
-    const execucaoItens = { ...(osAtual.execucaoItens || {}) };
-    const rows = D.querySelectorAll('#resumoAprovacaoEquipe .execucao-aprovado-row');
-    if (!rows.length) { W.toast?.('Nenhum item aprovado para atualizar.', 'warn'); return; }
-
-    for (const row of rows) {
-      const st = row.querySelector('.exec-status')?.value || 'pendente';
-      const obs = (row.querySelector('.exec-obs')?.value || '').trim();
-      if (['executado_obs', 'nao_executado', 'cancelado'].includes(st) && !obs) {
-        W.toast?.('Informe uma observação para este status.', 'warn');
-        row.querySelector('.exec-obs')?.focus();
-        return;
-      }
-    }
-
-    let alterados = 0;
-    rows.forEach(row => {
-      const key = row.dataset.key;
-      if (!key) return;
-      const anterior = execucaoItens[key] || {};
-      const mecId = row.querySelector('.exec-mec')?.value || row.dataset.mecId || anterior.mecId || J?.fid || '';
-      const obs = (row.querySelector('.exec-obs')?.value || '').trim();
-      const status = row.querySelector('.exec-status')?.value || 'pendente';
-      const nome = mecanicoNome(osAtual, mecId) || anterior.mecNome || J?.nome || '';
-      if (String(anterior.status || 'pendente') !== String(status) || String(anterior.obs || '') !== obs || String(anterior.mecId || '') !== String(mecId)) alterados++;
-      execucaoItens[key] = {
-        ...anterior,
-        key,
-        tipo: row.dataset.tipo || anterior.tipo || '',
-        status,
-        obs,
-        mecId,
-        mecNome: nome,
-        responsavelId: mecId,
-        responsavelNome: nome,
-        atualizadoEm: new Date().toISOString(),
-        atualizadoPorId: J?.fid || '',
-        atualizadoPor: J?.nome || 'Equipe',
-        atualizadoPorTipo: J?.role || 'equipe'
-      };
-    });
-
-    if (!alterados) {
-      W.reorganizarExecucaoEquipeV262();
-      W.toast?.('Nenhuma alteração nova para salvar.', 'warn');
-      return;
-    }
-
-    const agora = new Date().toISOString();
-    const timeline = Array.isArray(osAtual.timeline) ? osAtual.timeline.slice() : [];
-    timeline.push({ dt: agora, user: J?.nome || 'Equipe', acao: `Atualizou ${alterados} item(ns) da execução da O.S.` });
-
-    try {
-      await db.collection('ordens_servico').doc(osId).update({ execucaoItens, timeline, updatedAt: agora });
-      osAtual.execucaoItens = execucaoItens;
-      osAtual.timeline = timeline;
-      osAtual.updatedAt = agora;
-      W._equipeOSAtual = osAtual;
-      W.aplicarMarcadoresAprovacaoEquipe(osAtual);
-      W.toast?.('✓ Execução atualizada. Itens concluídos foram recolhidos.', 'ok');
-    } catch (erro) {
-      console.error('[V26.2] Falha ao salvar execução da equipe:', erro);
-      W.toast?.('Não foi possível salvar a execução. Tente novamente.', 'err');
-      throw erro;
-    }
-  };
+  // Um único gravador transacional para gestores e profissionais.
+  W.salvarExecucaoAprovadosEquipe = originalSave;
 
   garantirEstilos();
 })(window, document);

@@ -233,17 +233,17 @@
   function statusOptions(tipo, atual) {
     const isPeca = String(tipo || '').toLowerCase().includes('peca');
     const opts = isPeca
-      ? [['pendente','Pendente'],['em_execucao','Separando/comprando'],['trocada','Trocada/aplicada'],['nao_encontrada','Peca nao encontrada'],['nao_trocada','Nao aplicada'],['cancelado','Cancelado']]
+      ? [['pendente','Pendente'],['em_execucao','Separando/comprando'],['executado','Peça aplicada'],['executado_obs','Aplicada com observação'],['nao_executado','Não executado'],['trocada','Trocada/aplicada'],['nao_encontrada','Peca nao encontrada'],['nao_trocada','Nao aplicada'],['cancelado','Cancelado']]
       : [['pendente','Pendente'],['em_execucao','Em execucao'],['executado','Executado'],['executado_obs','Executado com observacao'],['nao_executado','Nao executado'],['cancelado','Cancelado']];
-    return opts.map(([v,l]) => `<option value="${v}" ${String(atual||'pendente')===v?'selected':''}>${l}</option>`).join('');
+    return opts.map(([v,l]) => `<option value="${v}" ${W.OSOperacional.normalize(atual)===v?'selected':''}>${l}</option>`).join('');
   }
   function statusFinalizado(st) {
-    return /^(executado|executado_obs|executado_com_observacao|trocada|nao_executado|nao_trocada|nao_encontrada|cancelado)$/i.test(String(st || ''));
+    return /^(executado|executado_obs|executado_com_observacao|trocada|nao_executado|nao_trocada|nao_encontrada|cancelado)$/i.test(String(W.OSOperacional.normalize(st)));
   }
   function itemHTML(it, e) {
     const st = e?.status || 'pendente';
     const finalizado = statusFinalizado(st);
-    return `<div class="execucao-aprovado-row" data-key="${esc(it.key)}" data-tipo="${esc(it.tipo)}" style="display:grid;grid-template-columns:minmax(230px,1fr) 190px minmax(200px,1fr);gap:7px;align-items:center;background:${finalizado?'rgba(0,255,170,.045)':'rgba(0,0,0,.16)'};border:1px solid rgba(255,255,255,.10);border-radius:3px;padding:8px;">
+    return `<div class="execucao-aprovado-row" data-key="${esc(it.key)}" data-tipo="${esc(it.tipo)}" data-status-inicial="${esc(W.OSOperacional.normalize(st))}" data-obs-inicial="${esc(e?.obs || '')}" style="display:grid;grid-template-columns:minmax(230px,1fr) 190px minmax(200px,1fr);gap:7px;align-items:center;background:${finalizado?'rgba(0,255,170,.045)':'rgba(0,0,0,.16)'};border:1px solid rgba(255,255,255,.10);border-radius:3px;padding:8px;">
       <div style="font-size:.75rem;color:var(--text);"><b>${esc(it.labelTipo || it.tipo)}</b> ${it.codigo ? '[' + esc(it.codigo) + '] ' : ''}${esc(it.desc || '-')}${it.tempo ? `<br><small style="color:var(--muted);">TMO ${String(it.tempo).replace('.', ',')}h</small>` : ''}</div>
       <select class="j-select exec-status" style="font-size:.72rem;" onchange="window.reorganizarExecucaoAprovadosOS()">${statusOptions(it.tipo, st)}</select>
       <input class="j-input exec-obs" value="${esc(e?.obs || '')}" placeholder="Observacao interna obrigatoria quando houver excecao">
@@ -255,7 +255,7 @@
     const fin = byId('execFinalizadosListaOS');
     if (!pend || !fin) return;
     Array.from(D.querySelectorAll('#resumoAprovacaoOS .execucao-aprovado-row')).forEach(row => {
-      const st = row.querySelector('.exec-status')?.value || 'pendente';
+      const st = row.dataset.statusInicial || 'pendente';
       (statusFinalizado(st) ? fin : pend).appendChild(row);
     });
     const count = fin.querySelectorAll('.execucao-aprovado-row').length;
@@ -269,7 +269,7 @@
       const U = osUtils();
       byId('resumoAprovacaoOS')?.remove();
       D.querySelectorAll('#containerServicosOS .aprovacao-item-badge,#containerPecasOS .aprovacao-item-badge').forEach(el => el.remove());
-      const temAprovacao = U.hasApproval?.(os);
+      const temAprovacao = os?.aprovacaoAtiva !== false && U.hasApproval?.(os);
       W.atualizarCotacaoPecasOrcamentoAtualOS?.(os);
       if (!temAprovacao) return;
       const keys = U.getApprovedKeys?.(os) || new Set();
