@@ -1119,6 +1119,17 @@ function repararLayoutEquipe(){
     force('.mec-kpis', {display:'grid'});
     force('.kanban-wrap', {display: window.innerWidth <= 760 ? 'flex' : 'grid'});
     if(window.innerWidth <= 760) force('.kanban-wrap', {'flex-direction':'column'});
+    // Desktop: o CSS original usa a grade com menu lateral.
+    // Os estilos inline !important acima são necessários para o mobile,
+    // mas não podem sobrepor a composição web definida em @media(min-width:761px).
+    if(window.innerWidth > 760){
+      document.querySelectorAll('.page').forEach(el => el.style.removeProperty('display'));
+      document.querySelectorAll('.tab-bar').forEach(el => {
+        el.style.removeProperty('display');
+        el.style.removeProperty('overflow-x');
+        el.style.removeProperty('white-space');
+      });
+    }
   }catch(e){ console.warn('[Equipe] Falha ao reparar layout', e); }
 }
 repararLayoutEquipe();
