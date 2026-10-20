@@ -1024,8 +1024,8 @@
 
   // ===== V26.20.1 — consultas operacionais por cliente/período =====
   // Mantém a consulta de frota cadastral separada do histórico real de atendimento.
-  function mecanicosRelacionadosOSIA(ctx, os) {
-    if (osEhOficialAtendimentoIA(os)) {
+  function mecanicosRelacionadosOSIA(ctx, os, opcoes={}) {
+    if (osEhOficialAtendimentoIA(os) && !opcoes.incluirServicos) {
       const cfg = os?.comissaoOficialOS || {};
       return cfg?.ativa === true && Array.isArray(cfg.rateios) ? uniq(cfg.rateios.filter(r=>num(r?.valor ?? r?.valorPrevisto ?? 0)>0).map(r=>r?.mecNome || (ctx.equipe||[]).find(e=>String(e.id)===String(r?.mecId||r?.id))?.nome).filter(Boolean)) : [];
     }
@@ -1035,7 +1035,13 @@
     const addId = v => { const t=String(v||'').trim(); if(t) ids.push(t); };
     addNome(os?.mecNome); addNome(os?.mecanicoNome); addNome(os?.responsavelNome);
     addId(os?.mecId); addId(os?.mecanicoId); addId(os?.responsavelId);
+    (Array.isArray(os?.mecIds) ? os.mecIds : []).forEach(addId);
     (Array.isArray(os?.mecanicos) ? os.mecanicos : []).forEach(m => {
+      if (typeof m === 'string') {
+        const pessoa=(ctx.equipe || []).find(e=>String(e.id)===m);
+        if (pessoa) addNome(pessoa.nome); else addNome(m);
+        return;
+      }
       addNome(m?.nome || m?.mecNome || m?.mecanicoNome); addId(m?.id || m?.mecId || m?.mecanicoId);
     });
     (Array.isArray(os?.servicos) ? os.servicos : []).forEach(sv => {
@@ -1373,6 +1379,7 @@
     const placa=placaLimpa(String(texto||'').trim());
     const respostaPlaca=anterior && Date.now()-anterior.em < 30*60*1000 &&
       /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(placa) && anterior.placas.includes(placa);
+    if (extrairPlaca(texto) && !respostaPlaca) return null;
     const pergunta=q.match(/\b(?:quem|qual mecanico|qual funcionario)\b.*?\b(?:trocou|trocaram|substituiu|realizou|executou|instalou|fez)\b\s+(?:a|o|as|os)?\s*(.{3,75}?)\s+(?:da|do|de|no|na)\s+(?:renault\s+)?([a-z][a-z0-9-]{2,35})\s*\??$/);
     if(!respostaPlaca&&!pergunta)return null;
     const servico=respostaPlaca?anterior.servico:pergunta[1].trim();
@@ -1396,32 +1403,8 @@
     }
     contextoConversaIA.pendenteServicoModelo=null;
     const selecionada=placas[0];
-    const termos=norm(servico).split(/\s+/).filter(t=>t.length>2&&!/^(troca|trocar|substituicao|substituir|servico|manutencao)$/.test(t));
-    const registros=[];
-    (ctx.os||[]).filter(o=>placaOS(ctx,o)===selecionada).forEach(o=>{
-      (Array.isArray(o.servicos)?o.servicos:[]).forEach((sv,i)=>{
-        const descricao=norm(sv.desc||sv.descricao||sv.nome||'');
-        if(!termos.length||!termos.every(t=>descricao.includes(t)))return;
-        const exec=o.execucaoItens?.[sv.key||'servico-'+i]||{};
-        const status=norm(exec.status||sv.statusExecucao||'').replace(/[_-]/g,' ');
-        const comprovado=/^(executado|executado obs|concluido|finalizado|feito|realizado)$/.test(status)||sv.executado===true;
-        const id=exec.executorId||exec.mecId||exec.mecanicoId||'';
-        const pessoa=(ctx.equipe||[]).find(e=>String(e.id||'')===String(id||''))?.nome ||
-          exec.executorNome||exec.mecNome||exec.mecanicoNome||'';
-        const atribuicoes=(Array.isArray(sv.rateiosComissao)?sv.rateiosComissao:[])
-          .map(x=>x.mecNome||(ctx.equipe||[]).find(e=>String(e.id||'')===String(x.mecId||''))?.nome)
-          .filter(Boolean);
-        const responsabilidade=comprovado
-          ? (pessoa?'Executor identificado no registro: '+esc(pessoa):'Execução registrada, sem identificação inequívoca do executor')
-          : 'Execução não confirmada'+(atribuicoes.length?' | atribuído a: '+esc(atribuicoes.join(', ')):'');
-        const data=comprovado?dataBR(exec.atualizadoEm||exec.data||exec.em||sv.executadoEm||''):'';
-        registros.push('- O.S. #'+esc(String(o.numero||o.id||'').slice(-6).toUpperCase())+
-          ' | '+esc(sv.desc||sv.descricao||servico)+' | '+responsabilidade+
-          (data&&data!=='-'?' | data '+esc(data):''));
-      });
-    });
-    if(!registros.length)return 'Não encontrei lançamento do serviço '+esc(servico)+' nas O.S. carregadas da placa '+esc(selecionada)+'. Não é possível afirmar quem o realizou.';
-    return '<strong>Serviço '+esc(servico)+' — '+esc(modelo)+' — '+esc(selecionada)+':</strong><br>'+registros.join('<br>');
+    const consulta=`Quem executou ${servico} da placa ${selecionada}?`;
+    return responderAutoriaItemPlacaIA(consulta,norm(consulta),ctx,selecionada,osMatchesPlaca(ctx,selecionada));
   }
 
   function responderJarvisDadosPrecisos(texto, q, ctx, opts) {
@@ -1570,7 +1553,7 @@
     const q = norm(texto);
     const keys = new Set();
     const placa = extrairPlaca(texto);
-    if (/\bquem\b.*\b(trocou|substituiu|executou|fez|realizou)\b/.test(q) || W.__thiaIAContextoConversacional?.pendenteServicoModelo) {
+    if (perguntaAutoriaPlacaIA(q) || W.__thiaIAContextoConversacional?.pendenteServicoModelo) {
       keys.add('os'); keys.add('clientes'); keys.add('veiculos'); keys.add('equipe');
     }
     const atividadePessoa = /\b(fez|realizou|executou|trabalhou|atendeu|atendimento|atividade|atividades|servicos?|tarefas?)\b/.test(q)
@@ -1663,20 +1646,30 @@
     const raw = String(texto || '').trim();
     if (!raw || !contextoConversaIA.atualizadoEm || Date.now() - contextoConversaIA.atualizadoEm > 30*60*1000) return raw;
     const q = norm(raw);
-    const contin = /^(e\b|e o\b|e a\b|e qual\b|e quais\b|e quanto\b|e quando\b|e onde\b)|\b(?:esse veiculo|essa placa|esse carro|dele|dela|o mesmo|a mesma)\b/.test(q);
+    const contin = /^(e\b|e o\b|e a\b|e qual\b|e quais\b|e quanto\b|e quando\b|e onde\b)|\b(?:esse veiculo|essa placa|esse carro|dele|dela|o mesmo|a mesma)\b/.test(q)
+      || perguntaAutoriaPlacaIA(q) && !extrairPlaca(raw) && !/\b(?:hoje|ontem|semana|mes|oficina|todos|periodo)\b/.test(q);
     if (!contin) return raw;
     let extra = '';
     const seguePrecoCompra = /preco|compra|fornecedor|paguei|ultimo|maior|menor|media/.test(q) && !!contextoConversaIA.codigoPeca;
     if (seguePrecoCompra && !extrairCodigoConsultaCompraIA(raw)) extra += ` historico de compra da peca ${contextoConversaIA.codigoPeca}`;
     else if (!extrairPlaca(raw) && contextoConversaIA.placa) extra += ` placa ${contextoConversaIA.placa}`;
-    if (contextoConversaIA.funcionarioNome && /fez|realizou|executou|trabalhou|atendeu|comiss|atividade|servico/.test(q)) extra += ` mecanico ${contextoConversaIA.funcionarioNome}`;
+    const placaConsulta=extrairPlaca(raw) || contextoConversaIA.placa;
+    if (perguntaAutoriaPlacaIA(q) && !termosItemPergunta(raw,placaConsulta).length && contextoConversaIA.itemTermos?.length && placaConsulta===contextoConversaIA.placa && !/atend|veiculo|carro|mecanico.*servicos/.test(q)) {
+      extra += ` item ${contextoConversaIA.itemTermos.join(' ')}`;
+    }
+    if (contextoConversaIA.funcionarioNome && !placaConsulta && /fez|realizou|executou|trabalhou|atendeu|comiss|atividade|servico/.test(q)) extra += ` mecanico ${contextoConversaIA.funcionarioNome}`;
     if (contextoConversaIA.fornecedorNome && /boleto|nota|nf|paguei|pagamento|compra/.test(q) && !/fornecedor/.test(q)) extra += ` fornecedor ${contextoConversaIA.fornecedorNome}`;
     return (raw + extra).trim();
   }
 
   function atualizarContextoConversacionalIA(texto, ctx) {
     const placa = extrairPlaca(texto);
-    if (placa) contextoConversaIA.placa = placa;
+    if (placa) {
+      if (placa!==contextoConversaIA.placa) contextoConversaIA.itemTermos=[];
+      contextoConversaIA.placa = placa;
+      if (/troc|substitu|instal|execut|realiz|feito|fez|aplic|registr|status/.test(norm(texto))) contextoConversaIA.itemTermos=termosItemPergunta(texto,placa);
+      else contextoConversaIA.itemTermos=[];
+    }
     const codigo = extrairCodigoConsultaCompraIA(texto);
     if (codigo) contextoConversaIA.codigoPeca = codigo;
     try {
@@ -2909,7 +2902,7 @@
 
     const descricao = item => String(item?.desc || item?.descricao || item?.nome || item?.servico || item?.peca || item?.item || item?.titulo || item?.descLivre || item?.descricaoPeca || item?.nomePeca || '').trim();
     const codigo = item => String(item?.codigo || item?.cod || item?.codigoOriginal || item?.codigoFornecedor || item?.codigoComercial || item?.oem || '').trim();
-    const statusExecutado = value => /executad|concluid|finaliz|instalad|trocad|substituid|feito|realizad|aplicad|ok/.test(norm(value));
+    const statusExecutado = value => /^(?:executad[oa](?: obs| com observacao)?|concluid[oa]|finalizad[oa]|instalad[oa]|trocad[oa]|substituid[oa]|feit[oa]|realizad[oa]|aplicad[oa]|ok)$/.test(norm(value).replace(/[_-]/g,' ').replace(/\s+/g,' ').trim());
     const assinatura = (tipo, item) => {
       const c = codigoCompactoIA(codigo(item));
       const d = norm(descricao(item)).replace(/[^a-z0-9]+/g, ' ').trim();
@@ -2922,11 +2915,13 @@
       const desc = descricao(item);
       const cod = codigo(item);
       if (!desc && !cod) return;
-      const key = String(item.key || item.itemKey || item.idItem || `${tipo}-legacy-${fonte}-${indice}`);
+      const key = String(fonte === 'servicos' || fonte === 'pecas' ? `${tipo}-${indice}` : item.key || item.itemKey || item.idItem || `${tipo}-legacy-${fonte}-${indice}`);
       const execRegistro = os?.execucaoItens?.[key] || null;
       const status = itemExecucao(os, Object.assign({}, item, { key })) || execRegistro?.status || item.statusExecucao || item.status || '';
       const aprovado = flags.aprovado === true || item.aprovado === true || item.aprovada === true || aprovados.has(key);
-      const executado = flags.executado === true || statusExecutado(status) || item.executado === true || item.realizado === true || item.trocado === true || item.instalado === true;
+      // Um estado explícito atual prevalece sobre flags/listas antigas, inclusive
+      // quando foi reaberto, cancelado ou marcado como NÃO executado/aplicado.
+      const executado = status ? statusExecutado(status) : flags.executado === true || item.executado === true || item.realizado === true || item.trocado === true || item.instalado === true;
       const legadoFinalizado = !executado && aprovado && !status && isEntregueOS(os);
       // O.S. antigas podem não ter mapa de aprovação/execução. O item é mostrado, mas nunca
       // promovido a "executado" apenas porque a O.S. foi entregue.
@@ -2948,16 +2943,21 @@
         legadoFinalizado,
         registradoFinalizado
       });
-      const sig = assinatura(tipo, normalizado);
+      const sigDescricao = assinatura(tipo, normalizado);
+      // Linhas distintas do orçamento mantêm suas chaves, mesmo com descrição
+      // igual. Fontes legadas só se unem a uma linha quando o vínculo é único.
+      const canonico = /^(?:servico|peca)-\d+$/.test(key);
+      const equivalentes = Array.from(mapa.entries()).filter(([,v]) => assinatura(tipo,v) === sigDescricao && v.tipo === tipo);
+      const sig = canonico ? key : equivalentes.length === 1 ? equivalentes[0][0] : `${sigDescricao}|${key}`;
       const atual = mapa.get(sig);
       if (!atual) { mapa.set(sig, normalizado); return; }
       // Se o mesmo item aparecer em uma fonte antiga e numa fonte de execução, preserva a evidência mais forte.
       mapa.set(sig, Object.assign({}, atual, normalizado, {
         key: atual.key || normalizado.key,
         aprovado: atual.aprovado || normalizado.aprovado,
-        executado: atual.executado || normalizado.executado,
-        legadoFinalizado: (atual.legadoFinalizado || normalizado.legadoFinalizado) && !(atual.executado || normalizado.executado),
-        registradoFinalizado: (atual.registradoFinalizado || normalizado.registradoFinalizado) && !(atual.executado || normalizado.executado),
+        executado: (normalizado.status || atual.status) ? statusExecutado(normalizado.status || atual.status) : atual.executado || normalizado.executado,
+        legadoFinalizado: (atual.legadoFinalizado || normalizado.legadoFinalizado) && !(normalizado.status || atual.status) && !(atual.executado || normalizado.executado),
+        registradoFinalizado: (atual.registradoFinalizado || normalizado.registradoFinalizado) && !(normalizado.status || atual.status) && !(atual.executado || normalizado.executado),
         status: normalizado.status || atual.status,
         fonteIA: uniq([atual.fonteIA, normalizado.fonteIA]).join(' + ')
       }));
@@ -2978,7 +2978,11 @@
       ['pecas', os?.pecas, false], ['pecasOS', os?.pecasOS, false], ['itensPecas', os?.itensPecas, false], ['pecasOrcamento', os?.pecasOrcamento, false],
       ['pecasTrocadas', os?.pecasTrocadas, true], ['pecasExecutadas', os?.pecasExecutadas, true], ['pecasAplicadas', os?.pecasAplicadas, true], ['aplicacoes', os?.aplicacoes, true]
     ];
-    fontesPeca.forEach(([fonte, arr, executado]) => (Array.isArray(arr) ? arr : []).forEach((item,i) => adicionar(item, 'peca', fonte, i, { executado })));
+    const pecasPublicas=typeof U.getPublicBudgetPieces==='function' ? new Set(U.getPublicBudgetPieces(os,cliente).map(p=>p.index)) : null;
+    fontesPeca.forEach(([fonte, arr, executado]) => (Array.isArray(arr) ? arr : []).forEach((item,i) => {
+      if (fonte==='pecas' && pecasPublicas && !pecasPublicas.has(i)) return;
+      adicionar(item, 'peca', fonte, i, { executado });
+    }));
 
     const genericos = [
       ['itens', os?.itens], ['items', os?.items]
@@ -3000,6 +3004,7 @@
 
   function statusVerdadeiroItem(os, item) {
     if (item.executado) return `execução confirmada${item.status ? ` (${esc(item.status)})` : ''}`;
+    if (item.status) return `execução não confirmada | status do item: ${esc(item.status)}`;
     if (item.legadoFinalizado) return 'O.S. finalizada, item aprovado sem confirmação individual de execução';
     if (item.registradoFinalizado) return 'registrado em O.S. entregue, mas sem confirmação individual de execução';
     if (item.aprovado) return 'aprovado, mas execução não confirmada';
@@ -3009,18 +3014,77 @@
   function termosItemPergunta(texto, placa) {
     const p = norm(placa || '');
     return norm(texto)
-      .replace(new RegExp(`\\b${p}\\b`, 'g'), ' ')
-      .replace(/\b(?:veiculo|veículo|placa|historico|histórico|resumo|servico|serviço|servicos|serviços|peca|peça|pecas|peças|item|itens|foi|foram|trocado|trocada|trocados|trocadas|substituido|substituida|instalado|instalada|feito|feita|executado|executada|realizado|realizada|realizados|realizadas|consta|tem|houve|nesse|nessa|neste|nesta|qual|quais|do|da|de|dos|das|no|na|nos|nas|o|a|os|as|em)\b/g, ' ')
+      .replace(/\b(?:mudanca de status|alteracao de status|quem foi|foi quem|ficou como|marcad[oa] como)\b/g,' ')
+      .replace(p ? new RegExp(`\\b${p.split('').join('[-\\s]*')}\\b`, 'g') : /$^/, ' ')
+      .replace(/\bo\.?s\.?\b/g, ' ')
+      .replace(/\b(?:veiculos?|carros?|placa|historico|resumo|servicos?|pecas?|itens?|item|foi|foram|era|foram|ser|sido|ja|teve|fez|fizeram|trocou|trocaram|trocar|troca|trocad[oa]s?|substituiu|substituiram|substituir|substituicao|substituid[oa]s?|instalou|instalaram|instalar|instalad[oa]s?|feito|feita|feitos|feitas|executou|executaram|executar|execucao|executad[oa]s?|realizou|realizaram|realizar|realizad[oa]s?|aplicou|aplicaram|aplicad[oa]s?|colocou|colocaram|utilizad[oa]s?|usad[oa]s?|consta|tem|houve|nesse|nessa|neste|nesta|esse|essa|esses|essas|deste|desta|dessa|desse|quem|qual|quais|mecanicos?|funcionarios?|usuarios?|colaboradores?|responsavel|responsaveis|profissional|profissionais|atendeu|atenderam|atendimentos?|registrou|registraram|registrad[oa]s?|registro|marcou|marcaram|lancou|lancaram|alterou|alteraram|mudou|mudaram|atualizou|atualizaram|status|situacao|para|confirmou|confirmar|informe|pode|poderia|saber|gostaria|quero|por|favor|obrigado|ainda|nao|sim|do|da|de|dos|das|no|na|nos|nas|o|a|os|as|em|e|que|se|com)\b/g, ' ')
       .replace(/[^a-z0-9./-]+/g, ' ')
       .split(/\s+/)
-      .filter(t => t.length >= 3);
+      .filter(t => (t.length >= 3 || t === 'ar' || /\d/.test(t)) && t !== 'como')
+      .map(normalizarTermoItemIA);
+  }
+
+  function normalizarTermoItemIA(termo) {
+    const t=norm(termo);
+    if (/\d/.test(t)) return t;
+    const plurais={amortecedores:'amortecedor',tensores:'tensor',rolamentos:'rolamento',terminais:'terminal',filtros:'filtro',discos:'disco',buchas:'bucha',barras:'barra',bieletas:'bieleta',correias:'correia',dentadas:'dentada',pastilhas:'pastilha',freios:'freio',dianteiros:'dianteiro',dianteiras:'dianteiro',dianteira:'dianteiro',traseiros:'traseiro',traseiras:'traseiro',traseira:'traseiro',pecas:'peca',servicos:'servico'};
+    if (/^estabiliz(?:ador|adora|adores|adoras)?$/.test(t)) return 'estabiliz';
+    return plurais[t] || t;
   }
 
   function itemCombinaTermos(item, termos) {
     if (!termos.length) return false;
-    const hay = norm([item.codigo, item.codigoInterno, item.codigoTabela, item.desc, item.sistema].join(' '));
-    const compacto = hay.replace(/[^a-z0-9]/g, '');
-    return termos.every(t => hay.includes(t) || compacto.includes(t.replace(/[^a-z0-9]/g, '')));
+    const palavras = norm([item.codigo, item.codigoInterno, item.codigoTabela, item.desc, item.sistema].join(' ')).split(/[^a-z0-9./-]+/).filter(Boolean).map(normalizarTermoItemIA);
+    const codigos=[item.codigo,item.codigoInterno,item.codigoTabela,...palavras.filter(p=>/\d/.test(p))].filter(Boolean).map(c=>norm(c).replace(/[^a-z0-9]/g,''));
+    return termos.every(t => palavras.includes(t) || (/\d/.test(t) && codigos.includes(t.replace(/[^a-z0-9]/g,''))));
+  }
+
+  function perguntaAutoriaPlacaIA(q) {
+    return /\b(?:quem|qual mecanico|quais mecanicos|qual funcionario|qual usuario|qual colaborador|qual profissional|qual responsavel)\b/.test(q)
+      && /\b(?:mecanicos?|funcionarios?|usuarios?|colaboradores?|profissional|responsavel|atendeu|atenderam|atendimentos?|fez|fizeram|trocou|trocaram|substituiu|executou|realizou|instalou|aplicou|registrou|marcou|lancou|alterou|mudou|atualizou|confirmou)\b/.test(q) && !/comiss/.test(q);
+  }
+
+  function nomePessoaItemIA(ctx,id,nome) {
+    if (String(nome || '').trim()) return String(nome).trim();
+    if (!id) return '';
+    const pessoa=(ctx.equipe || []).find(p=>[p.id,p.uid,p.userId,p.usuarioId].some(v=>v && String(v)===String(id)));
+    return pessoa?.nome || pessoa?.usuario || `identificador ${String(id)}`;
+  }
+
+  function autoriaItemIA(ctx,os,item) {
+    const reg=os?.execucaoItens?.[item.key] || {};
+    const executor=nomePessoaItemIA(ctx,reg.executorId || reg.executadoPorId || item.executorId || item.executadoPorId,
+      reg.executorNome || reg.executadoPorNome || item.executorNome || item.executadoPorNome);
+    const atribuicoes=[reg,item,...(Array.isArray(item.rateiosComissao)?item.rateiosComissao.map(r=>({...r,mecId:r.mecId || r.id,mecNome:r.mecNome || r.nome})):[])];
+    const responsaveis=uniq(atribuicoes.map(r=>nomePessoaItemIA(ctx,r.mecId || r.mecanicoId || r.responsavelId,r.mecNome || r.mecanicoNome || r.responsavelNome)));
+    const audit=W.OSOperacional?.executionStatusAudit?.(os,item.key,reg) || null;
+    const registrante=audit ? nomePessoaItemIA(ctx,audit.id,audit.nome) : '';
+    return {executor,responsaveis,audit,registrante};
+  }
+
+  function evidenciasItemPlacaIA(texto,placa,ctx,listaOS) {
+    const termos=termosItemPergunta(texto,placa);
+    const encontrados=[];
+    listaOS.slice().sort((a,b)=>String(b.data || b.createdAt || '').localeCompare(String(a.data || a.createdAt || ''))).forEach(o=>{
+      itensOrcamentoOS(ctx,o).forEach(item=>{ if(itemCombinaTermos(item,termos)) encontrados.push({o,item}); });
+    });
+    return {termos,encontrados};
+  }
+
+  function responderAutoriaItemPlacaIA(texto,q,ctx,placa,listaOS) {
+    if (!perguntaAutoriaPlacaIA(q) || pareceConsultaOrigemCompraVeiculoIA(texto)) return null;
+    const {termos,encontrados}=evidenciasItemPlacaIA(texto,placa,ctx,listaOS);
+    if (!termos.length) return null;
+    if (!encontrados.length) return `Não encontrei ${esc(termos.join(' '))} nas O.S. carregadas da placa ${esc(placa)}. Não há registro correspondente para identificar quem realizou ou registrou a execução.`;
+    const linhas=encontrados.map(({o,item})=>{
+      const {executor,responsaveis,audit,registrante}=autoriaItemIA(ctx,o,item);
+      const detalhes=[`- O.S. #${esc(String(o.numero || o.id || '').slice(-6).toUpperCase())} | entrada ${esc(dataBR(o.data || o.createdAt))} | ${esc(item.labelTipo)}: ${esc(item.codigo ? `[${item.codigo}] ` : '')}${esc(item.desc)} | ${statusVerdadeiroItem(o,item)}`];
+      detalhes.push(item.executado && executor ? `Executor identificado: ${esc(executor)}.` : 'Executor da troca/serviço não identificado de forma explícita neste item.');
+      if (responsaveis.length) detalhes.push(`Responsável(is) atribuído(s) ao item: ${esc(responsaveis.join(', '))}.`);
+      detalhes.push(registrante ? `Status registrado por: ${esc(registrante)}${audit.dt ? ` em ${esc(dataHoraEventoIA(audit.dt))}` : ''}${audit.novo ? ` | ${esc(audit.anterior || 'estado anterior não informado')} → ${esc(audit.novo)}` : ''}.` : 'Usuário que alterou o status: não identificado no registro disponível.');
+      return detalhes.join('<br>&nbsp;&nbsp;');
+    });
+    return `<strong>Autoria de ${esc(termos.join(' '))} — placa ${esc(placa)}:</strong><br>${linhas.join('<br><br>')}`;
   }
 
   function vinculoFiscalAtivoIA(v) {
@@ -3080,44 +3144,38 @@
     const querPecasAplicadas = /(?:peca|item)/.test(q) && /troc|substitu|instal|aplic|usad|coloc|utiliz/.test(q);
     const querConfirmar = /foi|foram|troc|substitu|instal|execut|realiz|feito|feita|consta|tem/.test(q);
     if (!querResumo && !querServicosRealizados && !querPecasAplicadas && !querConfirmar) return null;
+    const termos = termosItemPergunta(texto, placa);
 
-    const osOrdenadas = listaOS.slice().sort((a, b) => String(b.updatedAt || b.createdAt || b.data || '').localeCompare(String(a.updatedAt || a.createdAt || a.data || '')));
-    if (querResumo || querServicosRealizados || querPecasAplicadas) {
+    const osOrdenadas = listaOS.slice().sort((a, b) => String(b.data || b.createdAt || '').localeCompare(String(a.data || a.createdAt || '')));
+    if ((querResumo || querServicosRealizados || querPecasAplicadas) && !termos.length) {
       const modo = querServicosRealizados ? 'servico' : (querPecasAplicadas ? 'peca' : 'todos');
-      const blocos = osOrdenadas.slice(0, 8).map(o => {
+      const blocos = osOrdenadas.map(o => {
         const itens = itensOrcamentoOS(ctx, o);
         const relevantesBase = itens.filter(i => i.aprovado || i.executado || i.legadoFinalizado || i.registradoFinalizado);
         const relevantes = modo === 'todos' ? relevantesBase : relevantesBase.filter(i => i.tipo === modo);
         const servicos = relevantesBase.filter(i => i.tipo === 'servico');
         const pecas = relevantesBase.filter(i => i.tipo === 'peca');
-        const amostra = relevantes.slice(0, modo === 'todos' ? 10 : 20).map(i => `- ${esc(i.labelTipo || i.tipo)}: ${esc(i.codigo ? `[${i.codigo}] ` : '')}${esc(i.desc || '-') } | ${statusVerdadeiroItem(o, i)}`);
-        const extra = Math.max(0, relevantes.length - amostra.length);
+        const linhasItens = relevantes.map(i => `- ${esc(i.labelTipo || i.tipo)}: ${esc(i.codigo ? `[${i.codigo}] ` : '')}${esc(i.desc || '-') } | ${statusVerdadeiroItem(o, i)}`);
         const cabQtd = modo === 'servico' ? `Serviços localizados: ${relevantes.filter(i=>i.tipo==='servico').length}` : modo === 'peca' ? `Peças localizadas: ${relevantes.filter(i=>i.tipo==='peca').length}` : `Serviços: ${servicos.length} | Peças: ${pecas.length}`;
-        return `${resumoOS(ctx, o, Object.assign({}, opts, { comDiagnostico:false, comValores:false }))}<br>${cabQtd}${amostra.length ? `<br>${amostra.join('<br>')}` : `<br>Nenhum ${modo === 'servico' ? 'serviço' : modo === 'peca' ? 'item de peça' : 'item'} compatível localizado nessa O.S.`}${extra ? `<br><small>+ ${extra} item(ns).</small>` : ''}`;
+        return `${resumoOS(ctx, o, Object.assign({}, opts, { comDiagnostico:false, comValores:false }))}<br>${cabQtd}${linhasItens.length ? `<br>${linhasItens.join('<br>')}` : `<br>Nenhum ${modo === 'servico' ? 'serviço' : modo === 'peca' ? 'item de peça' : 'item'} compatível localizado nessa O.S.`}`;
       });
       const titulo = modo === 'servico' ? `Serviços da placa ${esc(placa)}` : modo === 'peca' ? `Peças da placa ${esc(placa)}` : `Resumo de serviços e peças da placa ${esc(placa)}`;
       return `<strong>${titulo}:</strong><br>${blocos.join('<br><br>')}<br><br><small>Regra de verdade: somente itens com evidência de execução são chamados de executados/trocados. Registros antigos de O.S. entregue aparecem como localizados, mas sem confirmação individual quando esse dado não existe.</small>`;
     }
 
-    const termos = termosItemPergunta(texto, placa);
     if (!termos.length) return null;
-    const encontrados = [];
-    osOrdenadas.forEach(o => {
-      itensOrcamentoOS(ctx, o).forEach(item => {
-        if (itemCombinaTermos(item, termos)) encontrados.push({ o, item });
-      });
-    });
+    const {encontrados} = evidenciasItemPlacaIA(texto,placa,ctx,osOrdenadas);
     const descricaoBusca = termos.join(' ');
     if (!encontrados.length) {
       return `Não encontrei ${esc(descricaoBusca)} nas O.S. carregadas da placa ${esc(placa)}. Portanto, não há dado comprovado de troca/instalação desse item.`;
     }
-    const linhas = encontrados.slice(0, 8).map(({o,item}) => {
+    const linhas = encontrados.map(({o,item}) => {
       return `- O.S. #${esc(String(o.numero || o.id || '').slice(-6).toUpperCase())} | ${esc(dataBR(o.data || o.createdAt))} | ${esc(item.codigo ? `[${item.codigo}] ` : '')}${esc(item.desc || '-')} | ${statusVerdadeiroItem(o, item)}`;
     });
-    const confirmados = encontrados.filter(x => x.item.executado).length;
+    const confirmados = new Set(encontrados.filter(x => x.item.executado).map(x => x.o)).size;
     const legados = encontrados.filter(x => x.item.legadoFinalizado || x.item.registradoFinalizado).length;
     const conclusao = confirmados
-      ? `Sim. Há ${confirmados} registro(s) com execução confirmada.`
+      ? `Sim. Há execução confirmada em ${confirmados} O.S. As linhas abaixo são evidências por item, agrupadas pelo atendimento.`
       : legados
         ? `O item consta em O.S. finalizada/entregue, mas sem confirmação individual de execução. Não é correto afirmar troca comprovada.`
         : `O item consta, porém não há execução confirmada.`;
@@ -3464,19 +3522,16 @@
   }
 
   function responderAtendimentosPlacaIA(texto, q, ctx, placa, listaOS) {
-    if (!/atendimentos?|historico.*(?:os|ordem)|ordens.*placa/.test(q)) return null;
+    const perguntaMecanico=perguntaAutoriaPlacaIA(q) && !termosItemPergunta(texto,placa).length;
+    if (!perguntaMecanico && !/atendimentos?|historico.*(?:os|ordem)|ordens.*placa/.test(q)) return null;
     const linhas = listaOS.slice().sort((a,b)=>String(a.createdAt || a.data || '').localeCompare(String(b.createdAt || b.data || ''))).map(os => {
-      const mecs = uniq([
-        os.mecNome,
-        ...(Array.isArray(os.mecanicos) ? os.mecanicos.map(m=>m?.nome || m?.mecNome) : []),
-        ...(Array.isArray(os.servicos) ? os.servicos.flatMap(s=>[s?.mecNome,s?.mecanicoNome,...(Array.isArray(s?.rateiosComissao)?s.rateiosComissao.map(r=>r?.mecNome||r?.nome):[])]) : [])
-      ]).filter(Boolean);
-      const serv = (Array.isArray(os.servicos) ? os.servicos : []).filter(s=>s?.desc || s?.descricao).slice(0,10).map(s=>esc(s.desc || s.descricao)).join('; ');
+      const mecs = mecanicosRelacionadosOSIA(ctx,os,{incluirServicos:true});
+      const serv = (Array.isArray(os.servicos) ? os.servicos : []).filter(s=>s?.desc || s?.descricao).map(s=>esc(s.desc || s.descricao)).join('; ');
       const abertura = os.createdAt || os.abertaEm || os.data || '';
       const fim = os.finalizadoEm || os.entregueEm || '';
-      return `- O.S. ${esc(String(os.numero || os.id || '-').slice(-10))} | abertura ${esc(dataBR(abertura) || '-')} | ${esc(statusOperacionalAtendimento(os).rotulo)}${fim ? ` | finalizada ${esc(dataBR(fim))}` : ''}${mecs.length ? ` | mec&acirc;nico(s): ${esc(mecs.join(', '))}` : ''}${serv ? `<br>&nbsp;&nbsp;Servi&ccedil;os: ${serv}` : '<br>&nbsp;&nbsp;Sem servi&ccedil;o lan&ccedil;ado.'}`;
+      return `- O.S. #${esc(String(os.numero || os.id || '-').slice(-6).toUpperCase())} | abertura ${esc(dataBR(abertura) || '-')} | ${esc(statusOperacionalAtendimento(os).rotulo)}${fim ? ` | finalizada ${esc(dataBR(fim))}` : ''}${mecs.length ? ` | mecânico(s) relacionado(s): ${esc(mecs.join(', '))}` : ' | mecânico não identificado'}${serv ? `<br>&nbsp;&nbsp;Servi&ccedil;os: ${serv}` : '<br>&nbsp;&nbsp;Sem servi&ccedil;o lan&ccedil;ado.'}`;
     });
-    return `<strong>Atendimentos da placa ${esc(placa)} (${listaOS.length} O.S.):</strong><br>${linhas.join('<br>')}`;
+    return `<strong>Atendimentos da placa ${esc(placa)} (${listaOS.length} O.S.):</strong><br>${linhas.join('<br>')}<br><small>Os nomes indicam vínculo com o atendimento. A execução e a autoria de cada item são consultadas nos seus registros individuais.</small>`;
   }
 
   function normalizeBrainJson(raw, fallback) {
@@ -3731,17 +3786,22 @@
     const placa = extrairPlaca(texto);
     if (placa) {
       const lista = osMatchesPlaca(ctx, placa).sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+      const autoriaItem = lista.length && responderAutoriaItemPlacaIA(texto,q,ctx,placa,lista);
+      if (autoriaItem) return aplicarComportamento(autoriaItem);
       const agendaPlaca = responderAgendaIA(texto, q, ctx, placa);
       if (agendaPlaca) return aplicarComportamento(agendaPlaca);
       const auditoriaPlaca = responderAuditoriaIA(texto, q, ctx);
       if (auditoriaPlaca) return aplicarComportamento(auditoriaPlaca);
       const movimentosPlaca = responderMovimentosEstoqueIA(texto, q, ctx);
       if (movimentosPlaca) return aplicarComportamento(movimentosPlaca);
-      const donoPlaca = responderDonoPlacaIA(texto, q, ctx, placa);
-      if (donoPlaca) return aplicarComportamento(donoPlaca);
       const comprasPlaca = responderComprasDaPlacaIA(texto, q, ctx, opts, placa, lista);
       if (comprasPlaca) return aplicarComportamento(comprasPlaca);
+      const donoPlaca = responderDonoPlacaIA(texto, q, ctx, placa);
+      if (donoPlaca) return aplicarComportamento(donoPlaca);
       if (!lista.length) return `Nao encontrei O.S. carregada para a placa ${esc(placa)}. Confirme se a placa esta correta ou se os dados ja sincronizaram.`;
+      if (perguntaAutoriaPlacaIA(q) && !termosItemPergunta(texto,placa).length) {
+        return aplicarComportamento(responderAtendimentosPlacaIA(texto,q,ctx,placa,lista));
+      }
       const placaMecanico = responderPlacaMecanicoIA(texto, q, ctx, placa, lista);
       if (placaMecanico) return aplicarComportamento(placaMecanico);
       const datasPlaca = responderDatasPlacaIA(texto, q, ctx, placa, lista);
