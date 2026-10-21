@@ -19,12 +19,19 @@
     const accountId=manager(s)?(s.adminEmail || s.tid || ''):'';
     return {user:String(s.nome || '').trim(),usuarioId:String(s.fid || s.uid || s.userId || s.usuarioId || accountId || authId || ''),usuarioAuthId:authId||null,perfil:s.role || 'equipe'};
   };
-  const labels = {pendente:'Pendente',em_execucao:'Em execução',executado:'Executado / aplicado',trocada:'Trocada / aplicada',executado_obs:'Executado com observação',nao_executado:'Não executado',nao_encontrada:'Peça não encontrada',nao_trocada:'Peça não aplicada',cancelado:'Cancelado'};
+  const labels = {pendente:'Pendente',em_execucao:'Em execução',executado:'Concluído / executado',trocada:'Trocada / aplicada',executado_obs:'Executado com observação',nao_executado:'Não executado',nao_encontrada:'Peça não encontrada',nao_trocada:'Peça não aplicada',cancelado:'Cancelado'};
   const normalize = s => ({executado_com_observacao:'executado_obs',concluido:'executado',finalizado:'executado',feito:'executado',realizado:'executado'}[s] || s || 'pendente');
   const stateOf = e => ({status:normalize(e?.status),obs:String(e?.obs || '')});
   const identity = i => i ? [i.tipo, String(i.desc || '').trim(), String(i.codigo || '').trim(), i.estoqueId || '', Number(i.qtd || 1)] : null;
   const items = os => new Map((U()?.buildBudgetItems(os) || []).map(i => [i.key,i]));
   const approved = os => os?.aprovacaoAtiva !== false && U()?.hasApproval(os) ? U().getApprovedKeys(os) : new Set();
+  function itemApproved(os,key,item) {
+    const authorization=(os.aprovacao?.itens || []).find(i=>i && typeof i==='object' && i.key===key);
+    return approved(os).has(key) && (!authorization ||
+      (!authorization.desc || String(authorization.desc).trim()===String(item?.desc || '').trim()) &&
+      (!authorization.codigo || String(authorization.codigo).trim()===String(item?.codigo || '').trim()) &&
+      (authorization.qtd==null || Number(authorization.qtd)===Number(item?.qtd)));
+  }
   let active = null, unsub = null, unsubConflicts = null;
   const busy = new Set();
   const fieldLabels = {desc:'Descrição',diagnostico:'Diagnóstico',km:'Quilometragem',prisma:'Prisma',numeroPrisma:'Prisma',chkObs:'Observação da inspeção',status:'Status do veículo',pecas:'Peças',servicos:'Serviços',aprovacao:'Aprovação',itensAprovados:'Itens aprovados',total:'Total',totalAprovado:'Total aprovado',media:'Evidências'};
@@ -54,14 +61,14 @@
     const e = Error('Há alterações simultâneas no mesmo campo. A proposta foi enviada ao JARVIS para conferência; o rascunho foi mantido.');
     e.code = 'os-conflict'; return e;
   }
-  function executionEvent(session,key,item,before,after,who=actor(session),origin='') {
+  function executionEvent(session,key,item,before,after,who=actor(session),origin='',financialApproval=false) {
     return event(session,'execucao_item_os',(item.tipo === 'peca' ? 'Peça ' : 'Serviço ')+item.desc+': '+
       labels[before.status]+' → '+labels[after.status]+(before.obs !== after.obs ? ' | Observação: "'+(before.obs || '(vazia)')+'" → "'+(after.obs || '(vazia)')+'"' : '')+' — usuário: '+who.user,
-      {...who,usuarioNome:who.user,origem:origin,itemKey:key,itemTipo:item.tipo,itemDescricao:item.desc,statusAnterior:before.status,statusNovo:after.status,statusAlterado:before.status!==after.status,observacaoAnterior:before.obs,observacaoNova:after.obs,aprovadoFinanceiramente:true});
+      {...who,usuarioNome:who.user,origem:origin,itemKey:key,itemTipo:item.tipo,itemDescricao:item.desc,statusAnterior:before.status,statusNovo:after.status,statusAlterado:before.status!==after.status,observacaoAnterior:before.obs,observacaoNova:after.obs,aprovadoFinanceiramente:financialApproval});
   }
   function executionRecord(previous,key,item,before,after,who,entry) {
     const changed=before.status!==after.status;
-    return {...previous,...after,key,tipo:item.tipo,itemDescricao:item.desc,itemIdentidade:identity(item),
+    return {...previous,...after,key,tipo:item.tipo,itemDescricao:item.desc,itemIdentidade:identity(item),aprovadoFinanceiramenteNoRegistro:entry.aprovadoFinanceiramente,
       atualizadoPor:who.user,atualizadoPorId:who.usuarioId,atualizadoPorAuthId:who.usuarioAuthId,
       atualizadoPorTipo:who.perfil,atualizadoEm:entry.dt,updatedAt:entry.dt,
       ...(changed?{statusAlteradoPor:who.user,statusAlteradoPorId:who.usuarioId,statusAlteradoPorAuthId:who.usuarioAuthId,
@@ -140,14 +147,14 @@
         if (!snap.exists) throw Error('O.S. não encontrada.');
         const current = snap.data();
         if (current.tenantId !== session.tid || (!manager(session) && !ctx.linked?.(current))) throw Error('Usuário sem vínculo autorizado com esta O.S.');
-        const keys = approved(current), approvalItems=new Map((current.aprovacao?.itens||[]).filter(i=>i&&typeof i==='object').map(i=>[i.key,i])), currentItems = items(current), exec = {...current.execucaoItens}, events = [], conflicts = [];
+        const currentItems = items(current), exec = {...current.execucaoItens}, events = [], conflicts = [];
         for (const d of drafts.values()) {
           const item = currentItems.get(d.key), before = stateOf(exec[d.key]);
           if(d.hasRespControl)before.mecId=String(exec[d.key]?.mecId || exec[d.key]?.responsavelId || item?.mecId || current.mecId || '');
-          const authorization=approvalItems.get(d.key);
-          const approvalMatches=!authorization || (!authorization.desc || String(authorization.desc).trim()===String(item?.desc||'').trim()) && (!authorization.codigo || String(authorization.codigo).trim()===String(item?.codigo||'').trim()) && (authorization.qtd==null || Number(authorization.qtd)===Number(item?.qtd));
-          if (!keys.has(d.key) || !item || !approvalMatches || !equal(d.identity,identity(item))) {
-            conflicts.push({campo:d.key,rotulo:baseItems.get(d.key)?.desc || d.key,base:d.before,atual:before,proposta:d.proposed,identidade:d.identity,motivo:'Item ou autorização alterados. Conferir a ficha.'}); continue;
+          // A conclusão operacional independe da aprovação do orçamento.
+          // A existência e a identidade do item continuam sendo conferidas.
+          if (!item || !equal(d.identity,identity(item))) {
+            conflicts.push({campo:d.key,rotulo:baseItems.get(d.key)?.desc || d.key,base:d.before,atual:before,proposta:d.proposed,identidade:d.identity,motivo:'Item alterado ou removido. Conferir a ficha.'}); continue;
           }
           const m = merge(d.before,before,d.proposed);
           if (m.conflicts.length) { conflicts.push({campo:d.key,rotulo:item.desc,base:d.before,atual:before,proposta:d.proposed,identidade:d.identity}); continue; }
@@ -155,7 +162,7 @@
           if (equal(before,after)) continue;
           validateState(after);
           const resp=d.hasRespControl?{mecId:after.mecId,responsavelId:after.mecId,mecNome:ctx.resolveName?.(after.mecId)||((session.equipe||[]).find(m=>m.id===after.mecId)?.nome)||exec[d.key]?.mecNome||'',responsavelNome:ctx.resolveName?.(after.mecId)||((session.equipe||[]).find(m=>m.id===after.mecId)?.nome)||exec[d.key]?.responsavelNome||''}:{};
-          const execution=executionEvent(session,d.key,item,before,after,who,ctx.kind || '');
+          const execution=executionEvent(session,d.key,item,before,after,who,ctx.kind || '',itemApproved(current,d.key,item));
           exec[d.key] = executionRecord({...exec[d.key],...resp},d.key,item,before,after,who,execution);
           if(d.hasRespControl&&before.mecId!==after.mecId){execution.responsavelAnteriorId=before.mecId;execution.responsavelNovoId=after.mecId;execution.acao+=' | Responsável: '+(ctx.resolveName?.(before.mecId)||before.mecId||'(nenhum)')+' → '+(resp.mecNome||after.mecId||'(nenhum)');}
           events.push(execution);
@@ -324,9 +331,9 @@
         if(!equal(before,c.atual))throw Error('O campo mudou durante a conferência. Confira novamente antes de decidir.');
         if(message.tipoConflito==='execucao' && !equal(before,c.valor)) {
           const item=items(current).get(c.campo);
-          if(!approved(current).has(c.campo) || !equal(c.identidade,identity(item)))throw Error('Item ou autorização mudaram. Corrija na ficha antes de executar.');
+          if(!item || !equal(c.identidade,identity(item)))throw Error('Item alterado ou removido. Confira a ficha antes de registrar a execução.');
           const responsible=Object.hasOwn(c.valor,'mecId')?{responsavelId:c.valor.mecId,mecNome:(ctx.session.equipe||[]).find(m=>m.id===c.valor.mecId)?.nome||'',responsavelNome:(ctx.session.equipe||[]).find(m=>m.id===c.valor.mecId)?.nome||''}:{};
-          const execution=executionEvent(ctx.session,c.campo,item,before,c.valor,who,'jarvis');
+          const execution=executionEvent(ctx.session,c.campo,item,before,c.valor,who,'jarvis',itemApproved(current,c.campo,item));
           exec[c.campo]=executionRecord({...exec[c.campo],...responsible},c.campo,item,before,c.valor,who,execution);
           patch.execucaoItens=exec; events.push(execution);
         }else if(message.tipoConflito!=='execucao' && !equal(before,c.valor))patch[c.campo]=c.valor;

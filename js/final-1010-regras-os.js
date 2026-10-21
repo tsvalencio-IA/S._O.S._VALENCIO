@@ -22,7 +22,7 @@
       const exec = o.execucaoItens || {};
       const placa = o.placa || (window.J?.veiculos||[]).find(v=>v.id===o.veiculoId)?.placa || 'S/P';
       const aprovados = info.aprovados.map(i=>`${i.labelTipo||i.tipo}: ${i.desc} [${exec[i.key]?.status || 'pendente'}${exec[i.key]?.obs ? ' obs:'+exec[i.key].obs : ''}]`).join('; ') || 'nenhum item aprovado identificado';
-      const nao = info.nao.map(i=>`${i.labelTipo||i.tipo}: ${i.desc}`).join('; ') || 'nenhum';
+      const nao = info.nao.map(i=>`${i.labelTipo||i.tipo}: ${i.desc} [${exec[i.key]?.status || 'pendente'}]`).join('; ') || 'nenhum';
       return `OS ${String(o.id||'').slice(-6).toUpperCase()} | Placa ${placa} | Status ${o.status||'-'} | Diag ${o.diagnostico||'-'} | APROVADOS: ${aprovados} | NÃO APROVADOS/HISTÓRICO: ${nao}`;
     }).join('\n');
   };
@@ -33,12 +33,12 @@
     window._buildContextoIA = function(){
       const base = old.call(this);
       return base + '\n\n=== REGRA DE VERDADE SOBRE O.S. ===\n' +
-        'Item no orçamento NÃO significa item trocado. Só afirmar executado/trocado quando execucaoItens.status for executado/executado_obs. Itens não aprovados são histórico, não autorização.\n' +
+        'Item no orçamento NÃO significa item trocado. Execução e aprovação do orçamento são independentes: a conclusão registrada vale mesmo sem aprovação financeira. Só afirmar executado/trocado com evidência individual de execução; a aprovação isolada não comprova execução.\n' +
         window.thIAContextoOSVerdadeiro(window.J?.os || []);
     };
   }
 
-  // Equipe: IA com contexto verdadeiro; evita afirmar que item não aprovado foi trocado.
+  // Equipe: IA com contexto verdadeiro; aprovação e execução são dados distintos.
   if (location.pathname.toLowerCase().includes('equipe') && typeof window.iaEnviar === 'function') {
     window.iaEnviar = async function(){
       const inp=$('iaInput'); const msg=inp?.value?.trim(); if(!msg) return; inp.value='';
@@ -64,7 +64,7 @@
     const msg = document.createElement('div');
     msg.className='alerta-aprovacao-1010';
     msg.style.cssText='background:rgba(255,184,0,.08);border:1px solid rgba(255,184,0,.35);border-radius:4px;padding:10px;margin:8px 0;color:var(--warn);font-family:var(--fm);font-size:.68rem;line-height:1.55;';
-    msg.textContent='ATENÇÃO: O.S. aprovada. Itens não aprovados são histórico e não devem ser executados. Equipe só pode atualizar status de execução dos itens aprovados.';
+    msg.textContent='Execução e aprovação do orçamento são independentes. A equipe pode registrar a conclusão de qualquer item da O.S., com identificação do usuário. A aprovação financeira permanece sob controle do JARVIS.';
     const alvo=$('containerServicosOS')||$('containerServicos')||$('tp1');
     if(alvo && !document.querySelector('.alerta-aprovacao-1010')) alvo.parentElement.insertBefore(msg, alvo);
   };
@@ -137,7 +137,7 @@
       const keys = U().getApprovedKeys?.(o) || new Set(o?.itensAprovados || []);
       const exec = o.execucaoItens || {};
       const aprov = itens.filter(i=>keys.has(i.key)).map(i=>`${i.labelTipo||i.tipo}: ${i.desc} [${exec[i.key]?.status || 'pendente'}${exec[i.key]?.obs?' obs:'+exec[i.key].obs:''}]`).join('; ') || 'nenhum aprovado identificado';
-      const nao = itens.filter(i=>!keys.has(i.key)).map(i=>`${i.labelTipo||i.tipo}: ${i.desc}`).join('; ') || 'nenhum';
+      const nao = itens.filter(i=>!keys.has(i.key)).map(i=>`${i.labelTipo||i.tipo}: ${i.desc} [${exec[i.key]?.status || 'pendente'}]`).join('; ') || 'nenhum';
       return `OS ${String(o.id||'').slice(-6).toUpperCase()} | Placa ${o.placa||'-'} | Status ${o.status||'-'} | APROVADOS: ${aprov} | NÃO APROVADOS/HISTÓRICO: ${nao}`;
     }).join('\n');
   }
@@ -149,7 +149,7 @@
       const novo = function(){
         const base = oldBuild.apply(this, arguments);
         return base + '\n\n=== REGRAS ABSOLUTAS SOBRE O.S. / EXECUÇÃO ===\n' +
-          'Item no orçamento NÃO significa peça trocada ou serviço executado. Item NÃO APROVADO é histórico, não autorização. Só afirmar executado/trocado quando execucaoItens.status = executado ou executado_obs. Nunca usar o campo peças reais em resposta normal.\n' + contextoVerdadeiro(window.J?.os || []);
+          'Item no orçamento NÃO significa peça trocada ou serviço executado. Aprovação financeira e execução são independentes. Uma conclusão individual registrada comprova execução mesmo sem aprovação do item no orçamento. Nunca usar o campo peças reais em resposta normal.\n' + contextoVerdadeiro(window.J?.os || []);
       };
       novo.__verdadeiro1010 = true;
       window._buildContextoIA = novo;
@@ -162,7 +162,7 @@
     window.testarCerebroLocal = async function(){
       const inp = $('iaTestInput');
       if (inp && !/item no orçamento/i.test(inp.value || '')) {
-        inp.value = String(inp.value || '') + '\n\nRegra do sistema: item no orçamento não é item executado; não aprovado não é trocado; só considerar executado com status de execução real.';
+        inp.value = String(inp.value || '') + '\n\nRegra do sistema: orçamento e aprovação isolados não comprovam execução; considerar executado com evidência individual, mesmo sem aprovação financeira.';
       }
       return old.apply(this, arguments);
     };
@@ -185,7 +185,7 @@
     const box = document.createElement('div');
     box.id='avisoAprovacao1010';
     box.style.cssText='background:rgba(255,184,0,.09);border:1px solid rgba(255,184,0,.4);border-left:4px solid var(--warn);border-radius:4px;padding:10px 12px;margin:10px 0;color:var(--warn);font-family:var(--fm);font-size:.68rem;line-height:1.55;';
-    box.innerHTML='<b>O.S. APROVADA:</b> itens não aprovados são histórico e não podem ser executados. Equipe/Jarvis devem alterar somente status de execução dos itens aprovados.';
+    box.innerHTML='<b>EXECUÇÃO DA O.S.:</b> a conclusão pode ser registrada mesmo sem aprovação do item, com identificação do usuário. A aprovação do orçamento é um controle separado do JARVIS.';
     const alvo = document.getElementById('containerServicosOS') || document.getElementById('containerServicos') || document.getElementById('tp1');
     if (alvo?.parentElement) alvo.parentElement.insertBefore(box, alvo);
   };

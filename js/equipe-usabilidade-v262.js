@@ -37,7 +37,7 @@
     const opts = isPeca ? [
       ['pendente', 'Pendente'],
       ['em_execucao', 'Separando / aplicando'],
-      ['executado', 'Peça aplicada'],
+      ['executado', 'Concluído / peça aplicada'],
       ['trocada', 'Peça trocada / aplicada'],
       ['executado_obs', 'Aplicada com observação'],
       ['nao_encontrada', 'Peça não encontrada'],
@@ -47,7 +47,7 @@
     ] : [
       ['pendente', 'Pendente'],
       ['em_execucao', 'Em execução'],
-      ['executado', 'Serviço executado'],
+      ['executado', 'Concluído / serviço executado'],
       ['executado_obs', 'Executado com observação'],
       ['nao_executado', 'Não executado'],
       ['cancelado', 'Cancelado']
@@ -213,13 +213,11 @@
       return typeof originalApply === 'function' ? originalApply(os) : undefined;
     }
 
-    // Mantém os badges e todas as regras existentes; troca apenas a apresentação da área de execução.
+    // Aprovação do orçamento e conclusão operacional são controles independentes.
     if (typeof originalApply === 'function') originalApply(os);
 
     const U = W.JOS || W.JarvisOSUtils || {};
-    const chaves=U.getApprovedKeys?.(os)||new Set();
-    const aprovadaAtiva=U.hasApproval?.(os)&&os?.aprovacaoAtiva!==false&&chaves.size>0;
-    if(!aprovadaAtiva){
+    if(!os?.id){
       caixasOrcamento().forEach(el => { el.style.display = ''; });
       return;
     }
@@ -232,15 +230,15 @@
       W._equipeOrcamentoDetalhadoAbertoV262 = false;
     }
 
-    const keys = U.getApprovedKeys?.(os) || new Set();
+    const keys = os.aprovacaoAtiva!==false ? U.getApprovedKeys?.(os) || new Set() : new Set();
     const cliente = (typeof dbClientes !== 'undefined' ? dbClientes : []).find(c => String(c.id) === String(os?.clienteId || ''));
     const todos = U.buildBudgetItems?.(os, cliente) || [];
     const itens = todos; // O vínculo é validado na OS; auxiliares acompanham todos os itens.
-    const aprovados = itens.filter(it => keys.has(it.key));
+    if(!itens.length){caixasOrcamento().forEach(el=>{el.style.display='';});return;}
     const naoAprovados = itens.filter(it => !keys.has(it.key));
     const exec = os?.execucaoItens || {};
-    const pendentes = aprovados.filter(it => !statusFinalizado(exec[it.key]?.status));
-    const finalizados = aprovados.filter(it => statusFinalizado(exec[it.key]?.status));
+    const pendentes = itens.filter(it => !statusFinalizado(exec[it.key]?.status));
+    const finalizados = itens.filter(it => statusFinalizado(exec[it.key]?.status));
 
     const box = D.createElement('div');
     box.id = 'resumoAprovacaoEquipe';
@@ -254,7 +252,7 @@
           <span class="equipe-tarefa-chip ok"><span data-equipe-final-count-v262>${finalizados.length}</span> CONCLUÍDO(S)</span>
         </div>
       </div>
-      <p class="equipe-tarefas-ajuda">Use <b>CONCLUIR</b> para finalizar rapidamente. O item sai da fila principal, mas continua registrado no histórico e pode ser reaberto.</p>
+      <p class="equipe-tarefas-ajuda">Use <b>CONCLUIR</b> para registrar a conclusão e seu usuário, mesmo sem aprovação do item no orçamento. O item continua no histórico e pode ser reaberto.</p>
       <div id="execPendentesEquipeV262" class="equipe-tarefas-lista">
         ${pendentes.map(it => itemRowHTML(it, exec[it.key] || {}, os, false)).join('')}
       </div>
@@ -265,7 +263,7 @@
           <div id="execFinalizadosListaEquipeV262" class="equipe-tarefas-lista" style="margin-top:8px;">${finalizados.map(it => itemRowHTML(it, exec[it.key] || {}, os, true)).join('')}</div>
         </details>
       </div>
-      ${naoAprovados.length ? `<div class="equipe-nao-aprovados" style="margin-top:8px;"><details><summary>NÃO APROVADOS — SOMENTE HISTÓRICO (${naoAprovados.length})</summary><div style="display:grid;gap:6px;margin-top:8px;">${naoAprovados.map(it => `<div style="padding:8px;border:1px solid rgba(255,184,0,.18);border-radius:3px;color:var(--muted2);font-size:.72rem;">${esc(it.desc || '-')}</div>`).join('')}</div></details></div>` : ''}
+      ${naoAprovados.length ? `<div class="equipe-nao-aprovados" style="margin-top:8px;"><details><summary>SEM APROVAÇÃO NO ORÇAMENTO (${naoAprovados.length})</summary><div style="display:grid;gap:6px;margin-top:8px;">${naoAprovados.map(it => `<div style="padding:8px;border:1px solid rgba(255,184,0,.18);border-radius:3px;color:var(--muted2);font-size:.72rem;">${esc(it.desc || '-')}</div>`).join('')}</div></details></div>` : ''}
       <div class="equipe-save-bar">
         <button type="button" class="btn-primary" onclick="window.salvarExecucaoAprovadosEquipe('${esc(os?.id || '')}')">SALVAR ALTERAÇÕES</button>
       </div>

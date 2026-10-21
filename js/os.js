@@ -8558,10 +8558,10 @@ window.aplicarMarcadoresAprovacaoOS = function(os) {
   const U = OSU();
   document.getElementById('resumoAprovacaoOS')?.remove();
   document.querySelectorAll('#containerServicosOS .aprovacao-item-badge,#containerPecasOS .aprovacao-item-badge').forEach(el => el.remove());
-  const temAprovacaoOS = U.hasApproval?.(os);
-  if (!temAprovacaoOS) { window.atualizarCotacaoPecasOrcamentoAtualOS?.(os); return; }
-  const keys = U.getApprovedKeys?.(os) || new Set();
-  const badge = key => `<div class="aprovacao-item-badge" style="grid-column:1/-1;font-family:var(--fm);font-size:.62rem;letter-spacing:.8px;color:${keys.has(key) ? 'var(--success)' : 'var(--danger)'};border-top:1px dashed rgba(255,255,255,.12);padding-top:5px;margin-top:2px;">${keys.has(key) ? 'APROVADO NO ORÇAMENTO' : 'NÃO APROVADO - MANTIDO APENAS COMO HISTÓRICO'}</div>`;
+  const temAprovacaoOS = os?.aprovacaoAtiva!==false && U.hasApproval?.(os);
+  if (!os?.id) { window.atualizarCotacaoPecasOrcamentoAtualOS?.(os); return; }
+  const keys = temAprovacaoOS ? U.getApprovedKeys?.(os) || new Set() : new Set();
+  const badge = key => `<div class="aprovacao-item-badge" style="grid-column:1/-1;font-family:var(--fm);font-size:.62rem;letter-spacing:.8px;color:${keys.has(key) ? 'var(--success)' : 'var(--danger)'};border-top:1px dashed rgba(255,255,255,.12);padding-top:5px;margin-top:2px;">${keys.has(key) ? 'APROVADO NO ORÇAMENTO' : 'SEM APROVAÇÃO NO ORÇAMENTO'}</div>`;
 
   document.querySelectorAll('#containerServicosOS > div').forEach((row, idx) => {
     row.querySelector('.aprovacao-item-badge')?.remove();
@@ -8587,12 +8587,12 @@ window.aplicarMarcadoresAprovacaoOS = function(os) {
   const moeda = U.moeda || (v => 'R$ ' + numBR(v).toFixed(2).replace('.', ','));
   const exec = os?.execucaoItens || {};
   window.atualizarCotacaoPecasOrcamentoAtualOS?.(os);
-  const execHtml = aprovados.length ? `
+  const execHtml = itens.length ? `
     <div style="margin-top:14px;border-top:1px solid rgba(255,255,255,.12);padding-top:12px;">
-      <div style="font-family:var(--fm);font-size:.72rem;color:var(--cyan);font-weight:800;letter-spacing:1px;margin-bottom:8px;">EXECUÇÃO INTERNA DOS ITENS APROVADOS</div>
+      <div style="font-family:var(--fm);font-size:.72rem;color:var(--cyan);font-weight:800;letter-spacing:1px;margin-bottom:8px;">EXECUÇÃO INTERNA DOS ITENS DA O.S.</div>
       <div style="font-family:var(--fm);font-size:.60rem;color:var(--muted);margin-bottom:8px;">Controle interno da oficina/equipe. O cliente não vê estas marcações.</div>
       <div style="display:grid;gap:7px;">
-        ${aprovados.map(it => {
+        ${itens.map(it => {
           const e = exec[it.key] || {};
           const mecIdItem = e.mecId || e.responsavelId || it.mecId || it.responsavelId || os.mecId || '';
           const seletorMec = String(it.tipo || '').toLowerCase().includes('serv')
@@ -8612,7 +8612,7 @@ window.aplicarMarcadoresAprovacaoOS = function(os) {
   resumo.id = 'resumoAprovacaoOS';
   resumo.className = 'aprovacao-resumo';
   resumo.innerHTML = `
-    <h4>ORÇAMENTO APROVADO - ${aprovados.length}/${itens.length} ITEM(NS) - ${moeda(totalAprovado)}</h4>
+    <h4>${temAprovacaoOS?'ORÇAMENTO APROVADO':'ORÇAMENTO SEM APROVAÇÃO'} - ${aprovados.length}/${itens.length} ITEM(NS) - ${moeda(totalAprovado)}</h4>
     <div class="aprovacao-resumo-grid">
       ${aprovados.map(it => `<div class="aprovacao-resumo-item"><strong style="color:var(--success);">APROVADO</strong><br>${escOS(it.labelTipo || it.tipo)} ${it.codigo ? '[' + escOS(it.codigo) + '] ' : ''}${escOS(it.desc || '-')}${it.tempo ? `<br><small>TMO ${String(it.tempo).replace('.', ',')}h</small>` : ''}<br><b>${moeda(it.valorFinal)}</b></div>`).join('')}
       ${historico.map(it => `<div class="aprovacao-resumo-item nao"><strong style="color:var(--warn);">NÃO APROVADO</strong><br>${escOS(it.labelTipo || it.tipo)} ${it.codigo ? '[' + escOS(it.codigo) + '] ' : ''}${escOS(it.desc || '-')}<br><small>Mantido no histórico do orçamento.</small></div>`).join('')}

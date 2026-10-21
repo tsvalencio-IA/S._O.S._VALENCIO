@@ -48,9 +48,9 @@ test('conflito no mesmo status preserva banco e produz proposta persistente para
  await assert.rejects(c.OSOperacional.saveExecution(context(c,db,base,[row('peca-0','executado')])),/simultâneas/);
  assert.equal(db.docs.get('ordens_servico/os-test').execucaoItens['peca-0'].status,'trocada');const notices=[...db.docs.entries()].filter(([p])=>p.startsWith('chat_equipe/'));assert.equal(notices.length,1);assert.equal(notices[0][1].conflitos[0].proposta.status,'executado');
 });
-test('aprovação revogada ou troca de identidade do índice não autoriza execução',async()=>{
- for(const change of [os=>os.aprovacaoAtiva=false,os=>os.pecas.reverse()]){
-  const c=environment(),base=fixture(),current=copy(base);change(current);const db=database({'ordens_servico/os-test':current});await assert.rejects(c.OSOperacional.saveExecution(context(c,db,base,[row('peca-0','executado')])),/simultâneas/);assert.equal(db.docs.get('ordens_servico/os-test').execucaoItens['peca-0'].status,'pendente');
+test('item removido ou troca de identidade do índice exige conferência antes de registrar execução',async()=>{
+ for(const [key,change] of [['peca-1',os=>os.pecas.pop()],['peca-0',os=>os.pecas.reverse()]]){
+  const c=environment(),base=fixture(),current=copy(base);change(current);const db=database({'ordens_servico/os-test':current});await assert.rejects(c.OSOperacional.saveExecution(context(c,db,base,[row(key,'executado')])),/simultâneas/);assert.equal(db.docs.get('ordens_servico/os-test').execucaoItens[key].status,'pendente');
  }
 });
 test('repetição de callback da transação não duplica auditoria e falha não confirma UI',async()=>{

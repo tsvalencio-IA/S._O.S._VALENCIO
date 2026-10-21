@@ -139,3 +139,9 @@ test('mesmo modelo em duas placas exige escolha e respeita a placa informada',as
   const a=ambiente(J);assert.match(await a.ask('Quem trocou bucha da barra da Hilux?'),/Qual é a placa/);
   const r=await a.ask('FJU4J18');assert.match(r,/KAYO/);assert.doesNotMatch(r,/Outro responsável/);
 });
+test('IA reconhece conclusão e autor sem exigir aprovação do item no orçamento',async()=>{
+  const J=dados(),o=atual(J);delete o.aprovacao;delete o.itensAprovados;o.aprovacaoAtiva=false;
+  o.execucaoItens['peca-0']={status:'executado',statusAlteradoPor:'Autor teste',statusAlteradoPorId:'autor-teste',statusAlteradoPara:'executado',statusAlteradoEm:'2026-10-21T12:00:00Z'};
+  const a=ambiente(J),r=await a.ask('Foi trocada bucha barra no FJU4J18?');assert.match(r,/Sim\. Há execução confirmada em 1 O.S./);
+  assert.match(await a.ask('Quem registrou bucha barra do FJU4J18?'),/Status registrado por: Autor teste/);
+});

@@ -233,8 +233,8 @@
   function statusOptions(tipo, atual) {
     const isPeca = String(tipo || '').toLowerCase().includes('peca');
     const opts = isPeca
-      ? [['pendente','Pendente'],['em_execucao','Separando/comprando'],['executado','Peça aplicada'],['executado_obs','Aplicada com observação'],['nao_executado','Não executado'],['trocada','Trocada/aplicada'],['nao_encontrada','Peca nao encontrada'],['nao_trocada','Nao aplicada'],['cancelado','Cancelado']]
-      : [['pendente','Pendente'],['em_execucao','Em execucao'],['executado','Executado'],['executado_obs','Executado com observacao'],['nao_executado','Nao executado'],['cancelado','Cancelado']];
+      ? [['pendente','Pendente'],['em_execucao','Separando/comprando'],['executado','Concluído / peça aplicada'],['executado_obs','Aplicada com observação'],['nao_executado','Não executado'],['trocada','Trocada/aplicada'],['nao_encontrada','Peca nao encontrada'],['nao_trocada','Nao aplicada'],['cancelado','Cancelado']]
+      : [['pendente','Pendente'],['em_execucao','Em execucao'],['executado','Concluído / executado'],['executado_obs','Executado com observacao'],['nao_executado','Nao executado'],['cancelado','Cancelado']];
     return opts.map(([v,l]) => `<option value="${v}" ${W.OSOperacional.normalize(atual)===v?'selected':''}>${l}</option>`).join('');
   }
   function statusFinalizado(st) {
@@ -271,20 +271,20 @@
       D.querySelectorAll('#containerServicosOS .aprovacao-item-badge,#containerPecasOS .aprovacao-item-badge').forEach(el => el.remove());
       const temAprovacao = os?.aprovacaoAtiva !== false && U.hasApproval?.(os);
       W.atualizarCotacaoPecasOrcamentoAtualOS?.(os);
-      if (!temAprovacao) return;
-      const keys = U.getApprovedKeys?.(os) || new Set();
+      if (!os?.id) return;
+      const keys = temAprovacao ? U.getApprovedKeys?.(os) || new Set() : new Set();
       const itens = U.buildBudgetItems?.(os, (J().clientes || []).find(c => c.id === os?.clienteId)) || [];
       const aprovados = itens.filter(it => keys.has(it.key));
       const nao = itens.filter(it => !keys.has(it.key));
       const exec = os?.execucaoItens || {};
-      const pendentes = aprovados.filter(it => !statusFinalizado(exec[it.key]?.status));
-      const finalizados = aprovados.filter(it => statusFinalizado(exec[it.key]?.status));
+      const pendentes = itens.filter(it => !statusFinalizado(exec[it.key]?.status));
+      const finalizados = itens.filter(it => statusFinalizado(exec[it.key]?.status));
       const totalAprovado = os?.totalAprovado != null ? num(os.totalAprovado) : aprovados.reduce((s,it)=>s+num(it.valorFinal),0);
       const resumo = D.createElement('div');
       resumo.id = 'resumoAprovacaoOS';
       resumo.className = 'aprovacao-resumo';
       resumo.innerHTML = `
-        <h4>ORCAMENTO APROVADO - ${aprovados.length}/${itens.length} ITEM(NS) - ${moeda(totalAprovado)}</h4>
+        <h4>${temAprovacao?'ORCAMENTO APROVADO':'ORCAMENTO SEM APROVAÇÃO'} - ${aprovados.length}/${itens.length} ITEM(NS) - ${moeda(totalAprovado)}</h4>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 10px;">
           <span class="op-chip ok">${aprovados.length} aprovados</span>
           <span class="op-chip warn">${nao.length} nao aprovados</span>
@@ -293,10 +293,10 @@
         </div>
         <div class="aprovacao-resumo-grid">
           ${aprovados.map(it => `<div class="aprovacao-resumo-item"><strong style="color:var(--success);">APROVADO</strong><br>${esc(it.labelTipo || it.tipo)} ${it.codigo ? '[' + esc(it.codigo) + '] ' : ''}${esc(it.desc || '-')}<br><b>${moeda(it.valorFinal)}</b></div>`).join('')}
-          ${nao.map(it => `<div class="aprovacao-resumo-item nao"><strong style="color:var(--warn);">NAO APROVADO</strong><br>${esc(it.labelTipo || it.tipo)} ${it.codigo ? '[' + esc(it.codigo) + '] ' : ''}${esc(it.desc || '-')}<br><small>Mantido apenas como historico do orcamento.</small></div>`).join('')}
+          ${nao.map(it => `<div class="aprovacao-resumo-item nao"><strong style="color:var(--warn);">NAO APROVADO</strong><br>${esc(it.labelTipo || it.tipo)} ${it.codigo ? '[' + esc(it.codigo) + '] ' : ''}${esc(it.desc || '-')}<br><small>Aprovação do orçamento pendente; execução registrada separadamente.</small></div>`).join('')}
         </div>
         <div style="margin-top:14px;border-top:1px solid rgba(255,255,255,.12);padding-top:12px;">
-          <div class="op-title">EXECUCAO INTERNA DOS ITENS APROVADOS</div>
+          <div class="op-title">EXECUÇÃO INTERNA DOS ITENS DA O.S.</div>
           <div style="font-family:var(--fm);font-size:.60rem;color:var(--muted);margin-bottom:8px;">Ao marcar como executado/trocado/cancelado, o item sai da fila principal e vai para Finalizados. Cliente nao ve observacao interna.</div>
           <div id="execPendentesOS" style="display:grid;gap:7px;">${pendentes.map(it => itemHTML(it, exec[it.key] || {}, os)).join('')}</div>
           <div class="exec-finalizados" style="margin-top:10px;">
