@@ -97,4 +97,37 @@ test('HTML e scripts alterados compilam e CSS/media queries permanecem idêntico
  }
  for(const f of ['js/os-operacional.js','js/portal-eventos-publicos.js','js/os.js','js/backup-banco-v1.js','js/equipe-usabilidade-v262.js','js/hardening-operacional-20260515.js','js/jarvis-firestore-profissional-v2612.js'])new vm.Script(fs.readFileSync(path.join(root,f),'utf8'),{filename:f});
 });
+
+test('salvamento não pode reduzir ou trocar silenciosamente pecas serviços e fotos',async()=>{
+ const c=environment(),base=fixture();
+ base.media=[{url:'https://res.cloudinary.com/teste/image/upload/a.jpg'}];
+ for(const campo of ['pecas','servicos','media']){
+  const banco=database({'ordens_servico/os-test':base,'financeiro/f1':{status:'Pendente'}});
+  const novo=copy(base);
+  novo[campo]=campo==='pecas'?[base.pecas[0]]:[];
+  const tx=c.OSOperacional.batch(banco,banco.doc('ordens_servico/os-test'),base,{session:{...session,role:'admin'}});
+  tx.update(banco.doc('ordens_servico/os-test'),novo);
+  tx.update(banco.doc('financeiro/f1'),{status:'Pago'});
+  await assert.rejects(tx.commit(),/Gravação bloqueada/);
+  const os=banco.docs.get('ordens_servico/os-test');
+  assert.equal(os[campo].length,base[campo].length,campo);
+  assert.equal(banco.docs.get('financeiro/f1').status,'Pendente','financeiro não pode ser parcialmente atualizado');
+ }
+});
+test('salvamento permite acrescentar peças serviços e fotos sem remover anteriores',async()=>{
+ const c=environment(),base=fixture();base.media=[{url:'https://res.cloudinary.com/teste/image/upload/a.jpg'}];
+ const banco=database({'ordens_servico/os-test':base});
+ const novo=copy(base);
+ novo.pecas.push({desc:'Bomba d’água',codigo:'NOVA',qtd:1});
+ novo.servicos.push({desc:'Diagnóstico por scanner',valor:0});
+ novo.media.push({url:'https://res.cloudinary.com/teste/image/upload/b.jpg'});
+ const tx=c.OSOperacional.batch(banco,banco.doc('ordens_servico/os-test'),base,{session:{...session,role:'admin'}});
+ tx.update(banco.doc('ordens_servico/os-test'),novo);
+ await tx.commit();
+ const os=banco.docs.get('ordens_servico/os-test');
+ assert.equal(os.pecas.length,3);
+ assert.equal(os.servicos.length,2);
+ assert.equal(os.media.length,2);
+});
+
 module.exports={environment,database,fixture,row,context};
