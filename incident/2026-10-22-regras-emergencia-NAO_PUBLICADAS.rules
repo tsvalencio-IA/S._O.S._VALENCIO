@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // CONTENCAO TEMPORARIA, NAO E MODELO DE SEGURANCA COMPLETO.
+    // Sem Firebase Auth/RBAC efetivamente validado, outros dados seguem publicos.
+    function manterQuantidade(campo) {
+      let anterior = resource.data.get(campo, []);
+      let proximo = request.resource.data.get(campo, []);
+      return anterior is list && proximo is list &&
+             proximo.size() >= anterior.size();
+    }
+    function somenteAcrescentar(campo) {
+      let anterior = resource.data.get(campo, []);
+      let proximo = request.resource.data.get(campo, []);
+      return anterior is list && proximo is list &&
+             proximo.size() >= anterior.size() && proximo.hasAll(anterior);
+    }
+    match /ordens_servico/{osId} {
+      allow read, create: if true;
+      allow update: if
+        request.resource.data.get('tenantId','') == resource.data.get('tenantId','') &&
+        manterQuantidade('pecas') &&
+        manterQuantidade('servicos') &&
+        somenteAcrescentar('media') &&
+        somenteAcrescentar('timeline');
+      allow delete: if false;
+    }
+    match /ordens_servico/{osId}/{subcolecao}/{subId} {
+      allow read, write: if true;
+    }
+    match /ordens_servico/{osId}/{subcolecao}/{subId}/{resto=**} {
+      allow read, write: if true;
+    }
+    match /{colecao}/{doc} {
+      allow read, write: if colecao != 'ordens_servico';
+    }
+    match /{colecao}/{doc}/{resto=**} {
+      allow read, write: if colecao != 'ordens_servico';
+    }
+  }
+}
