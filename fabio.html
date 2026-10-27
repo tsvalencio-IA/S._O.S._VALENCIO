@@ -1930,6 +1930,9 @@ area.addEventListener('touchend',e=>{
 
 async function abrir(id,fotosSelecionadas=null){
  const os=source(id);if(!os||preparando)return;
+ if(!(window.__fabioFilaNavegacao||[]).includes(id)){
+  window.__fabioFilaNavegacao=(window.__fabioFiltradosIds||[]).includes(id)?window.__fabioFiltradosIds.slice():[id];
+ }
  preparando=true;osAtual=id;refOS=os;modo='cliente';paginasValidas=false;
  fotosAtuais=Array.isArray(fotosSelecionadas)?fotosSelecionadas.slice():null;
  window.fabioFotos.atualizarInternas(id);
