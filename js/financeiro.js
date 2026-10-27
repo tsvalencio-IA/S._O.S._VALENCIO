@@ -227,11 +227,12 @@ window.renderFinanceiro = function() {
         return `<tr style="${atrasado ? 'background:rgba(255,59,59,0.05);' : ''}">
             <td style="font-family:var(--fm);font-size:0.75rem">${dtBr(f.venc)}</td>
             <td><span class="pill ${tipCls}">${f.tipo}</span></td>
-            <td>${f.desc} ${vinculoNome}</td>
+            <td>${window.financeiroPodeAbrirBoleto?.(f) ? `<button type="button" class="btn-ghost fin-abrir-boleto-desc" data-boleto-financeiro="${String(f.id).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" style="text-align:left;white-space:normal;max-width:100%;overflow-wrap:anywhere;" title="Abrir dados do boleto">${String(f.desc || 'Boleto').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</button>` : f.desc} ${vinculoNome}</td>
             <td style="font-family:var(--fm);font-size:0.75rem">${f.pgto || '-'}</td>
             <td style="font-family:var(--fm);font-weight:700;color:${corValor}">${moeda(f.valor)}</td>
             <td><span class="pill ${stCls}">${f.status}</span></td>
             <td>
+                ${window.financeiroPodeAbrirBoleto?.(f) ? `<button type="button" class="btn-outline" data-boleto-financeiro="${String(f.id).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" title="Abrir dados do boleto">📄 ABRIR BOLETO</button>` : ''}
                 ${financeiroPodeSelecionarTabelaFin(f) ? `<label class="fin-boleto-select" title="Selecionar para agrupar em boleto"><input type="checkbox" class="fin-boleto-check" data-agrupavel="1" value="${f.id}" ${window.financeiroAgruparSelecionados.has(f.id) ? 'checked' : ''} onchange="window.toggleSelecaoBoletoFinanceiro('${f.id}', this.checked)"><span>boleto</span></label>` : `<span class="fin-boleto-select disabled" title="Este lançamento não pode ser agrupado">—</span>`}
                 <button class="btn-ghost" onclick="prepFin('${f.id}');abrirModal('modalFin')" title="Editar">✏</button>
                 <button class="btn-danger" onclick="toggleStatusFin('${f.id}','${f.status}')" title="${f.status === 'Pago' ? 'Marcar como Pendente' : 'Marcar como Pago'}">
@@ -247,7 +248,20 @@ window.renderFinanceiro = function() {
     financeiroAtualizarResumoSelecaoTabelaFin();
 };
 
+function financeiroSelecionarValorSalvoFin(id, valor) {
+    const select = document.getElementById(id);
+    if (!select) return;
+    const texto = String(valor ?? '');
+    if (texto && !Array.from(select.options).some(o => o.value === texto)) {
+        const option = new Option(texto, texto);
+        option.dataset.finValorSalvo = '1';
+        select.appendChild(option);
+    }
+    select.value = texto;
+}
+
 window.prepFin = function(id = null) {
+    document.querySelectorAll('#modalFin option[data-fin-valor-salvo]').forEach(o => o.remove());
     ['finId', 'finDesc', 'finValor', 'finNota'].forEach(f => { if ($(f)) $(f).value = ''; });
     
     if ($('finTipo')) $('finTipo').value = 'Entrada'; 
@@ -262,12 +276,12 @@ window.prepFin = function(id = null) {
         if ($('finId')) $('finId').value = f.id; 
         if ($('finDesc')) $('finDesc').value = f.desc || ''; 
         if ($('finValor')) $('finValor').value = f.valor || 0;
-        if ($('finTipo')) $('finTipo').value = f.tipo || 'Entrada'; 
-        if ($('finStatus')) $('finStatus').value = f.status || 'Pago';
-        if ($('finPgto')) $('finPgto').value = f.pgto || 'PIX'; 
+        financeiroSelecionarValorSalvoFin('finTipo', f.tipo || 'Entrada');
+        financeiroSelecionarValorSalvoFin('finStatus', f.status || 'Pago');
+        financeiroSelecionarValorSalvoFin('finPgto', f.pgto || 'PIX');
         if ($('finVenc')) $('finVenc').value = f.venc || ''; 
         if ($('finNota')) $('finNota').value = f.nota || '';
-        if ($('finVinculo')) $('finVinculo').value = f.vinculo || '';
+        financeiroSelecionarValorSalvoFin('finVinculo', f.vinculo || '');
     }
 };
 
