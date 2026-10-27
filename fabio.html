@@ -12,9 +12,9 @@
 <script src="js/config.js"></script>
 <script src="js/os-utils.js?v=26.25.1"></script>
 <script src="js/os-evidencias-export.js"></script>
-<script src="js/os-selecao-fotos-export.js?v=20261027.2-fabio"></script>
-<script src="js/fabio-fotos.js?v=20261027.1"></script>
-<link rel="stylesheet" href="css/fabio-fotos.css?v=20261027.1">
+<script src="js/os-selecao-fotos-export.js?v=20261027.3-iphone"></script>
+<script src="js/fabio-fotos.js?v=20261027.2-iphone"></script>
+<link rel="stylesheet" href="css/fabio-fotos.css?v=20261027.2-iphone">
 <style>
 :root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#f1f6fc;background:#071222;color-scheme:dark}
 *{box-sizing:border-box}body{margin:0;min-height:100dvh}button,input{font:inherit}button{cursor:pointer}
@@ -507,30 +507,40 @@ html,body{overflow-x:hidden}
 <div class="pdf-fundo" id="fabioPdfDialog" hidden role="dialog" aria-modal="true" aria-labelledby="fabioPdfTitulo">
   <div class="pdf-box">
     <div class="pdf-cabecalho"><strong id="fabioPdfTitulo">O.S. completa com fotos</strong><button type="button" id="fabioPdfFechar">✕ Fechar</button></div>
-    <div class="pdf-acoes">
-      <button type="button" id="fabioPdfAbrir">Abrir / imprimir</button>
-      <button type="button" id="fabioPdfCompartilhar" class="pdf-compartilhar" disabled>Compartilhar PDF</button>
-      <button type="button" id="fabioPdfBaixar" disabled>Baixar PDF</button>
-    </div>
     <div class="fabio-fotos-acoes">
-      <button type="button" id="fabioPdfEscolherFotos" disabled>☑ Escolher fotos para enviar</button>
-      <button type="button" id="fabioPdfVerFotos" disabled>▧ Ver fotos da O.S.</button>
+      <button type="button" id="fabioPdfSemFotos" disabled>PDF sem fotos</button>
+      <button type="button" id="fabioPdfEscolherFotos" disabled>Escolher fotos</button>
       <span id="fabioFotosResumo" role="status" aria-live="polite"></span>
     </div>
-    <details id="fabioObservacoesInternas" open>
-      <summary>OBSERVAÇÕES INTERNAS DA O.S. (<span id="fabioObservacoesContagem">0</span>)</summary>
-      <div id="fabioObservacoesLista"></div>
-    </details>
-    <div class="pdf-navegacao"><button id="fabioPdfAnterior" type="button">← PDF anterior</button><span id="fabioPdfPosicao">1 de 1</span><button id="fabioPdfProximo" type="button">Próximo PDF →</button></div>
+    <div class="fabio-leitura-acoes">
+      <button type="button" id="fabioPdfVerFotos" disabled>Ver fotos</button>
+      <button type="button" id="fabioPdfLerMaior" disabled>Ler maior</button>
+      <button type="button" id="fabioPdfMaisOpcoes" aria-expanded="false" aria-controls="fabioPdfOpcoes">Obs. / opções</button>
+    </div>
+    <section id="fabioPdfOpcoes" hidden aria-label="Opções do documento e observações internas">
+      <div class="fabio-opcoes-topo"><strong>Opções da O.S.</strong><button type="button" id="fabioPdfOpcoesFechar">Voltar ao PDF</button></div>
+      <div class="pdf-acoes">
+        <button type="button" id="fabioPdfAbrir">Abrir / imprimir</button>
+        <button type="button" id="fabioPdfBaixar" disabled>Baixar PDF</button>
+      </div>
+      <div class="fabio-zoom"><button type="button" id="fabioMenosZoom">− Reduzir</button><output id="fabioNivelZoom">100%</output><button type="button" id="fabioMaisZoom">+ Ampliar</button></div>
+      <div class="pdf-navegacao"><button id="fabioPdfAnterior" type="button">← O.S. anterior</button><span id="fabioPdfPosicao">1 de 1</span><button id="fabioPdfProximo" type="button">Próxima O.S. →</button></div>
+      <details id="fabioObservacoesInternas" open>
+        <summary>OBSERVAÇÕES INTERNAS (<span id="fabioObservacoesContagem">0</span>)</summary>
+        <div id="fabioObservacoesLista"></div>
+      </details>
+    </section>
     <div class="fabio-doc-controles" hidden aria-hidden="true">
       <button id="fabioDocAlternar" type="button" hidden></button>
       <button id="fabioDocExecucoes" type="button" hidden></button>
     </div>
     <section id="fabioDocMecanicos" class="fabio-doc-mecanicos" hidden></section>
-    <label id="fabioDocConfirmacao" class="fabio-doc-confirmacao" hidden><input id="fabioDocConferi" type="checkbox"> Conferi as páginas do documento para cliente.</label>
-    <div class="fabio-zoom"><button type="button" id="fabioMenosZoom">− Reduzir</button><output id="fabioNivelZoom">100%</output><button type="button" id="fabioMaisZoom">+ Ampliar</button></div>
     <div id="fabioPdfEstado" role="status" aria-live="polite"></div>
     <div id="fabioDocPaginas" class="fabio-doc-paginas" role="document" aria-label="Páginas reais do PDF"></div>
+    <div class="fabio-envio-rodape">
+      <label id="fabioDocConfirmacao" class="fabio-doc-confirmacao" hidden><input id="fabioDocConferi" type="checkbox"><span>Conferi o PDF</span></label>
+      <button type="button" id="fabioPdfCompartilhar" class="pdf-compartilhar" disabled>Enviar PDF</button>
+    </div>
     <iframe id="fabioPdfViewer" title="Documento PDF original da ordem de serviço" allow="fullscreen" hidden></iframe>
   </div>
 </div>
@@ -1771,7 +1781,7 @@ const g=id=>document.getElementById(id),source=id=>window.__fabioOsFonte?.().fin
 const text=v=>v===undefined||v===null?'':String(v);
 let docAtual=null,modo='cliente',osAtual='',refOS=null,preparando=false,paginasValidas=false,epoch=0,urlAtual='';
 let zoom=1,ultimoDocumento=null,distanciaPinch=0,zoomNoInicio=1,execAberta=false;
-let fotosAtuais=null,escolhendoFotos=false;
+let fotosAtuais=null,escolhendoFotos=false,redesenhando=false;
 const display=s=>{g('fabioPdfEstado').textContent=s};
 const update=()=>{
  const fila=(window.__fabioFilaNavegacao||[]).length?window.__fabioFilaNavegacao:(window.__fabioFiltradosIds||[]);
@@ -1787,7 +1797,11 @@ const update=()=>{
  g('fabioPdfAnterior').disabled=preparando||pos<=0;
  g('fabioPdfProximo').disabled=preparando||pos<0||pos>=fila.length-1;
  g('fabioPdfEscolherFotos').disabled=preparando||escolhendoFotos||!source(osAtual);
+ g('fabioPdfSemFotos').disabled=preparando||escolhendoFotos||!source(osAtual);
+ g('fabioPdfSemFotos').setAttribute('aria-pressed',String(Array.isArray(fotosAtuais)&&fotosAtuais.length===0));
  g('fabioPdfVerFotos').disabled=!source(osAtual);
+ g('fabioPdfLerMaior').disabled=preparando||redesenhando||!docAtual;
+ g('fabioPdfLerMaior').textContent=zoom>1?'Ajustar página':'Ler maior';
  try{g('fabioFotosResumo').textContent=source(osAtual)?window.fabioFotos.resumo(osAtual,fotosAtuais):'';}
  catch(e){g('fabioFotosResumo').textContent=e.message;}
 };
@@ -1858,7 +1872,7 @@ async function desenharPDF(doc,client,token,refazer=false){
   const shrink=Math.min(1,2500/Math.max(view.width,view.height));
   const canvas=document.createElement('canvas');
   canvas.width=Math.ceil(view.width*shrink);canvas.height=Math.ceil(view.height*shrink);
-  canvas.style.width=Math.round(largura)+'px';canvas.style.height='auto';
+  canvas.style.width=zoom===1?'100%':Math.round(largura)+'px';canvas.style.height='auto';
   canvas.setAttribute('aria-label','Página '+pagina+' de '+pdf.numPages);
   const ctx=canvas.getContext('2d',{alpha:false});
   if(!ctx)throw Error('Visualização PDF indisponível no aparelho.');
@@ -1876,14 +1890,29 @@ async function desenharPDF(doc,client,token,refazer=false){
 }
 async function mudarZoomPDF(target){
  const value=Math.min(2.5,Math.max(1,Math.round(target*10)/10));
- if(value===zoom||!docAtual||preparando)return;
- zoom=value;
+ if(value===zoom||!docAtual||preparando||redesenhando)return;
+ zoom=value;redesenhando=true;update();
  try{await desenharPDF(docAtual,modo==='cliente',epoch,true);}
  catch(e){display('Zoom indisponível. Use Abrir / imprimir para consultar o PDF.');}
+ finally{redesenhando=false;update();ajustarLargura();}
 }
+g('fabioPdfLerMaior').addEventListener('click',()=>mudarZoomPDF(zoom>1?1:1.5));
 g('fabioMaisZoom').addEventListener('click',()=>mudarZoomPDF(zoom+.5));
 g('fabioMenosZoom').addEventListener('click',()=>mudarZoomPDF(zoom-.5));
 const area=g('fabioDocPaginas');
+area.addEventListener('dblclick',()=>mudarZoomPDF(zoom>1?1:1.5));
+let resizeTimer=null,larguraLida=0;
+const ajustarLargura=()=>{
+ clearTimeout(resizeTimer);resizeTimer=setTimeout(async()=>{
+  if(!docAtual||g('fabioPdfDialog').hidden||area.clientWidth===larguraLida)return;
+  if(preparando||redesenhando){ajustarLargura();return;}
+  larguraLida=area.clientWidth;redesenhando=true;update();
+  try{await desenharPDF(docAtual,modo==='cliente',epoch,true);}catch(e){display('Toque em Ajustar página para refazer a leitura.');}
+  finally{redesenhando=false;update();if(area.clientWidth!==larguraLida)ajustarLargura();}
+ },180);
+};
+if(typeof ResizeObserver==='function')new ResizeObserver(ajustarLargura).observe(area);
+window.addEventListener('resize',ajustarLargura);
 const distancia=e=>Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
 area.addEventListener('touchstart',e=>{if(e.touches.length===2){distanciaPinch=distancia(e);zoomNoInicio=zoom;}},{passive:true});
 area.addEventListener('touchmove',e=>{
@@ -1906,6 +1935,7 @@ async function abrir(id,fotosSelecionadas=null){
  window.fabioFotos.atualizarInternas(id);
  docAtual=null;ultimoDocumento=null;zoom=1;g('fabioNivelZoom').textContent='100%';
  g('fabioDocConferi').checked=false;
+ g('fabioPdfOpcoes').hidden=true;g('fabioPdfMaisOpcoes').setAttribute('aria-expanded','false');
  g('fabioPdfDialog').hidden=false;
  g('fabioPdfTitulo').textContent='OS '+text(os.numero||os.numeroOS||id.slice(-6))+' • PDF PARA CLIENTE';
  g('fabioDocPaginas').replaceChildren();g('fabioPdfViewer').hidden=true;
@@ -1917,7 +1947,9 @@ async function abrir(id,fotosSelecionadas=null){
   const ok=await desenharPDF(pdf,true,token);
   if(!ok)throw Error('A visualização foi interrompida.');
   docAtual=pdf;paginasValidas=true;
-  display('Confira todas as páginas e confirme antes de compartilhar.');
+  larguraLida=area.clientWidth;
+  const totalFotosPDF=Array.isArray(fotosAtuais)?fotosAtuais.length:window.fabioFotos.listar(id).length;
+  display(totalFotosPDF?totalFotosPDF+' foto(s) • confira o PDF.':'PDF sem fotos. Confira antes de enviar.');
  }catch(err){
   console.error('[Fabio PDF cliente]',err);
   docAtual=null;paginasValidas=false;g('fabioDocPaginas').replaceChildren();
@@ -1926,6 +1958,13 @@ async function abrir(id,fotosSelecionadas=null){
 }
 window.fabioAbrirPdfOS=(id)=>abrir(id);
 window.fabioAbrirConsultaOS=(id)=>abrir(id);
+const opcoes=mostrar=>{
+ g('fabioPdfOpcoes').hidden=!mostrar;g('fabioPdfMaisOpcoes').setAttribute('aria-expanded',String(mostrar));
+ (mostrar?g('fabioPdfOpcoesFechar'):g('fabioPdfMaisOpcoes')).focus();
+};
+g('fabioPdfMaisOpcoes').addEventListener('click',()=>opcoes(g('fabioPdfOpcoes').hidden));
+g('fabioPdfOpcoesFechar').addEventListener('click',()=>opcoes(false));
+g('fabioPdfSemFotos').addEventListener('click',()=>{if(osAtual&&!preparando&&!escolhendoFotos)abrir(osAtual,[]);});
 g('fabioPdfEscolherFotos').addEventListener('click',async()=>{
  if(preparando||escolhendoFotos||!osAtual)return;
  const id=osAtual,token=epoch;escolhendoFotos=true;update();

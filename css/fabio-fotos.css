@@ -36,3 +36,58 @@
  #fabioFotoDialog .fabio-foto-topo{padding:8px}#fabioFotoDialog .fabio-foto-miniaturas{max-height:70px}
 }
 @media print{.fabio-fotos-acoes,#fabioObservacoesInternas,#fabioFotoDialog{display:none!important}}
+
+/* Leitor com comandos essenciais à mão e opções em painel próprio. */
+#fabioPdfDialog.pdf-fundo{height:100vh;height:100dvh;max-height:100dvh;padding:8px;box-sizing:border-box}
+#fabioPdfDialog.pdf-fundo .pdf-box{position:relative;min-height:0;height:100%;max-height:100%;max-width:1000px}
+#fabioPdfDialog .fabio-fotos-acoes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;flex-shrink:0}
+#fabioPdfDialog .fabio-fotos-acoes button{width:100%;min-height:48px;font-size:.95rem;line-height:1.25;padding:8px;touch-action:manipulation}
+#fabioPdfDialog #fabioPdfSemFotos{background:#185746;border:1px solid #55cfa7;font-weight:850}
+#fabioPdfDialog #fabioPdfSemFotos[aria-pressed=true]{background:#087a4f;box-shadow:inset 0 0 0 1px #7de9be}
+#fabioPdfDialog #fabioFotosResumo{grid-column:1/-1;line-height:1.3;font-size:.84rem;min-width:0}
+#fabioPdfDialog .fabio-leitura-acoes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:0 10px 6px;flex-shrink:0}
+#fabioPdfDialog .fabio-leitura-acoes button{min-width:0;width:100%;min-height:44px;padding:6px;font-size:.9rem;line-height:1.2;white-space:normal;overflow-wrap:anywhere;touch-action:manipulation}
+#fabioPdfDialog button,#fabioPdfDialog label{-webkit-tap-highlight-color:transparent}
+#fabioPdfDialog #fabioPdfOpcoes[hidden]{display:none!important}
+#fabioPdfDialog #fabioPdfOpcoes{position:absolute;inset:58px 8px 76px;z-index:4;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;border:1px solid #6587a4;border-radius:10px;background:#14273d;box-shadow:0 10px 35px #0009;padding:10px}
+#fabioPdfDialog .fabio-opcoes-topo{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-bottom:10px;border-bottom:1px solid #476582;margin-bottom:8px}
+#fabioPdfDialog .fabio-opcoes-topo strong{min-width:0;overflow-wrap:anywhere}
+#fabioPdfDialog #fabioPdfOpcoes .pdf-acoes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:8px 0}
+#fabioPdfDialog #fabioPdfOpcoes button{min-height:46px;font-size:.95rem;padding:8px;white-space:normal;overflow-wrap:anywhere;touch-action:manipulation}
+#fabioPdfDialog #fabioPdfOpcoes .pdf-navegacao{padding:8px 0;min-width:0}
+#fabioPdfDialog #fabioPdfOpcoes .pdf-navegacao button{min-width:0;flex:1}
+#fabioPdfDialog #fabioPdfOpcoes #fabioObservacoesInternas{margin:8px 0}
+#fabioPdfDialog #fabioPdfOpcoes #fabioObservacoesLista{max-height:none;font-size:1rem}
+#fabioPdfDialog #fabioPdfOpcoes #fabioObservacoesInternas summary{font-size:.94rem;min-height:48px;display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+#fabioPdfDialog #fabioPdfEstado{flex-shrink:0;max-height:78px;overflow:auto;font-size:.85rem;line-height:1.3;padding:5px 10px}
+#fabioPdfDialog #fabioDocPaginas{min-width:0;min-height:0;flex:1 1 0;position:relative;border-top:1px solid #48627c;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+#fabioPdfDialog .fabio-envio-rodape{display:grid;grid-template-columns:minmax(0,1fr) minmax(115px,1fr);gap:8px;align-items:center;flex-shrink:0;padding:8px 10px;background:#12273c;border-top:1px solid #56718b}
+#fabioPdfDialog .fabio-envio-rodape #fabioDocConfirmacao{min-width:0;margin:0;padding:7px;min-height:48px;font-size:.92rem;line-height:1.2;display:flex;gap:7px;align-items:center;border-radius:8px;overflow-wrap:anywhere}
+#fabioPdfDialog .fabio-envio-rodape #fabioDocConfirmacao[hidden]{display:none!important}
+#fabioPdfDialog .fabio-envio-rodape #fabioDocConferi{width:27px;height:27px;flex:0 0 27px;margin:0}
+#fabioPdfDialog .fabio-envio-rodape #fabioPdfCompartilhar{min-height:48px;min-width:0;width:100%;padding:8px;font-size:1rem;white-space:normal;overflow-wrap:anywhere;touch-action:manipulation;border-radius:8px}
+@media(max-width:650px){
+ #fabioPdfDialog.pdf-fundo{padding:max(0px,env(safe-area-inset-top)) 0 max(0px,env(safe-area-inset-bottom));width:100%;inset:0}
+ #fabioPdfDialog.pdf-fundo .pdf-box{width:100%;max-width:100%;height:100%;border:0;border-radius:0}
+ #fabioPdfDialog .pdf-cabecalho{min-height:48px;flex-shrink:0;padding:5px 8px;gap:8px}
+ #fabioPdfDialog .pdf-cabecalho strong{font-size:.85rem;line-height:1.25}
+ #fabioPdfDialog #fabioPdfFechar{min-height:44px;min-width:80px;font-size:.9rem;padding:7px 10px}
+ #fabioPdfDialog .fabio-fotos-acoes{padding:6px 8px;gap:5px}
+ #fabioPdfDialog .fabio-fotos-acoes button{font-size:.92rem}
+ #fabioPdfDialog #fabioFotosResumo{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+ #fabioPdfDialog .fabio-leitura-acoes{padding:0 8px 5px;gap:5px}
+ #fabioPdfDialog .fabio-leitura-acoes button{font-size:.85rem}
+ #fabioPdfDialog #fabioDocPaginas{padding:4px 0;background:#263241}
+ #fabioPdfDialog .fabio-envio-rodape{padding:7px 8px;gap:6px}
+ #fabioPdfDialog .fabio-envio-rodape #fabioDocConfirmacao{font-size:.85rem}
+ #fabioPdfDialog #fabioPdfOpcoes{inset:54px 6px 72px;padding:10px}
+}
+@media(orientation:landscape) and (max-height:500px){
+ #fabioPdfDialog .fabio-fotos-acoes{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);padding:3px 8px}
+ #fabioPdfDialog #fabioFotosResumo{grid-column:auto}
+ #fabioPdfDialog .pdf-cabecalho{min-height:40px}
+ #fabioPdfDialog .fabio-leitura-acoes{position:absolute;right:92px;top:3px;width:min(45%,340px);padding:0;z-index:2}
+ #fabioPdfDialog .pdf-cabecalho strong{max-width:34%}
+ #fabioPdfDialog #fabioPdfEstado{max-height:35px;padding:3px 8px;font-size:.78rem}
+ #fabioPdfDialog .fabio-envio-rodape{padding:4px 8px}
+}

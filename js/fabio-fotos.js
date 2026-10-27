@@ -18,6 +18,7 @@
     const fotos = listar(id);
     const selecionadas = await W.thiaEscolherFotosDocumento(fotos, 'pdf', {
       titulo: 'Escolher fotos — O.S. ' + str(os.numero || os.numeroOS || id.slice(-6)),
+      modoFabio: true,
       fotosSelecionadas: atuais
     });
     if (selecionadas === null) return null;

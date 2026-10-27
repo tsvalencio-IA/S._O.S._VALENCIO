@@ -62,6 +62,32 @@
       :root[data-theme="light"] #thia-selecao-fotos .thia-foto.thia-marcada { background:#e9f6ff; border-color:#007db5; }
       :root[data-theme="light"] #thia-selecao-fotos button:not(.thia-gerar) { color:#17334a; background:#f1f5f9; border-color:#9bb0c4; }
       @media (max-width:480px) { #thia-selecao-fotos { padding:8px; } #thia-selecao-fotos .thia-dialogo { max-height:calc(100vh - 16px); max-height:calc(100dvh - 16px); } #thia-selecao-fotos .thia-cabecalho { padding:13px 12px 9px; } #thia-selecao-fotos .thia-controles { padding:9px 12px; } #thia-selecao-fotos .thia-grade { padding:3px 12px 12px; gap:8px; } #thia-selecao-fotos .thia-rodape { padding:10px 12px; } #thia-selecao-fotos .thia-rodape button { flex:1 1 120px; } }
+      #thia-selecao-fotos.thia-fabio button { min-height:48px; font-size:15px; touch-action:manipulation; }
+      #thia-selecao-fotos.thia-fabio .thia-rotulo { min-height:56px; align-items:center; font-size:15px; }
+      #thia-selecao-fotos.thia-fabio .thia-rotulo input { width:30px; height:30px; }
+      #thia-selecao-fotos.thia-fabio .thia-foto { touch-action:manipulation; }
+      #thia-selecao-fotos.thia-fabio * { -webkit-tap-highlight-color:transparent; }
+      #thia-selecao-fotos.thia-fabio .thia-rodape .thia-gerar { flex:1 1 100%; }
+      @media(max-width:650px){
+        #thia-selecao-fotos.thia-fabio { padding:0; }
+        #thia-selecao-fotos.thia-fabio .thia-dialogo { width:100%; height:100vh; height:100dvh; max-height:100vh; max-height:100dvh; border:0; border-radius:0; padding-top:env(safe-area-inset-top); }
+        #thia-selecao-fotos.thia-fabio .thia-cabecalho { padding:12px; }
+        #thia-selecao-fotos.thia-fabio .thia-cabecalho h2 { font-size:18px; }
+        #thia-selecao-fotos.thia-fabio .thia-cabecalho p { font-size:14px; }
+        #thia-selecao-fotos.thia-fabio .thia-grade { flex:1; grid-template-columns:repeat(2,minmax(0,1fr)); align-content:start; -webkit-overflow-scrolling:touch; }
+        #thia-selecao-fotos.thia-fabio .thia-imagem { height:145px; }
+        #thia-selecao-fotos.thia-fabio .thia-controles { padding:8px 12px; }
+        #thia-selecao-fotos.thia-fabio .thia-contador { flex:1 1 100%; margin:0; }
+        #thia-selecao-fotos.thia-fabio .thia-rodape { flex-shrink:0; padding:10px 12px max(10px,env(safe-area-inset-bottom)); }
+        #thia-selecao-fotos.thia-fabio .thia-rodape button { flex:1 1 110px; }
+      }
+      @media(orientation:landscape) and (max-height:500px){
+        #thia-selecao-fotos.thia-fabio .thia-cabecalho { padding:8px 12px; }
+        #thia-selecao-fotos.thia-fabio .thia-cabecalho p { display:none; }
+        #thia-selecao-fotos.thia-fabio .thia-contador { flex:0 1 auto; margin-left:auto; }
+        #thia-selecao-fotos.thia-fabio .thia-rodape { padding:6px 12px max(6px,env(safe-area-inset-bottom)); }
+        #thia-selecao-fotos.thia-fabio .thia-rodape button.thia-gerar { flex:1 1 150px; }
+      }
     `;
     D.head.appendChild(estilo);
   }
@@ -70,8 +96,10 @@
     if (!fotos.length) return Promise.resolve([]);
     criarEstilos();
     const focoAnterior = D.activeElement;
+    const overflowAnterior = D.body.style.overflow;
     const overlay = D.createElement('div');
     overlay.id = 'thia-selecao-fotos';
+    if (opcoes.modoFabio) overlay.className = 'thia-fabio';
     const dialogo = D.createElement('div');
     dialogo.className = 'thia-dialogo';
     dialogo.setAttribute('role', 'dialog');
@@ -84,9 +112,9 @@
     titulo.id = 'thia-selecao-fotos-titulo';
     titulo.textContent = opcoes.titulo || 'Escolher fotos para ' + (tipo === 'pdf' ? 'o PDF' : 'a planilha agrupada');
     const instrucoes = D.createElement('p');
-    instrucoes.textContent = 'Marque somente as fotos que deseja incluir. Você também pode gerar o documento sem fotos.';
+    instrucoes.textContent = opcoes.modoFabio ? 'Toque nas fotos para marcar ou desmarcar.' : 'Marque somente as fotos que deseja incluir. Você também pode gerar o documento sem fotos.';
     const detalhe = D.createElement('p');
-    detalhe.textContent = 'A escolha vale para este documento; as fotos continuam na O.S. Fotos do checklist não são incluídas.';
+    detalhe.textContent = opcoes.modoFabio ? 'As fotos permanecem na O.S. Fotos do checklist não entram no PDF.' : 'A escolha vale para este documento; as fotos continuam na O.S. Fotos do checklist não são incluídas.';
     cabecalho.append(titulo, instrucoes, detalhe);
 
     const controles = D.createElement('div');
@@ -160,6 +188,7 @@
         fechado = true;
         D.removeEventListener('keydown', aoTeclado, true);
         overlay.remove();
+        if (opcoes.modoFabio) D.body.style.overflow = overflowAnterior;
         try { focoAnterior?.focus(); } catch (_) {}
         resolve(resultado);
       };
@@ -177,11 +206,14 @@
         }
       };
       const cancelar = botao('Cancelar', '', () => fechar(null));
-      const gerar = botao(tipo === 'pdf' ? 'Gerar PDF' : 'Gerar planilha', 'thia-gerar', () => {
+      const gerar = botao(opcoes.modoFabio ? 'Usar fotos marcadas' : tipo === 'pdf' ? 'Gerar PDF' : 'Gerar planilha', 'thia-gerar', () => {
         fechar(escolhas.filter(item => item.check.checked).map(item => item.url));
       });
-      rodape.append(cancelar, gerar);
+      rodape.appendChild(cancelar);
+      if (opcoes.modoFabio) rodape.appendChild(botao('Continuar sem fotos', '', () => fechar([])));
+      rodape.appendChild(gerar);
       D.addEventListener('keydown', aoTeclado, true);
+      if (opcoes.modoFabio) D.body.style.overflow = 'hidden';
       D.body.appendChild(overlay);
       escolhas[0]?.check.focus();
     });
