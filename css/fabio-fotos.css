@@ -1,0 +1,38 @@
+/* Controles exclusivos do perfil Fábio. */
+.fabio-fotos-acoes{display:flex;flex-wrap:wrap;gap:6px;padding:6px 10px;align-items:center;border-top:1px solid #31516f;min-width:0}
+.fabio-fotos-acoes button{min-height:42px;padding:7px 10px;font-size:.85rem;flex:1 1 180px;min-width:0;white-space:normal}
+#fabioFotosResumo{font-size:.82rem;color:#d0e6f7;flex:1 1 100%;overflow-wrap:anywhere}
+#fabioObservacoesInternas{margin:0 10px 6px;border:1px solid #ae924d;border-radius:8px;background:#233044;flex:0 0 auto;min-width:0}
+#fabioObservacoesInternas summary{padding:8px 10px;font-weight:750;cursor:pointer;font-size:.85rem;overflow-wrap:anywhere}
+#fabioObservacoesLista{padding:0 10px 8px;max-height:145px;overflow:auto;font-size:.87rem}
+#fabioObservacoesLista .fabio-aviso{border-top:1px solid #8c815b;padding:7px 0;overflow-wrap:anywhere}
+#fabioObservacoesLista small{display:block;color:#d6d9dd}
+#fabioObservacoesLista p{white-space:pre-wrap;margin:5px 0;line-height:1.4}
+#fabioFotoDialog{position:fixed;inset:0;z-index:2147483100;padding:12px;background:#020a15ed;display:flex;align-items:center;justify-content:center;box-sizing:border-box;color:#fff}
+#fabioFotoDialog *{box-sizing:border-box;min-width:0}
+#fabioFotoDialog .fabio-foto-painel{width:min(1100px,100%);height:min(900px,calc(100dvh - 24px));max-height:100%;display:flex;flex-direction:column;overflow:hidden;background:#0f2036;border:1px solid #4e789a;border-radius:12px}
+#fabioFotoDialog .fabio-foto-topo{display:flex;align-items:center;gap:8px;justify-content:space-between;padding:10px 12px;flex-shrink:0}
+#fabioFotoDialog h2{font-size:1rem;margin:0;overflow-wrap:anywhere}
+#fabioFotoDialog button{min-height:44px;font-size:.87rem;padding:7px 10px}
+#fabioFotoDialog .fabio-foto-topo button{flex-shrink:0}
+#fabioFotoDialog .fabio-foto-palco{display:grid;grid-template-columns:46px minmax(0,1fr) 46px;gap:5px;flex:1 1 auto;min-height:100px;background:#030a14;align-items:center;padding:6px}
+#fabioFotoDialog .fabio-foto-palco img{width:100%;height:100%;max-height:100%;object-fit:contain;min-height:0;touch-action:pan-y pinch-zoom}
+#fabioFotoDialog .fabio-foto-palco button{padding:4px;font-size:1.4rem}
+#fabioFotoDialog .fabio-foto-legenda{padding:7px 12px;flex-shrink:0;max-height:100px;overflow:auto;overflow-wrap:anywhere}
+#fabioFotoDialog .fabio-foto-legenda p{margin:4px 0;white-space:pre-wrap;font-size:.85rem}
+#fabioFotoDialog .fabio-foto-acoes{display:flex;flex-wrap:wrap;gap:8px;padding:4px 12px;align-items:center;flex-shrink:0}
+#fabioFotoDialog .fabio-foto-acoes button{background:#087554;border-color:#35d29b}
+#fabioFotoDialog .fabio-foto-acoes a{color:#b9e6ff;font-size:.85rem;padding:8px;overflow-wrap:anywhere}
+#fabioFotoDialog .fabio-foto-estado{font-size:.82rem;margin:4px 12px;min-height:20px;overflow-wrap:anywhere;flex-shrink:0}
+#fabioFotoDialog .fabio-foto-miniaturas{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:5px;padding:6px 12px;max-height:92px;overflow:auto;flex-shrink:0}
+#fabioFotoDialog .fabio-foto-miniaturas button{padding:2px;border:2px solid transparent;border-radius:5px;min-height:45px;background:#0a1626}
+#fabioFotoDialog .fabio-foto-miniaturas button[aria-current=true]{border-color:#4cd8ff;background:#153c5a}
+#fabioFotoDialog .fabio-foto-miniaturas img{height:42px;width:100%;object-fit:contain;display:block}
+@media(max-width:650px){
+ .fabio-fotos-acoes{padding:5px 6px;gap:5px}.fabio-fotos-acoes button{flex:1 1 125px;font-size:.78rem}
+ #fabioObservacoesInternas{margin:0 6px 5px}#fabioObservacoesLista{max-height:115px}
+ #fabioFotoDialog{padding:0}#fabioFotoDialog .fabio-foto-painel{height:100dvh;width:100%;border:0;border-radius:0;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+ #fabioFotoDialog .fabio-foto-palco{grid-template-columns:38px minmax(0,1fr) 38px;padding:3px;gap:2px}
+ #fabioFotoDialog .fabio-foto-topo{padding:8px}#fabioFotoDialog .fabio-foto-miniaturas{max-height:70px}
+}
+@media print{.fabio-fotos-acoes,#fabioObservacoesInternas,#fabioFotoDialog{display:none!important}}

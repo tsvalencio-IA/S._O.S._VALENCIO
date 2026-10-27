@@ -66,7 +66,7 @@
     D.head.appendChild(estilo);
   }
 
-  function escolherFotos(fotos, tipo) {
+  function escolherFotos(fotos, tipo, opcoes = {}) {
     if (!fotos.length) return Promise.resolve([]);
     criarEstilos();
     const focoAnterior = D.activeElement;
@@ -82,7 +82,7 @@
     cabecalho.className = 'thia-cabecalho';
     const titulo = D.createElement('h2');
     titulo.id = 'thia-selecao-fotos-titulo';
-    titulo.textContent = 'Escolher fotos para ' + (tipo === 'pdf' ? 'o PDF' : 'a planilha agrupada');
+    titulo.textContent = opcoes.titulo || 'Escolher fotos para ' + (tipo === 'pdf' ? 'o PDF' : 'a planilha agrupada');
     const instrucoes = D.createElement('p');
     instrucoes.textContent = 'Marque somente as fotos que deseja incluir. Você também pode gerar o documento sem fotos.';
     const detalhe = D.createElement('p');
@@ -127,7 +127,7 @@
       rotulo.className = 'thia-rotulo';
       const check = D.createElement('input');
       check.type = 'checkbox';
-      check.checked = true;
+      check.checked = !Array.isArray(opcoes.fotosSelecionadas) || opcoes.fotosSelecionadas.includes(String(foto.url || foto.secure_url || ''));
       check.setAttribute('aria-label', 'Incluir foto ' + (indice + 1));
       check.addEventListener('change', atualizar);
       const texto = D.createElement('span');
@@ -210,6 +210,7 @@
     }
   }
 
+  W.thiaEscolherFotosDocumento = escolherFotos;
   W.thiaExportarPDFComSelecaoFotos = () => exportar('pdf');
   W.thiaExportarAgrupadoComSelecaoFotos = () => exportar('agrupado');
 })(window, document);

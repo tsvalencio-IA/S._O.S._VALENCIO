@@ -12,6 +12,9 @@
 <script src="js/config.js"></script>
 <script src="js/os-utils.js?v=26.25.1"></script>
 <script src="js/os-evidencias-export.js"></script>
+<script src="js/os-selecao-fotos-export.js?v=20261027.2-fabio"></script>
+<script src="js/fabio-fotos.js?v=20261027.1"></script>
+<link rel="stylesheet" href="css/fabio-fotos.css?v=20261027.1">
 <style>
 :root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#f1f6fc;background:#071222;color-scheme:dark}
 *{box-sizing:border-box}body{margin:0;min-height:100dvh}button,input{font:inherit}button{cursor:pointer}
@@ -509,6 +512,15 @@ html,body{overflow-x:hidden}
       <button type="button" id="fabioPdfCompartilhar" class="pdf-compartilhar" disabled>Compartilhar PDF</button>
       <button type="button" id="fabioPdfBaixar" disabled>Baixar PDF</button>
     </div>
+    <div class="fabio-fotos-acoes">
+      <button type="button" id="fabioPdfEscolherFotos" disabled>☑ Escolher fotos para enviar</button>
+      <button type="button" id="fabioPdfVerFotos" disabled>▧ Ver fotos da O.S.</button>
+      <span id="fabioFotosResumo" role="status" aria-live="polite"></span>
+    </div>
+    <details id="fabioObservacoesInternas" open>
+      <summary>OBSERVAÇÕES INTERNAS DA O.S. (<span id="fabioObservacoesContagem">0</span>)</summary>
+      <div id="fabioObservacoesLista"></div>
+    </details>
     <div class="pdf-navegacao"><button id="fabioPdfAnterior" type="button">← PDF anterior</button><span id="fabioPdfPosicao">1 de 1</span><button id="fabioPdfProximo" type="button">Próximo PDF →</button></div>
     <div class="fabio-doc-controles" hidden aria-hidden="true">
       <button id="fabioDocAlternar" type="button" hidden></button>
@@ -988,8 +1000,8 @@ function mostrarArquivo(doc){
  estado('PDF oficial pronto. Use Anterior / Próximo para percorrer as OS, ou Enviar PDF para compartilhar.');
  atualizarNavegacaoPdfFabio();
 }
-async function gerarDoc(id,versao='interna'){
- const chave=versao+':'+id;
+async function gerarDoc(id,versao='interna',opcoes={}){
+ const chave=versao+':'+id+':'+(Array.isArray(opcoes.fotosSelecionadas)?JSON.stringify(opcoes.fotosSelecionadas):'todas');
  const f=cache.get(chave);if(f)return f;
  const w=await iniciarGerador();
  const os=window.__fabioOsFonte?.().find(x=>x.id===id);
@@ -1070,7 +1082,7 @@ async function gerarDoc(id,versao='interna'){
    w.jspdf.jsPDF=ConstructorCliente;
    restaurarFiltro=()=>{w.jspdf.jsPDF=ConstructorOriginal;};
   }
-  await w.gerarPDFOS(); // ÚNICO gerador original do JARVIS, sem editar arquivo ou lógica.
+  await w.gerarPDFOS({fotosSelecionadas:opcoes.fotosSelecionadas,osIdSelecaoFotos:id}); // Mesmo gerador oficial, com a escolha temporária do Fábio.
   // PDF sem coluna de códigos é válido; o texto ainda é conferido antes do compartilhamento.
   if(versao==='cliente'&&!salvo)throw Error('Não foi possível produzir a versão para cliente.');
  }finally{
@@ -1184,12 +1196,12 @@ window.fabioPrepararMultiplos=async function(ids){
    const nome='OS-'+String(doc.numero).replace(/[^a-z0-9_-]/gi,'-')+'-'+unicos[i].slice(-6)+'.pdf';
    lotePronto.push(new File([doc.blob],nome,{type:'application/pdf'}));
   }
- }catch(e){erro=e;console.error('[Fábio lote PDF]',e);}
+ }catch(e){erro=e;if(e?.name!=='AbortError')console.error('[Fábio lote PDF]',e);}
  finally{
   if(token!==loteEpoch)return;
   loteGerando=false;
   if(erro){
-   lotePronto=[];estadoLote.textContent='Falha ao preparar os documentos: '+(erro.message||erro)+'. Nenhum PDF foi enviado.';
+   lotePronto=[];estadoLote.textContent=(erro.name==='AbortError'?'Preparação cancelada.':'Falha ao preparar os documentos: '+(erro.message||erro)+'.')+' Nenhum PDF foi enviado.';
   }else{
    estadoLote.textContent=lotePronto.length+' PDF(s) oficiais preparados. Toque em Compartilhar para escolher o aplicativo.';
    $('fabioLoteCompartilhar').disabled=true;
@@ -1759,6 +1771,7 @@ const g=id=>document.getElementById(id),source=id=>window.__fabioOsFonte?.().fin
 const text=v=>v===undefined||v===null?'':String(v);
 let docAtual=null,modo='cliente',osAtual='',refOS=null,preparando=false,paginasValidas=false,epoch=0,urlAtual='';
 let zoom=1,ultimoDocumento=null,distanciaPinch=0,zoomNoInicio=1,execAberta=false;
+let fotosAtuais=null,escolhendoFotos=false;
 const display=s=>{g('fabioPdfEstado').textContent=s};
 const update=()=>{
  const fila=(window.__fabioFilaNavegacao||[]).length?window.__fabioFilaNavegacao:(window.__fabioFiltradosIds||[]);
@@ -1773,6 +1786,10 @@ const update=()=>{
  g('fabioPdfAbrir').disabled=!docAtual||preparando;
  g('fabioPdfAnterior').disabled=preparando||pos<=0;
  g('fabioPdfProximo').disabled=preparando||pos<0||pos>=fila.length-1;
+ g('fabioPdfEscolherFotos').disabled=preparando||escolhendoFotos||!source(osAtual);
+ g('fabioPdfVerFotos').disabled=!source(osAtual);
+ try{g('fabioFotosResumo').textContent=source(osAtual)?window.fabioFotos.resumo(osAtual,fotosAtuais):'';}
+ catch(e){g('fabioFotosResumo').textContent=e.message;}
 };
 function montarEquipe(o){
  const target=g('fabioDocMecanicos');target.replaceChildren();
@@ -1882,9 +1899,11 @@ area.addEventListener('touchend',e=>{
  }
 });
 
-async function abrir(id){
+async function abrir(id,fotosSelecionadas=null){
  const os=source(id);if(!os||preparando)return;
  preparando=true;osAtual=id;refOS=os;modo='cliente';paginasValidas=false;
+ fotosAtuais=Array.isArray(fotosSelecionadas)?fotosSelecionadas.slice():null;
+ window.fabioFotos.atualizarInternas(id);
  docAtual=null;ultimoDocumento=null;zoom=1;g('fabioNivelZoom').textContent='100%';
  g('fabioDocConferi').checked=false;
  g('fabioPdfDialog').hidden=false;
@@ -1893,7 +1912,7 @@ async function abrir(id){
  update();const token=++epoch;
  display('Preparando a OS para cliente com o template original e fotos…');
  try{
-  const pdf=await window.fabioGerarDocOficial(id,'cliente');
+  const pdf=await window.fabioGerarDocOficial(id,'cliente',{fotosSelecionadas:fotosAtuais});
   if(token!==epoch||source(id)!==os)throw Error('A OS mudou durante a preparação. Confira novamente.');
   const ok=await desenharPDF(pdf,true,token);
   if(!ok)throw Error('A visualização foi interrompida.');
@@ -1907,10 +1926,33 @@ async function abrir(id){
 }
 window.fabioAbrirPdfOS=(id)=>abrir(id);
 window.fabioAbrirConsultaOS=(id)=>abrir(id);
+g('fabioPdfEscolherFotos').addEventListener('click',async()=>{
+ if(preparando||escolhendoFotos||!osAtual)return;
+ const id=osAtual,token=epoch;escolhendoFotos=true;update();
+ try{
+  const fotos=await window.fabioFotos.escolher(id,fotosAtuais);
+  if(fotos!==null&&token===epoch&&!g('fabioPdfDialog').hidden){
+   await abrir(id,fotos);
+  }
+ }catch(e){display('Não foi possível escolher as fotos: '+(e.message||e));}
+ finally{escolhendoFotos=false;update();}
+});
+g('fabioPdfVerFotos').addEventListener('click',()=>{
+ try{window.fabioFotos.abrirCarrossel(osAtual);}
+ catch(e){display(e.message||String(e));}
+});
+const atualizarAnterior=window.fabioAtualizarOSAberta;
+window.fabioAtualizarOSAberta=function(){
+ atualizarAnterior?.();
+ if(osAtual&&!g('fabioPdfDialog').hidden){window.fabioFotos.atualizarInternas(osAtual);update();}
+};
 window.fabioPrepararClienteSeguro=async id=>{
  const registro=source(id);
  if(!registro)throw Error('OS não encontrada.');
- const doc=await window.fabioGerarDocOficial(id,'cliente');
+ const fotosSelecionadas=await window.fabioFotos.escolher(id);
+ if(fotosSelecionadas===null)throw new DOMException('Seleção de fotos cancelada.','AbortError');
+ if(source(id)!==registro)throw Error('A OS mudou durante a escolha das fotos.');
+ const doc=await window.fabioGerarDocOficial(id,'cliente',{fotosSelecionadas});
  if(source(id)!==registro)throw Error('A OS mudou durante a preparação do lote.');
  await validarConteudoClientePDF(doc);
  if(source(id)!==registro)throw Error('A OS mudou durante a conferência.');
