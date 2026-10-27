@@ -1640,9 +1640,9 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 
   <div class="modal-foot">
     <button class="btn-ghost" id="btnVisualizarPDFOS" style="display:none;" onclick="window.visualizarOrcamentoOS&&window.visualizarOrcamentoOS()">👁 VISUALIZAR ORÇAMENTO</button>
-    <button class="btn-ghost" id="btnGerarPDFOS" style="display:none;" onclick="window.gerarPDFOS()">📄 EXPORTAR LAUDO PDF</button>
+    <button class="btn-ghost" id="btnGerarPDFOS" style="display:none;" onclick="window.thiaExportarPDFComSelecaoFotos ? window.thiaExportarPDFComSelecaoFotos() : window.toast?.('Seleção de fotos indisponível. Atualize o Jarvis.', 'err')">📄 EXPORTAR LAUDO PDF</button>
     <button class="btn-ghost" id="btnExportarPMSP" style="display:none;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.4);color:#A78BFA;" onclick="window.exportarOrcamentoPMSP()">🛡 EXPORTAR ORÇAMENTO PMSP (XLSX)</button>
-    <button class="btn-ghost" id="btnExportarPMSPItens" style="display:none;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.36);color:#7DD3FC;" onclick="window.exportarOrcamentoPMSPItens()">📋 EXPORTAR ITENS AGRUPADOS (XLSX)</button>
+    <button class="btn-ghost" id="btnExportarPMSPItens" style="display:none;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.36);color:#7DD3FC;" onclick="window.thiaExportarAgrupadoComSelecaoFotos ? window.thiaExportarAgrupadoComSelecaoFotos() : window.toast?.('Seleção de fotos indisponível. Atualize o Jarvis.', 'err')">📋 EXPORTAR ITENS AGRUPADOS (XLSX)</button>
     <button class="btn-ghost" id="btnSigfrotaOS" style="display:none;background:rgba(52,211,153,.10);border:1px solid rgba(52,211,153,.50);color:#6EE7B7;" onclick="window.SIGFROTA_INTEGRACAO?.sincronizarOSAtual()">↗ ENVIAR / ATUALIZAR NO SIGFROTA</button>
     <button class="btn-ghost" id="btnSigfrotaChatOS" style="display:none;background:rgba(96,165,250,.10);border:1px solid rgba(96,165,250,.48);color:#93C5FD;" onclick="window.SIGFROTA_INTEGRACAO?.abrirChatOSAtual()">💬 CHAT SIGFROTA</button>
     <button class="btn-ghost" id="btnExcluirOS" style="display:none;background:transparent;border:1px solid var(--danger);color:var(--danger);" onclick="window._excluirOSDoModal()">🗑 EXCLUIR O.S.</button>
@@ -4316,7 +4316,7 @@ window.iaAnalisarEstoque = function() { _jiaChamar('Quais pecas estao em estoque
 <script src="js/os-operacional.js?v=20261021.1-conclusao"></script>
 <script src="js/os-evidencias-export.js?v=26.25.13"></script>
 <script src="js/os-media-persist-v1.js?v=1.0.0"></script>
-<script src="js/os.js?v=20261021.1-conclusao"></script>
+<script src="js/os.js?v=20261027.1-selecao-fotos"></script>
 <script src="js/checklist-jarvis-bridge.js?v=26.24.0"></script>
 <script src="js/cotacoes.js"></script>
 <script src="js/assinatura-os.js"></script>
@@ -4325,7 +4325,8 @@ window.iaAnalisarEstoque = function() { _jiaChamar('Quais pecas estao em estoque
 <script src="js/ia.js?v=20261020.3-intencao"></script>
 <script src="js/catalogos-ia.js?v=19.0.0"></script>
 <script src="js/tabela-tempa.js?v=26.17.5"></script>
-<script src="js/exportar-pmsp.js?v=26.25.13"></script>
+<script src="js/exportar-pmsp.js?v=20261027.1-selecao-fotos"></script>
+<script src="js/os-selecao-fotos-export.js?v=20261027.1"></script>
 
 <script src="js/importar-orcamento-os.js"></script>
 <script src="js/final-1010-regras-os.js?v=20261021.1-conclusao"></script>

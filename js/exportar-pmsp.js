@@ -1825,7 +1825,7 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
 
   // Galeria anexada à MESMA planilha agrupada, após totais e assinaturas.
   // A área B:H original é preservada integralmente; nenhuma coluna/cálculo é movido.
-  async function inserirFotosDaOSExcelJS(wb, ws, os, linhaInicial) {
+  async function inserirFotosDaOSExcelJS(wb, ws, os, linhaInicial, fotosSelecionadas) {
     let mediaAtual = [];
     const idAberto = String(document.getElementById('osId')?.value || '');
     if (idAberto && idAberto === String(os?.id || '')) {
@@ -1837,7 +1837,9 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
       : [...(Array.isArray(os?.fotos) ? os.fotos : []), ...(Array.isArray(os?.media) ? os.media : []), ...mediaAtual]
           .map(m => typeof m === 'string' ? {url:m,type:'image'} : m)
           .filter(m => /^https?:\/\//i.test(String(m?.url || m?.secure_url || '')));
-    const fotos = evidencias.filter(m => !/^video/i.test(String(m?.type || 'image')));
+    const urlsSelecionadas = Array.isArray(fotosSelecionadas) ? new Set(fotosSelecionadas.map(String)) : null;
+    const fotos = evidencias.filter(m => !/^video/i.test(String(m?.type || 'image')) &&
+      (!urlsSelecionadas || urlsSelecionadas.has(String(m?.url || m?.secure_url || ''))));
     const videos = evidencias.filter(m => /^video/i.test(String(m?.type || 'image')));
     const indisponiveis = [];
     if (!fotos.length && !videos.length) return {total:0,indisponiveis,ultimaLinha:linhaInicial-1};
@@ -1963,7 +1965,7 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
     return {total:fotos.length,indisponiveis,ultimaLinha};
   }
 
-  async function exportarComposicaoExcelJS(os, cli, veiculo) {
+  async function exportarComposicaoExcelJS(os, cli, veiculo, opcoes = {}) {
     if (typeof ExcelJS === 'undefined') return false;
 
     const templateUrl = templatePMSPUrl();
@@ -2055,7 +2057,10 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
     await inserirAssinaturaFinalAgrupadaExcelJS(wb, ws, assinaturaExportar, assinaturaStartRow);
     limparLinhasAbaixoExportar(ws, assinaturaEndRow);
     // Separação de impressão, mantendo a galeria na mesma folha Excel (Plan1).
-    const galeriaExcelOS = await inserirFotosDaOSExcelJS(wb, ws, os, assinaturaEndRow+1);
+    if (opcoes?.osIdSelecaoFotos !== undefined && String(document.getElementById('osId')?.value || '') !== String(opcoes.osIdSelecaoFotos)) {
+      throw new Error('A O.S. aberta mudou. Selecione novamente as fotos para exportar.');
+    }
+    const galeriaExcelOS = await inserirFotosDaOSExcelJS(wb, ws, os, assinaturaEndRow+1, opcoes?.fotosSelecionadas);
     if (galeriaExcelOS.total) ws.getRow(assinaturaEndRow).addPageBreak();
 
     ws.pageSetup = {
@@ -2422,9 +2427,12 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
     window.toast?.('Itens agrupados exportados em planilha propria, sem usar formulas do template PMSP.', 'ok');
   }
 
-  async function exportarOrcamentoPMSPModo(modo) {
+  async function exportarOrcamentoPMSPModo(modo, opcoes = {}) {
     try {
       const osId = document.getElementById('osId')?.value;
+      if (opcoes?.osIdSelecaoFotos !== undefined && String(osId || '') !== String(opcoes.osIdSelecaoFotos)) {
+        throw new Error('A O.S. aberta mudou. Selecione novamente as fotos para exportar.');
+      }
       if (!osId) { window.toast?.('Salve a O.S. antes de exportar.', 'warn'); return; }
 
       const osSalva = (window.J?.os || []).find(o => o.id === osId);
@@ -2443,7 +2451,7 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
 
       const veiculo = (window.J?.veiculos || []).find(v => v.id === os.veiculoId) || {};
       if (modo === 'itens_agrupados') {
-        const ok = await exportarComposicaoExcelJS(os, cli, veiculo);
+        const ok = await exportarComposicaoExcelJS(os, cli, veiculo, opcoes);
         if (!ok) throw new Error('Biblioteca ExcelJS nao carregou. A planilha agrupada oficial precisa do template PMSP.');
       } else {
         const ok = await exportarComExcelJS(os, cli, veiculo);
@@ -2459,8 +2467,8 @@ R$ ${descontoValor.toFixed(2).replace('.', ',')}`;
     return exportarOrcamentoPMSPModo('completo');
   };
 
-  window.exportarOrcamentoPMSPItens = async function() {
-    return exportarOrcamentoPMSPModo('itens_agrupados');
+  window.exportarOrcamentoPMSPItens = async function(opcoes = {}) {
+    return exportarOrcamentoPMSPModo('itens_agrupados', opcoes);
   };
 
 

@@ -6646,6 +6646,9 @@ window.abrirVisualizadorPdfOS = function(urlPdf, tituloPdf) {
 
 
 window.gerarPDFOS = async function(opcoes = {}) {
+  if (opcoes?.osIdSelecaoFotos !== undefined && String($v('osId') || '') !== String(opcoes.osIdSelecaoFotos)) {
+    throw new Error('A O.S. aberta mudou. Selecione novamente as fotos para exportar.');
+  }
   const visualizarPDF = opcoes === 'visualizar' || opcoes?.visualizar === true;
   const visualizacaoEconomicaPDF = visualizarPDF === true;
   // Visualização: mantém logo/timbrado, mas remove fotos/evidências/assinatura em imagem e usa cabeçalhos brancos para impressão.
@@ -7171,6 +7174,9 @@ window.gerarPDFOS = async function(opcoes = {}) {
     y = doc.lastAutoTable.finalY + 5;
   }
 
+  if (opcoes?.osIdSelecaoFotos !== undefined && String($v('osId') || '') !== String(opcoes.osIdSelecaoFotos)) {
+    throw new Error('A O.S. aberta mudou. Selecione novamente as fotos para exportar.');
+  }
   // PDF: exclusivamente anexos da O.S., inclusive fotos legadas e ainda em edição.
   let mediaAtual = [];
   try { mediaAtual = JSON.parse(document.getElementById('osMediaArray')?.value || '[]'); } catch (_) { mediaAtual = []; }
@@ -7181,7 +7187,9 @@ window.gerarPDFOS = async function(opcoes = {}) {
         .map(m => typeof m === 'string' ? {url:m,type:'image'} : m)
         .filter(m => /^https?:\/\//i.test(String(m?.url || m?.secure_url || '')));
   // Não limitar a quantidade de fotos; preservar toda a cronologia da O.S.
-  const imagens = media.filter(m => m && !/^video/i.test(String(m?.type || 'image')) && (m.url || m.secure_url));
+  const fotosSelecionadasPDF = Array.isArray(opcoes?.fotosSelecionadas) ? new Set(opcoes.fotosSelecionadas.map(String)) : null;
+  const imagens = media.filter(m => m && !/^video/i.test(String(m?.type || 'image')) && (m.url || m.secure_url) &&
+    (!fotosSelecionadasPDF || fotosSelecionadasPDF.has(String(m.url || m.secure_url))));
   if (incluirImagensPDF && imagens.length) {
     linhaTitulo('EVIDÊNCIAS DIGITAIS — ' + imagens.length + ' FOTO(S)');
     const thumbW = 55, thumbH = 38, gap = 5, legendaH = 11, passoLinha = thumbH + legendaH + 7;
@@ -7252,6 +7260,9 @@ window.gerarPDFOS = async function(opcoes = {}) {
     }
   }
 
+  if (opcoes?.osIdSelecaoFotos !== undefined && String($v('osId') || '') !== String(opcoes.osIdSelecaoFotos)) {
+    throw new Error('A O.S. aberta mudou. Selecione novamente as fotos para exportar.');
+  }
   const assinaturaPDF = (typeof window._osSignGetPayload === 'function' ? window._osSignGetPayload() : null) || osAtual.assinaturaResponsavel || osAtual.assinaturaOS || osAtual.assinaturaUsada || J.oficina?.assinatura || {};
   const urlAssPDF = assinaturaPDF.url || assinaturaPDF.cloudUrl || assinaturaPDF.assinaturaUrl || assinaturaPDF.urlAssinatura || '';
   const imgAssPDF = incluirImagensPDF ? await carregarImagem(urlAssPDF) : null;
