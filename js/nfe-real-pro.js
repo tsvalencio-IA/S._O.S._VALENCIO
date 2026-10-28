@@ -268,7 +268,11 @@
         destino: 'estoque', vinculo: '', osId: '', placa: '', observacaoDestino: ''
       };
     });
-    const duplicatas = nodes(xml, 'dup').map(d => ({ numero:getFirstText(d,'nDup'), vencimento:getFirstText(d,'dVenc'), valor:parseNum(getFirstText(d,'vDup')) }));
+    const duplicatas = nodes(xml, 'dup').map(d => ({
+      numero:getFirstText(d,'nDup'), vencimento:getFirstText(d,'dVenc'), valor:parseNum(getFirstText(d,'vDup')),
+      // nDup, chave da NF e EAN de produto não são código bancário.
+      boletoLinhaDigitavel:getFirstText(d,'linhaDigitavel') || getFirstText(d,'boletoLinhaDigitavel') || getFirstText(d,'codigoBarras')
+    }));
     const pagamentos = nodes(xml, 'detPag').map(p => ({ tipo:getFirstText(p,'tPag'), descricao:getFirstText(p,'xPag'), valor:parseNum(getFirstText(p,'vPag')), data:getFirstText(p,'dPag') }));
     const info = {
       chave, modelo:getFirstText(ide,'mod'), serie:getFirstText(ide,'serie'), numero:getFirstText(ide,'nNF'), natureza:getFirstText(ide,'natOp'),
@@ -781,11 +785,12 @@
     const arr = Array.isArray(dups) ? dups : [];
     if(!arr.length){ box.style.display='none'; box.innerHTML=''; return; }
     box.style.display='block';
-    box.innerHTML = `<div style="font-family:var(--fd);font-weight:800;margin-bottom:8px;color:var(--accent)">DUPLICATAS / BOLETOS DA NF</div>` + arr.map((d,idx)=>`
+    box.innerHTML = `<div style="font-family:var(--fd);font-weight:800;margin-bottom:8px;color:var(--accent)">DUPLICATAS / BOLETOS DA NF</div><small style="display:block;margin-bottom:8px;">Cada parcela mantém seu vencimento e valor. Se o XML não informar o código de pagamento, preencha a linha digitável do boleto recebido.</small>` + arr.map((d,idx)=>`
       <div class="nf-parcela-row" style="display:grid;grid-template-columns:80px 1fr 1fr;gap:8px;margin-bottom:6px;align-items:end;">
         <div><label class="j-label">Parc.</label><input class="j-input nf-parc-num" value="${esc(d.numero || String(idx+1).padStart(3,'0'))}" oninput="this.closest('#nfParcelasBox').dataset.manualEdit='1'"></div>
         <div><label class="j-label">Vencimento</label><input type="date" class="j-input nf-parc-venc" value="${esc(d.vencimento || '')}" onchange="this.closest('#nfParcelasBox').dataset.manualEdit='1'"></div>
         <div><label class="j-label">Valor</label><input class="j-input nf-parc-valor" inputmode="decimal" value="${esc(fmtBR(d.valor||0))}" oninput="this.closest('#nfParcelasBox').dataset.manualEdit='1'"></div>
+        <div style="grid-column:1/-1;min-width:0;"><label class="j-label">Linha digitável / código de barras para pagar esta parcela</label><input class="j-input nf-parc-linha" inputmode="numeric" style="min-width:0;width:100%;" value="${esc(d.boletoLinhaDigitavel || d.linhaDigitavel || d.codigoBarras || '')}" placeholder="Cole o código deste boleto, se disponível" oninput="this.closest('#nfParcelasBox').dataset.manualEdit='1'"></div>
       </div>`).join('');
   }
   function ensureAgrupamentoPeriodoBox(){
@@ -817,10 +822,19 @@
     ensureFormaPagamentoNFOptions();
     ensureParcelasNFOptions();
     const boxParcelas = $('nfParcelasBox');
-    if(boxParcelas) boxParcelas.dataset.manualEdit = '';
     const forma = getVal('nfPgtoForma');
     if(forma === 'AgrupamentoPeriodo'){ renderParcels([]); mostrarAgrupamentoPeriodoNF(true); return; }
     if(!formaPagamentoNFParcelavel(forma)){ renderParcels([]); return; }
+    const originaisXML = W._nfeProData?.cobranca?.duplicatas || [];
+    if(originaisXML.length){
+      // checkPgtoNF é chamado após importar. Não substituir o XML por parcelas mensais.
+      if(!boxParcelas?.querySelector('.nf-parcela-row'))renderParcels(originaisXML);
+      const atuais=collectParcelas();
+      if($('nfParcelas'))$('nfParcelas').value=String(atuais.length || originaisXML.length);
+      setVal('nfVenc',atuais[0]?.vencimento || '');
+      return;
+    }
+    if(boxParcelas) boxParcelas.dataset.manualEdit = '';
     const n = parseInt(getVal('nfParcelas') || '1',10) || 1;
     const base = getVal('nfVenc') || isoToday();
     const total = calcTotaisNF().totalFiscal;
@@ -1253,7 +1267,8 @@
   W.thiaNFCollectItens = collectItens;
   function collectParcelas(){
     return Array.from(D.querySelectorAll('#nfParcelasBox .nf-parcela-row')).map(r => ({
-      numero: r.querySelector('.nf-parc-num')?.value || '', vencimento: r.querySelector('.nf-parc-venc')?.value || '', valor: parseNum(r.querySelector('.nf-parc-valor')?.value)
+      numero: r.querySelector('.nf-parc-num')?.value || '', vencimento: r.querySelector('.nf-parc-venc')?.value || '', valor: parseNum(r.querySelector('.nf-parc-valor')?.value),
+      boletoLinhaDigitavel:r.querySelector('.nf-parc-linha')?.value?.trim() || ''
     })).filter(p => p.valor > 0 || p.vencimento);
   }
   W.thiaNFCollectParcelas = collectParcelas;
@@ -2071,6 +2086,12 @@
       if (W.toast) W.toast('Modo edicao de NF ativo. Nova entrada bloqueada para evitar duplicidade de estoque, O.S. e financeiro.', 'warn');
       return;
     }
+    if(tipoOperacaoNF()==='entrada'&&formaPagamentoNFParcelavel(getVal('nfPgtoForma'))&&!formaPagamentoNFAVista(getVal('nfPgtoForma'))){
+      if(!collectParcelas().length)gerarParcelasManuais();
+      if(collectParcelas().some(p=>!/^\d{4}-\d{2}-\d{2}$/.test(p.vencimento))){
+        W.toast?.('Informe o vencimento de cada boleto. Datas ausentes no XML não serão inventadas.','warn');return;
+      }
+    }
     let itens = [];
     try { itens = collectItens(); }
     catch(e) { if(W.toast) W.toast(e.message || String(e), 'warn'); else alert(e.message || e); return; }
@@ -2168,7 +2189,7 @@
       batch.set(W.db.collection('financeiro').doc(), { tenantId:W.J.tid, tipo:'Saida', status:statusAgr, desc:`NF ${nfPayload.numero || 's/n'} aguardando boleto agrupado - ${fornecedorNome || 'Fornecedor'}`, valor:totalNF, pgto:'Agrupamento por periodo', venc:vencAgr, notaFiscalId:nfRef.id, chaveNFe:nfPayload.chave, fornecedorId, fornecedorNome:fornecedorNome || '', agrupamentoPeriodo:true, aguardaBoletoAgrupado:true, agrupamentoDias:diasAgr, agrupamentoVencimentoPrevisto:vencAgr, agrupamentoFornecedorKey:grupoKey, bloqueadoPagamentoIndividual:true, createdAt:new Date().toISOString() });
     } else if(parcelasFinanceiras.length){
       for(const [idx,p] of parcelasFinanceiras.entries()){
-        batch.set(W.db.collection('financeiro').doc(), { tenantId:W.J.tid, tipo:'Saída', status:statusFinanceiro, desc:`NF ${nfPayload.numero || 's/n'} — ${fornecedorNome || 'Fornecedor'} (${idx+1}/${parcelasFinanceiras.length})`, valor:p.valor, pgto:forma, venc:p.vencimento || isoToday(), notaFiscalId:nfRef.id, chaveNFe:nfPayload.chave, fornecedorId, fornecedorNome:fornecedorNome || '', createdAt:new Date().toISOString() });
+        batch.set(W.db.collection('financeiro').doc(), { tenantId:W.J.tid, tipo:'Saída', status:statusFinanceiro, desc:`NF ${nfPayload.numero || 's/n'} — ${fornecedorNome || 'Fornecedor'} (${idx+1}/${parcelasFinanceiras.length})`, valor:p.valor, pgto:forma, venc:p.vencimento, notaFiscalId:nfRef.id, chaveNFe:nfPayload.chave, fornecedorId, fornecedorNome:fornecedorNome || '', numeroParcela:idx+1, totalParcelas:parcelasFinanceiras.length, boletoNumero:p.numero || '', boletoLinhaDigitavel:p.boletoLinhaDigitavel || '', createdAt:new Date().toISOString() });
       }
     } else {
       batch.set(W.db.collection('financeiro').doc(), { tenantId:W.J.tid, tipo:'Saída', status:statusFinanceiro, desc:`NF ${nfPayload.numero || 's/n'} — ${fornecedorNome || 'Fornecedor'}`, valor:totalNF, pgto:forma, venc:getVal('nfVenc') || isoToday(), notaFiscalId:nfRef.id, chaveNFe:nfPayload.chave, fornecedorId, fornecedorNome:fornecedorNome || '', createdAt:new Date().toISOString() });
@@ -2190,7 +2211,7 @@
   D.addEventListener('DOMContentLoaded', function(){
     ensureNFVinculoLoteUI();
     const st = D.createElement('style');
-    st.textContent = `@media(max-width:900px){.nf-real-grid-main,.nf-real-grid-fiscal,.nf-real-grid-destino,.nf-real-grid-operacional,.nf-real-tributos,.nf-split-row{grid-template-columns:1fr!important}.nf-real-row input,.nf-real-row select{min-width:0!important}}`;
+    st.textContent = `@media(max-width:900px){.nf-real-grid-main,.nf-real-grid-fiscal,.nf-real-grid-destino,.nf-real-grid-operacional,.nf-real-tributos,.nf-split-row{grid-template-columns:1fr!important}.nf-real-row input,.nf-real-row select{min-width:0!important}}@media(max-width:600px){#nfParcelasBox .nf-parcela-row{grid-template-columns:minmax(0,1fr)!important}#nfParcelasBox input{min-width:0;font-size:16px}}`;
     D.head.appendChild(st);
   });
 })();

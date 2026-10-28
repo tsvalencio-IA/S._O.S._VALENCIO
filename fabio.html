@@ -1780,7 +1780,7 @@ get('fabioClienteEnviar').addEventListener('click',async()=>{
 const g=id=>document.getElementById(id),source=id=>window.__fabioOsFonte?.().find(x=>String(x.id)===String(id));
 const text=v=>v===undefined||v===null?'':String(v);
 let docAtual=null,modo='cliente',osAtual='',refOS=null,preparando=false,paginasValidas=false,epoch=0,urlAtual='';
-let zoom=1,ultimoDocumento=null,distanciaPinch=0,zoomNoInicio=1,execAberta=false;
+let zoom=1,ultimoDocumento=null,execAberta=false;
 let fotosAtuais=null,escolhendoFotos=false,redesenhando=false;
 const display=s=>{g('fabioPdfEstado').textContent=s};
 const update=()=>{
@@ -1860,9 +1860,12 @@ async function desenharPDF(doc,client,token,refazer=false){
  const pdf=ultimoDocumento.pdf,area=g('fabioDocPaginas');
  const px=area.scrollWidth?area.scrollLeft/area.scrollWidth:0;
  const py=area.scrollHeight?area.scrollTop/area.scrollHeight:0;
- area.replaceChildren();area.style.overflowX=zoom>1?'auto':'hidden';
+ const anteriores=refazer?[...area.querySelectorAll('canvas')]:[];
+ if(!refazer)area.replaceChildren();
+ area.style.overflowX=zoom>1?'auto':'hidden';
  let texto='';
- const largura=Math.max(250,area.clientWidth-12)*zoom;
+ const estiloArea=getComputedStyle(area);
+ const largura=Math.max(250,area.clientWidth-(parseFloat(estiloArea.paddingLeft)||0)-(parseFloat(estiloArea.paddingRight)||0))*zoom;
  for(let pagina=1;pagina<=pdf.numPages;pagina++){
   if(token!==epoch||g('fabioPdfDialog').hidden)return false;
   const p=await pdf.getPage(pagina);
@@ -1878,7 +1881,8 @@ async function desenharPDF(doc,client,token,refazer=false){
   if(!ctx)throw Error('Visualização PDF indisponível no aparelho.');
   await p.render({canvasContext:ctx,viewport:view,transform:shrink<1?[shrink,0,0,shrink,0,0]:undefined}).promise;
   if(token!==epoch)return false;
-  area.appendChild(canvas);
+  if(refazer&&anteriores[pagina-1]?.parentNode===area)area.replaceChild(canvas,anteriores[pagina-1]);
+  else area.appendChild(canvas);
  }
  if(client&&!refazer&&(
   /(?:^|\s)(?:C[oó]d\.?|C[oó]digo(?:s)?)(?=\s|$)/i.test(texto)||
@@ -1888,11 +1892,11 @@ async function desenharPDF(doc,client,token,refazer=false){
  g('fabioNivelZoom').textContent=Math.round(zoom*100)+'%';
  return true;
 }
-async function mudarZoomPDF(target){
+async function mudarZoomPDF(target,ancora=null){
  const value=Math.min(2.5,Math.max(1,Math.round(target*10)/10));
- if(value===zoom||!docAtual||preparando||redesenhando)return;
- zoom=value;redesenhando=true;update();
- try{await desenharPDF(docAtual,modo==='cliente',epoch,true);}
+ if(value===zoom||!docAtual||preparando||redesenhando||pinca)return;
+ zoom=value;redesenhando=true;update();const tokenZoom=epoch;
+ try{await desenharPDF(docAtual,modo==='cliente',tokenZoom,true);if(tokenZoom===epoch&&ancora)reposicionarPinca(ancora);}
  catch(e){display('Zoom indisponível. Use Abrir / imprimir para consultar o PDF.');}
  finally{redesenhando=false;update();ajustarLargura();}
 }
@@ -1905,7 +1909,7 @@ let resizeTimer=null,larguraLida=0;
 const ajustarLargura=()=>{
  clearTimeout(resizeTimer);resizeTimer=setTimeout(async()=>{
   if(!docAtual||g('fabioPdfDialog').hidden||area.clientWidth===larguraLida)return;
-  if(preparando||redesenhando){ajustarLargura();return;}
+  if(preparando||redesenhando||pinca){ajustarLargura();return;}
   larguraLida=area.clientWidth;redesenhando=true;update();
   try{await desenharPDF(docAtual,modo==='cliente',epoch,true);}catch(e){display('Toque em Ajustar página para refazer a leitura.');}
   finally{redesenhando=false;update();if(area.clientWidth!==larguraLida)ajustarLargura();}
@@ -1913,23 +1917,71 @@ const ajustarLargura=()=>{
 };
 if(typeof ResizeObserver==='function')new ResizeObserver(ajustarLargura).observe(area);
 window.addEventListener('resize',ajustarLargura);
-const distancia=e=>Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
-area.addEventListener('touchstart',e=>{if(e.touches.length===2){distanciaPinch=distancia(e);zoomNoInicio=zoom;}},{passive:true});
-area.addEventListener('touchmove',e=>{
- if(e.touches.length===2&&distanciaPinch>0){
-  e.preventDefault();
-  area.dataset.zoomPendente=String(Math.min(2.5,Math.max(1,zoomNoInicio*distancia(e)/distanciaPinch)));
- }
+let pinca=null,framePinca=0;
+const centroToques=e=>({x:(e.touches[0].clientX+e.touches[1].clientX)/2,y:(e.touches[0].clientY+e.touches[1].clientY)/2});
+const distanciaToques=e=>Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+const impedirGesto=e=>{if(e.cancelable)e.preventDefault();};
+function reposicionarPinca(a){
+ const pagina=area.querySelectorAll('canvas')[a.indice];if(!pagina)return;
+ const r=pagina.getBoundingClientRect(),caixa=area.getBoundingClientRect();
+ area.scrollLeft+=r.left+a.px*r.width-caixa.left-a.x;
+ area.scrollTop+=r.top+a.py*r.height-caixa.top-a.y;
+}
+function iniciarPinca(centro){
+ if(pinca)return true;
+ if(!docAtual||preparando||redesenhando||g('fabioPdfDialog').hidden)return false;
+ const paginas=[...area.querySelectorAll('canvas')];if(!paginas.length)return false;
+ const caixa=area.getBoundingClientRect();
+ const ponto=centro||{x:caixa.left+caixa.width/2,y:caixa.top+caixa.height/2};
+ let indice=paginas.findIndex(p=>{const r=p.getBoundingClientRect();return ponto.y>=r.top&&ponto.y<=r.bottom;});
+ if(indice<0)indice=0;
+ const r=paginas[indice].getBoundingClientRect();
+ pinca={zoomInicial:zoom,zoomAlvo:zoom,distancia:0,paginas,larguras:paginas.map(p=>p.getBoundingClientRect().width),
+  ancora:{indice,px:(ponto.x-r.left)/r.width,py:(ponto.y-r.top)/r.height,x:ponto.x-caixa.left,y:ponto.y-caixa.top}};
+ area.style.overflowX='auto';area.dataset.pincaAtiva='1';return true;
+}
+function mostrarPinca(){
+ framePinca=0;if(!pinca)return;
+ const fator=pinca.zoomAlvo/pinca.zoomInicial;
+ pinca.paginas.forEach((p,i)=>{p.style.width=(pinca.larguras[i]*fator)+'px';});
+ reposicionarPinca(pinca.ancora);g('fabioNivelZoom').textContent=Math.round(pinca.zoomAlvo*100)+'%';
+}
+function moverPinca(fator,centro){
+ if(!pinca||!Number.isFinite(fator)||fator<=0)return;
+ pinca.zoomAlvo=Math.min(2.5,Math.max(1,pinca.zoomInicial*fator));
+ if(centro){const r=area.getBoundingClientRect();pinca.ancora.x=centro.x-r.left;pinca.ancora.y=centro.y-r.top;}
+ if(!framePinca)framePinca=requestAnimationFrame(mostrarPinca);
+}
+function terminarPinca(cancelar=false){
+ if(!pinca)return;
+ if(framePinca){cancelAnimationFrame(framePinca);framePinca=0;}mostrarPinca();
+ const anterior=pinca;pinca=null;delete area.dataset.pincaAtiva;
+ const alvo=cancelar?anterior.zoomInicial:Math.round(anterior.zoomAlvo*10)/10;
+ if(cancelar||alvo===zoom){
+  anterior.paginas.forEach((p,i)=>{p.style.width=zoom===1?'100%':anterior.larguras[i]+'px';});
+  area.style.overflowX=zoom>1?'auto':'hidden';reposicionarPinca(anterior.ancora);g('fabioNivelZoom').textContent=Math.round(zoom*100)+'%';
+ }else mudarZoomPDF(alvo,anterior.ancora);
+}
+area.addEventListener('touchstart',e=>{
+ if(e.touches.length!==2)return;impedirGesto(e);
+ if(iniciarPinca(centroToques(e)))pinca.distancia=distanciaToques(e);
 },{passive:false});
-area.addEventListener('touchend',e=>{
- if(e.touches.length<2&&distanciaPinch){
-  distanciaPinch=0;const z=Number(area.dataset.zoomPendente||zoom);delete area.dataset.zoomPendente;
-  mudarZoomPDF(z);
- }
-});
+area.addEventListener('touchmove',e=>{
+ if(e.touches.length!==2)return;impedirGesto(e);
+ if(!pinca&&!iniciarPinca(centroToques(e)))return;
+ if(!pinca.distancia)pinca.distancia=distanciaToques(e);
+ moverPinca(distanciaToques(e)/pinca.distancia,centroToques(e));
+},{passive:false});
+area.addEventListener('touchend',e=>{if(pinca&&e.touches.length<2){impedirGesto(e);terminarPinca();}},{passive:false});
+area.addEventListener('touchcancel',()=>terminarPinca(true));
+// Safari/iPhone também pode entregar GestureEvent no lugar da sequência completa de TouchEvent.
+area.addEventListener('gesturestart',e=>{impedirGesto(e);},{passive:false});
+area.addEventListener('gesturechange',e=>{impedirGesto(e);if(!pinca)iniciarPinca();moverPinca(Number(e.scale));},{passive:false});
+area.addEventListener('gestureend',e=>{impedirGesto(e);if(pinca){if(Number.isFinite(e.scale))moverPinca(e.scale);terminarPinca();}},{passive:false});
 
 async function abrir(id,fotosSelecionadas=null){
  const os=source(id);if(!os||preparando)return;
+ terminarPinca(true);
  if(!(window.__fabioFilaNavegacao||[]).includes(id)){
   window.__fabioFilaNavegacao=(window.__fabioFiltradosIds||[]).includes(id)?window.__fabioFiltradosIds.slice():[id];
  }
@@ -2001,7 +2053,7 @@ window.fabioPrepararClienteSeguro=async id=>{
  return doc;
 };
 g('fabioDocConferi').addEventListener('change',update);
-const interromper=()=>{epoch++;ultimoDocumento=null;docAtual=null;paginasValidas=false;g('fabioDocPaginas').replaceChildren();};
+const interromper=()=>{terminarPinca(true);epoch++;ultimoDocumento=null;docAtual=null;paginasValidas=false;g('fabioDocPaginas').replaceChildren();};
 g('fabioPdfFechar').addEventListener('click',interromper,true);
 function download(){
  if(!docAtual)return;

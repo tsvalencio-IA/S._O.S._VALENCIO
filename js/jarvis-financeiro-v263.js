@@ -409,6 +409,19 @@
       const out=old.apply(this,arguments);
       ensureCategoryField();
       const f=id?getFin().find(x=>String(x.id)===String(id)):null;
+      let pagamento=byId('finBoletoPagamento');
+      if(!pagamento&&byId('finNota')){
+        pagamento=D.createElement('div');pagamento.id='finBoletoPagamento';pagamento.className='form-group';
+        const label=D.createElement('label');label.className='j-label';label.htmlFor='finBoletoLinhaDigitavel';label.textContent='Linha digitável / código de barras para pagamento';
+        const input=D.createElement('textarea');input.id='finBoletoLinhaDigitavel';input.className='j-textarea';input.rows=3;input.inputMode='numeric';input.style.fontSize='16px';
+        pagamento.append(label,input);byId('finNota').closest('.form-group').insertAdjacentElement('beforebegin',pagamento);
+      }
+      if(pagamento){
+        pagamento.hidden=!W.financeiroPodeAbrirBoleto?.(f);
+        pagamento.style.display=pagamento.hidden?'none':'';
+        byId('finBoletoLinhaDigitavel').value=W.thiaBoletoPagamento?.ler(f)?.valor || '';
+        byId('finBoletoLinhaDigitavel').dataset.boletoValorInicial=byId('finBoletoLinhaDigitavel').value.trim();
+      }
       const sel=byId('finCategoria');
       if(sel){
         sel.value=f?categoryOf(f):(byId('finTipo')?.value==='Entrada'?'receita':'outros');
@@ -446,11 +459,17 @@
         updatedAt:new Date().toISOString()
       };
       const id=val('finId');
+      if(id&&byId('finBoletoPagamento')&&!byId('finBoletoPagamento').hidden&&byId('finBoletoLinhaDigitavel')&&W.financeiroPodeAbrirBoleto?.(getFin().find(f=>String(f.id)===String(id)))){
+        const campoCodigo=byId('finBoletoLinhaDigitavel');
+        if(typeof campoCodigo.dataset.boletoValorInicial==='string'&&val('finBoletoLinhaDigitavel').trim()!==campoCodigo.dataset.boletoValorInicial){
+          payload.boletoLinhaDigitavel=val('finBoletoLinhaDigitavel').trim();
+        }
+      }
       try{
         if(id){
           await W.db.collection('financeiro').doc(id).update(payload);
           W.toast?.('✓ LANÇAMENTO ATUALIZADO');
-          W.audit?.('FINANCEIRO','Editou '+payload.tipo+': '+payload.desc);
+          W.audit?.('FINANCEIRO','Editou '+payload.tipo+': '+payload.desc+(payload.boletoLinhaDigitavel!==undefined?' • alterou o código de pagamento do boleto':''));
         }else{
           payload.createdAt=new Date().toISOString();
           await W.db.collection('financeiro').add(payload);

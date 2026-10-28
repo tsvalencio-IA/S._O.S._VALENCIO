@@ -10,6 +10,22 @@
     const match = str(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
     return match ? match[3] + '/' + match[2] + '/' + match[1] : str(v) || 'Não informado';
   };
+  function codigoPagamento(f) {
+    for(const campo of ['boletoLinhaDigitavel','linhaDigitavel','codigoBarras','boletoCodigoBarras']){
+      const valor=str(f?.[campo]).trim();if(valor)return {valor,origem:'campo',campo};
+    }
+    // Compatibilidade apenas com um código completo digitado como número/observação.
+    // Nunca calcular, completar ou misturar dígitos de NF, datas e valores.
+    for(const campo of ['boletoNumero','obs','nota']){
+      if(campo==='boletoNumero'&&(f?.notaFiscalId||f?.nfId)&&!f?.boletoAgrupado&&!f?.pacoteBoletoId)continue;
+      const valor=str(f?.[campo]).trim();
+      const rotulado=valor.match(/(?:linha\s+digit[aá]vel(?:\s*\/\s*c[oó]digo\s+base)?|c[oó]digo\s+de\s+barras)\s*[:=]\s*([\d .-]+)/i)?.[1]?.trim();
+      const candidato=rotulado || (/^[\d .-]+$/.test(valor)?valor:'');
+      if((rotulado?[44,47,48]:[47,48]).includes(candidato.replace(/\D/g,'').length))return {valor:candidato,origem:'legado',campo};
+    }
+    return null;
+  }
+  W.thiaBoletoPagamento=Object.freeze({ler:codigoPagamento});
   const canOpen = f => !!f && (f.boletoAgrupado === true || f.boletoAgrupadoOrigem === true ||
     f.boletoRealDoPacote === true || f.aguardaBoletoAgrupado === true ||
     /boleto/.test(norm([f.pgto, f.tipoDocumento].join(' '))) ||
@@ -81,6 +97,20 @@
     corpo.replaceChildren(); aviso.textContent = ''; modal.classList.add('open');
     titulo.textContent = record.boletoNumero ? 'BOLETO ' + record.boletoNumero : 'BOLETO CADASTRADO';
     el('p', corpo, record.desc || 'Descrição não informada');
+    const pagamento=el('section',corpo);pagamento.id='boletoFinanceiroPagamento';
+    function mostrarPagamento(dados){
+      pagamento.replaceChildren();el('h3',pagamento,'CÓDIGO PARA PAGAR');
+      const codigo=codigoPagamento(dados);
+      if(!codigo){el('p',pagamento,'Linha digitável não cadastrada neste boleto. Você pode preenchê-la no lápis de edição do lançamento.');return;}
+      const linha=el('textarea',pagamento,null,'j-textarea');linha.value=codigo.valor;linha.readOnly=true;linha.rows=3;
+      linha.style.fontSize='16px';linha.setAttribute('aria-label','Linha digitável / código para pagamento');
+      if(codigo.origem==='legado')el('p',pagamento,'Código encontrado no campo '+(codigo.campo==='boletoNumero'?'Número do boleto':'Observação')+' do cadastro original.');
+      button(pagamento,'COPIAR CÓDIGO PARA PAGAR',async()=>{
+        try{await W.navigator.clipboard.writeText(linha.value.replace(/\D/g,''));if(atual===token)aviso.textContent='Código de pagamento copiado.';}
+        catch(_){linha.focus();linha.select();if(atual===token)aviso.textContent='Código selecionado. Use a opção Copiar do aparelho.';}
+      });
+    }
+    mostrarPagamento(record);
     const grid = el('div', corpo, null, 'bol-fin-grid');
     const fornecedor = array(state().fornecedores).find(f => str(f.id) === str(record.fornecedorId || str(record.vinculo).replace(/^F_/, '')));
     campo(grid, 'Valor deste boleto', money(record.valor)); campo(grid, 'Vencimento', date(record.venc || record.vencimento));
@@ -89,14 +119,6 @@
     if (record.boletoBanco) campo(grid, 'Banco', record.boletoBanco);
     if (record.boletoParcela || record.boletoTotalParcelas) campo(grid, 'Parcela', str(record.boletoParcela || '?') + ' / ' + str(record.boletoTotalParcelas || '?'));
     if (record.pacoteBoletoNumero) campo(grid, 'Pacote', record.pacoteBoletoNumero);
-    if (record.boletoLinhaDigitavel) {
-      el('h3', corpo, 'Linha digitável cadastrada');
-      const linha = el('textarea', corpo, null, 'j-textarea'); linha.value = str(record.boletoLinhaDigitavel); linha.readOnly = true; linha.rows = 3; linha.setAttribute('aria-label', 'Linha digitável cadastrada');
-      button(corpo, 'Copiar linha digitável', async () => {
-        try { await W.navigator.clipboard.writeText(linha.value); if (atual === token) aviso.textContent = 'Linha digitável copiada.'; }
-        catch (_) { linha.focus(); linha.select(); if (atual === token) aviso.textContent = 'Linha selecionada. Use a opção Copiar do aparelho.'; }
-      });
-    }
     const observacoes = [record.nota, record.obs].filter((s, i, all) => s && all.indexOf(s) === i);
     if (observacoes.length) { el('h3', corpo, 'Observações / histórico do cadastro'); observacoes.forEach(s => el('p', corpo, s)); }
     const relacionado = el('section', corpo); const estado = el('p', relacionado, 'Carregando os vínculos do boleto…', 'bol-fin-estado'); estado.setAttribute('role', 'status');
@@ -114,6 +136,7 @@
       })(); memo.set(keyMemo, promise); return promise;
     }
     const ativo = () => atual === token && modal.classList.contains('open') && str(state().tid) === tid;
+    corpo.scrollTop=0;
     modal.querySelector('button')?.focus();
     try {
       let origensExibidas = false;
@@ -132,6 +155,10 @@
       if (record.pacoteBoletoId) {
         const pacote = await ler('pacotes_boletos', record.pacoteBoletoId, 'pacotesBoletos'); if (!ativo()) return;
         if (pacote) {
+          if(!codigoPagamento(record)){
+            const vinculados=array(pacote.boletos).filter(b=>str(b.numero)===str(record.boletoNumero)&&str(b.vencimento)===str(record.venc)&&Number(b.valor)===Number(record.valor));
+            if(vinculados.length===1&&codigoPagamento(vinculados[0]))mostrarPagamento(vinculados[0]);
+          }
           el('h3', relacionado, 'Pacote ' + str(pacote.numero || record.pacoteBoletoNumero || 'cadastrado'));
           origens(relacionado, 'Notas / títulos do pacote', array(pacote.titulos)); origensExibidas = array(pacote.titulos).length > 0;
           el('h3', relacionado, 'Boletos cadastrados no pacote');

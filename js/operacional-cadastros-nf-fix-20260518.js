@@ -438,6 +438,7 @@
     let arr = (Array.isArray(parcelas) ? parcelas : [])
       .map((p, idx) => ({
         numero: p.numero || String(idx + 1).padStart(3, '0'),
+        boletoLinhaDigitavel: String(p.boletoLinhaDigitavel || ''),
         vencimento: p.vencimento || p.venc || hojeISOEdicao(),
         valor: Math.round((Number(p.valor || 0) || 0) * 100) / 100
       }))
@@ -497,7 +498,8 @@
       return;
     }
     const parcelas = titulos.map((f, idx) => ({
-      numero: f.numeroParcela || f.parcela || String(idx + 1).padStart(3, '0'),
+      numero: f.boletoNumero || f.numeroParcela || f.parcela || String(idx + 1).padStart(3, '0'),
+      boletoLinhaDigitavel: f.boletoLinhaDigitavel || '',
       vencimento: String(f.venc || '').slice(0, 10),
       valor: Number(f.valor || 0) || 0
     }));
@@ -1109,6 +1111,10 @@
         motivoEdicaoNF: motivo,
         updatedAt: agora
       };
+      if(!tela.formaAgrupada){
+        payloadTitulo.boletoNumero=p.numero || existente?.boletoNumero || '';
+        payloadTitulo.boletoLinhaDigitavel=p.boletoLinhaDigitavel || '';
+      }
       if (p.ajusteAutomaticoEdicaoNF) payloadTitulo.ajusteAutomaticoEdicaoNF = p.ajusteAutomaticoEdicaoNF;
       if (existente?.id) {
         batch.update(db().collection('financeiro').doc(existente.id), payloadTitulo);
