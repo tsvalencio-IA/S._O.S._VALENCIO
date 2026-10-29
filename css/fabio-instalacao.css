@@ -1,0 +1,23 @@
+/* Instalação do painel do Fábio; mantém a identidade visual S.O.S. Valêncio. */
+#fabioInstalar{display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:normal}
+#fabioInstalar[hidden]{display:none}
+#fabioInstalar img{flex:0 0 26px;border-radius:5px}
+#fabioInstalacao{position:fixed;inset:0;z-index:2147483200;display:flex;align-items:center;justify-content:center;padding:16px;background:#020a15ed;color:#f1f6fc;box-sizing:border-box}
+#fabioInstalacao *{box-sizing:border-box;min-width:0}
+#fabioInstalacao .fabio-instalar-painel{width:min(460px,100%);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;overscroll-behavior:contain;padding:20px;border:1px solid #52799b;border-radius:16px;background:#10243a}
+#fabioInstalacao .fabio-instalar-topo{display:flex;justify-content:space-between;align-items:center;gap:12px}
+#fabioInstalacao h2{font-size:1.2rem;margin:0;overflow-wrap:anywhere}
+#fabioInstalacao button{min-height:46px;padding:10px;font-size:1rem;white-space:normal;touch-action:manipulation}
+#fabioInstalacao .fabio-instalar-identidade{display:flex;align-items:center;gap:14px;margin:20px 0}
+#fabioInstalacao .fabio-instalar-identidade img{width:88px;height:88px;flex:0 0 88px;object-fit:contain}
+#fabioInstalacao .fabio-instalar-identidade strong{display:block;font-size:1.1rem;overflow-wrap:anywhere}
+#fabioInstalacao p{line-height:1.45;color:#c8deef;overflow-wrap:anywhere}
+#fabioInstalacao .fabio-instalar-plataformas{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+#fabioInstalacao .fabio-instalar-plataformas button[aria-pressed=true]{border-color:#68ceff;background:#15567c}
+#fabioInstalacao ol{padding-left:24px;line-height:1.5;margin:16px 0}
+#fabioInstalacao li{padding-left:3px;margin:9px 0;overflow-wrap:anywhere}
+#fabioInstalacao .fabio-instalar-agora{width:100%;background:#087554;border-color:#55d8ac}
+#fabioInstalacao [hidden]{display:none!important}
+#fabioInstalacao button:focus-visible{outline:3px solid #66c5ff;outline-offset:2px}
+@media(max-width:360px){#fabioInstalacao{padding:10px}#fabioInstalacao .fabio-instalar-painel{padding:14px;max-height:calc(100dvh - 20px)}}
+@media print{#fabioInstalar,#fabioInstalacao{display:none!important}}

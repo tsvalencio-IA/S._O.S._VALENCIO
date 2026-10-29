@@ -66,6 +66,12 @@
       #thia-selecao-fotos.thia-fabio .thia-rotulo { min-height:56px; align-items:center; font-size:15px; }
       #thia-selecao-fotos.thia-fabio .thia-rotulo input { width:30px; height:30px; }
       #thia-selecao-fotos.thia-fabio .thia-foto { touch-action:manipulation; }
+      #thia-selecao-fotos.thia-fabio .thia-cabecalho, #thia-selecao-fotos.thia-fabio .thia-controles { flex:0 0 auto; }
+      #thia-selecao-fotos.thia-fabio .thia-grade { grid-auto-rows:max-content; align-items:start; }
+      #thia-selecao-fotos.thia-fabio .thia-foto { display:block; align-self:start; }
+      #thia-selecao-fotos.thia-fabio .thia-ampliar { display:block; width:100%; padding:0; border:0; border-radius:0; background:#07121e; color:#d7ebff; }
+      #thia-selecao-fotos.thia-fabio .thia-ampliar span { display:block; padding:8px; border-bottom:1px solid #52677d; font-size:14px; }
+      #thia-selecao-fotos.thia-fabio .thia-imagem { min-height:125px; }
       #thia-selecao-fotos.thia-fabio * { -webkit-tap-highlight-color:transparent; }
       #thia-selecao-fotos.thia-fabio .thia-rodape .thia-gerar { flex:1 1 100%; }
       @media(max-width:650px){
@@ -75,7 +81,7 @@
         #thia-selecao-fotos.thia-fabio .thia-cabecalho h2 { font-size:18px; }
         #thia-selecao-fotos.thia-fabio .thia-cabecalho p { font-size:14px; }
         #thia-selecao-fotos.thia-fabio .thia-grade { flex:1; grid-template-columns:repeat(2,minmax(0,1fr)); align-content:start; -webkit-overflow-scrolling:touch; }
-        #thia-selecao-fotos.thia-fabio .thia-imagem { height:145px; }
+        #thia-selecao-fotos.thia-fabio .thia-imagem, #thia-selecao-fotos.thia-fabio .thia-sem-previa { height:145px; min-height:145px; }
         #thia-selecao-fotos.thia-fabio .thia-controles { padding:8px 12px; }
         #thia-selecao-fotos.thia-fabio .thia-contador { flex:1 1 100%; margin:0; }
         #thia-selecao-fotos.thia-fabio .thia-rodape { flex-shrink:0; padding:10px 12px max(10px,env(safe-area-inset-bottom)); }
@@ -112,7 +118,7 @@
     titulo.id = 'thia-selecao-fotos-titulo';
     titulo.textContent = opcoes.titulo || 'Escolher fotos para ' + (tipo === 'pdf' ? 'o PDF' : 'a planilha agrupada');
     const instrucoes = D.createElement('p');
-    instrucoes.textContent = opcoes.modoFabio ? 'Toque nas fotos para marcar ou desmarcar.' : 'Marque somente as fotos que deseja incluir. Você também pode gerar o documento sem fotos.';
+    instrucoes.textContent = opcoes.modoFabio ? 'Amplie a foto para conferir. Marque aqui ou no carrossel para incluir no PDF.' : 'Marque somente as fotos que deseja incluir. Você também pode gerar o documento sem fotos.';
     const detalhe = D.createElement('p');
     detalhe.textContent = opcoes.modoFabio ? 'As fotos permanecem na O.S. Fotos do checklist não entram no PDF.' : 'A escolha vale para este documento; as fotos continuam na O.S. Fotos do checklist não são incluídas.';
     cabecalho.append(titulo, instrucoes, detalhe);
@@ -125,6 +131,7 @@
     const grade = D.createElement('div');
     grade.className = 'thia-grade';
     const escolhas = [];
+    let visualizando = false;
     const atualizar = () => {
       let total = 0;
       escolhas.forEach(({ check, cartao }) => {
@@ -137,7 +144,8 @@
     controles.append(botao('Marcar todas', '', () => marcar(true)), botao('Desmarcar todas', '', () => marcar(false)), contador);
 
     fotos.forEach((foto, indice) => {
-      const cartao = D.createElement('label');
+      const podeAmpliar = opcoes.modoFabio && typeof opcoes.visualizarFoto === 'function';
+      const cartao = D.createElement(podeAmpliar ? 'article' : 'label');
       cartao.className = 'thia-foto';
       const img = D.createElement('img');
       img.className = 'thia-imagem';
@@ -151,7 +159,7 @@
         img.replaceWith(aviso);
       }, { once: true });
       img.src = String(foto.url || foto.secure_url || '');
-      const rotulo = D.createElement('span');
+      const rotulo = D.createElement(podeAmpliar ? 'label' : 'span');
       rotulo.className = 'thia-rotulo';
       const check = D.createElement('input');
       check.type = 'checkbox';
@@ -170,7 +178,26 @@
         texto.appendChild(detalheFoto);
       }
       rotulo.append(check, texto);
-      cartao.append(img, rotulo);
+      if (podeAmpliar) {
+        const ampliar = botao('', 'thia-ampliar', () => {
+          visualizando = true;
+          try {
+            const abriu = opcoes.visualizarFoto(indice, {
+              fotos,
+              selecionada: i => !!escolhas[i]?.check.checked,
+              marcar: (i, valor) => { if (escolhas[i]) { escolhas[i].check.checked = !!valor; atualizar(); } },
+              total: () => escolhas.filter(item => item.check.checked).length,
+              aoFechar: () => { visualizando = false; ampliar.focus(); }
+            });
+            if (abriu === false) visualizando = false;
+          } catch (_) { visualizando = false; contador.textContent = 'Não foi possível ampliar. Feche e abra novamente a escolha de fotos.'; }
+        });
+        ampliar.setAttribute('aria-label', 'Ampliar foto ' + (indice + 1));
+        const legendaAmpliar = D.createElement('span');
+        legendaAmpliar.textContent = 'Ampliar foto ' + (indice + 1);
+        ampliar.append(img, legendaAmpliar);
+        cartao.append(ampliar, rotulo);
+      } else cartao.append(img, rotulo);
       grade.appendChild(cartao);
       escolhas.push({ check, cartao, url: String(foto.url || foto.secure_url || '') });
     });
@@ -193,6 +220,7 @@
         resolve(resultado);
       };
       const aoTeclado = evento => {
+        if (visualizando) return;
         if (evento.key === 'Escape') {
           evento.preventDefault();
           evento.stopPropagation();

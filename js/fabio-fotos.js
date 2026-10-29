@@ -19,7 +19,8 @@
     const selecionadas = await W.thiaEscolherFotosDocumento(fotos, 'pdf', {
       titulo: 'Escolher fotos — O.S. ' + str(os.numero || os.numeroOS || id.slice(-6)),
       modoFabio: true,
-      fotosSelecionadas: atuais
+      fotosSelecionadas: atuais,
+      visualizarFoto: (indice, selecao) => abrirCarrossel(id, indice, selecao)
     });
     if (selecionadas === null) return null;
     if (source(id) !== os) throw Error('A O.S. foi atualizada. Confira novamente antes de escolher as fotos.');
@@ -105,11 +106,12 @@
   }
 
   let galeria = null;
-  function abrirCarrossel(id, inicial = 0) {
-    if (galeria) return;
-    const fotos = listar(id), os = source(id); if (!os) return;
+  function abrirCarrossel(id, inicial = 0, selecao = null) {
+    if (galeria) return false;
+    const fotos = selecao?.fotos || listar(id), os = source(id); if (!os) return false;
     const foco = D.activeElement, overflow = D.body.style.overflow;
     const overlay = criar('div', '', null, D.body); overlay.id = 'fabioFotoDialog';
+    if (selecao) overlay.className = 'fabio-foto-selecao';
     overlay.setAttribute('role', 'dialog'); overlay.setAttribute('aria-modal', 'true');
     overlay.setAttribute('aria-labelledby', 'fabioFotoTitulo');
     const painel = criar('div', 'fabio-foto-painel', null, overlay);
@@ -120,18 +122,26 @@
       D.removeEventListener('keydown', teclado, true);
       overlay.remove(); galeria = null; D.body.style.overflow = overflow;
       try { foco?.focus(); } catch (_) {}
+      selecao?.aoFechar?.();
     };
-    const fecharBtn = botao('✕ Fechar fotos', topo, fechar);
+    const fecharBtn = botao(selecao ? '← Voltar à seleção' : '✕ Fechar fotos', topo, fechar);
     const palco = criar('div', 'fabio-foto-palco', null, painel);
     const anterior = botao('←', palco, () => mostrar(indice - 1)); anterior.setAttribute('aria-label', 'Foto anterior');
     const imagem = criar('img', '', null, palco); imagem.alt = 'Foto da O.S.';
     const proxima = botao('→', palco, () => mostrar(indice + 1)); proxima.setAttribute('aria-label', 'Próxima foto');
-    const legenda = criar('div', 'fabio-foto-legenda', null, painel); legenda.setAttribute('aria-live', 'polite');
+    const controlesFoto = selecao ? criar('div', 'fabio-foto-controles-selecao', null, painel) : painel;
+    const legenda = criar('div', 'fabio-foto-legenda', null, controlesFoto); legenda.setAttribute('aria-live', 'polite');
     const posicao = criar('strong', '', '', legenda), descricao = criar('p', '', '', legenda);
-    const acoes = criar('div', 'fabio-foto-acoes', null, painel);
+    const acoes = criar('div', 'fabio-foto-acoes', null, controlesFoto);
+    const marcarPDF = selecao ? botao('', acoes, () => {
+      selecao.marcar(indice, !selecao.selecionada(indice)); atualizarSelecao();
+    }) : null;
+    if (marcarPDF) marcarPDF.className = 'fabio-foto-marcar-pdf';
+    const contadorPDF = selecao ? criar('p', 'fabio-foto-contador-pdf', '', acoes) : null;
+    contadorPDF?.setAttribute('aria-live', 'polite');
     const baixar = botao('↓ Baixar esta foto', acoes, baixarAtual);
     const original = criar('a', '', 'Abrir foto original', acoes); original.target = '_blank'; original.rel = 'noopener noreferrer';
-    const aviso = criar('p', 'fabio-foto-estado', '', painel); aviso.setAttribute('role', 'status');
+    const aviso = criar('p', 'fabio-foto-estado', '', controlesFoto); aviso.setAttribute('role', 'status');
     const miniaturas = criar('div', 'fabio-foto-miniaturas', null, painel);
     let indice = 0, baixando = false, toque = null;
     const thumbs = fotos.map((f, i) => {
@@ -139,6 +149,18 @@
       const img = criar('img', '', null, btn); img.alt = 'Foto ' + (i + 1); img.loading = 'lazy'; img.src = f.url;
       return btn;
     });
+    function atualizarSelecao() {
+      if (!marcarPDF) return;
+      const marcada = selecao.selecionada(indice);
+      marcarPDF.textContent = marcada ? '✓ Incluída no PDF — desmarcar' : 'Incluir esta foto no PDF';
+      marcarPDF.setAttribute('aria-pressed', String(marcada));
+      contadorPDF.textContent = selecao.total() + ' de ' + fotos.length + ' selecionada(s) para o PDF';
+      thumbs.forEach((t, i) => {
+        const incluida = selecao.selecionada(i);
+        t.classList.toggle('fabio-foto-incluida', incluida);
+        t.setAttribute('aria-label', 'Ver foto ' + (i + 1) + (incluida ? ', incluída no PDF' : ', fora do PDF'));
+      });
+    }
     function mostrar(proximoIndice) {
       if (!fotos.length) {
         imagem.hidden = true; posicao.textContent = 'Nenhuma foto anexada diretamente à O.S.';
@@ -151,6 +173,7 @@
       original.href = foto.url; aviso.textContent = '';
       anterior.disabled = proxima.disabled = fotos.length < 2;
       thumbs.forEach((t, i) => t.setAttribute('aria-current', String(i === indice)));
+      atualizarSelecao();
       thumbs[indice]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
     imagem.addEventListener('error', () => { aviso.textContent = 'Prévia indisponível. Tente abrir a foto original.'; });
@@ -192,6 +215,7 @@
     }
     galeria = overlay; D.body.style.overflow = 'hidden';
     D.addEventListener('keydown', teclado, true); mostrar(inicial); fecharBtn.focus();
+    return true;
   }
   W.fabioFotos = Object.freeze({ listar, escolher, resumo, abrirCarrossel, atualizarInternas });
 })(window, document);

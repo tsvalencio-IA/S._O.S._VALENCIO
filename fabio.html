@@ -5,16 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#071222">
 <title>Minha Oficina | Painel Gestor</title>
-<link rel="icon" href="favicon.ico">
+<link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png?v=sosicon-20261015">
+<link rel="manifest" href="fabio.webmanifest?v=20261028.1">
+<link rel="apple-touch-icon" href="assets/icon-192.png?v=sosicon-20261015">
+<meta name="apple-mobile-web-app-title" content="Fábio · SOS">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<script src="js/fabio-instalacao.js?v=20261028.1" defer></script>
+<link rel="stylesheet" href="css/fabio-instalacao.css?v=20261028.1">
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-auth-compat.js"></script>
 <script src="js/config.js"></script>
 <script src="js/os-utils.js?v=26.25.1"></script>
 <script src="js/os-evidencias-export.js"></script>
-<script src="js/os-selecao-fotos-export.js?v=20261027.3-iphone"></script>
-<script src="js/fabio-fotos.js?v=20261027.2-iphone"></script>
-<link rel="stylesheet" href="css/fabio-fotos.css?v=20261027.2-iphone">
+<script src="js/os-selecao-fotos-export.js?v=20261028.4-previas"></script>
+<script src="js/fabio-fotos.js?v=20261028.4-previas"></script>
+<link rel="stylesheet" href="css/fabio-fotos.css?v=20261028.4-previas">
 <style>
 :root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#f1f6fc;background:#071222;color-scheme:dark}
 *{box-sizing:border-box}body{margin:0;min-height:100dvh}button,input{font:inherit}button{cursor:pointer}
@@ -448,7 +455,7 @@ html,body{overflow-x:hidden}
 </style>
 </head>
 <body>
-<header><div><small>S.O.S. VALÊNCIO • VISÃO RÁPIDA DO GESTOR</small><h1>Minha oficina</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button id="fabioVoltarPrincipal" type="button">← Voltar</button><button id="sair" type="button">Sair</button></div></header>
+<header><div><small>S.O.S. VALÊNCIO • VISÃO RÁPIDA DO GESTOR</small><h1>Minha oficina</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button id="fabioInstalar" type="button"><img src="assets/icon-192.png?v=sosicon-20261015" width="26" height="26" alt="">Ícone no celular</button><button id="fabioVoltarPrincipal" type="button">← Voltar</button><button id="sair" type="button">Sair</button></div></header>
 <main>
 <div class="resumo" aria-label="Filtrar por situação">
 <button class="indicador" data-filter="aguardando"><b id="nAguardando">—</b><span>Aguardando</span></button>
