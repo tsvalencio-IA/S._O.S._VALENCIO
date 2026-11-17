@@ -273,9 +273,25 @@
       if (W.__thiaOpenOSState?.token === token && now - W.__thiaOpenOSState.at < 700) return true;
       if (mode === 'edit' && id && modal?.classList.contains('open') && currentId === id) return true;
 
+      // Nunca limpar a ficha atual para tentar abrir outra sem encerrá-la.
+      // O editor só deve abrir uma O.S. cujo ID exista no conjunto carregado.
+      if (modal?.classList.contains('open') && currentId && (mode !== 'edit' || currentId !== id)) {
+        W.toast?.('Outra O.S. está aberta. Salve ou encerre essa ficha antes de abrir uma diferente.', 'warn');
+        return false;
+      }
+      if (mode === 'edit' && (!id || !Array.isArray(W.J?.os) ||
+          !W.J.os.some(o => String(o?.id || '') === id))) {
+        W.toast?.('O.S. não localizada nos dados carregados. Abertura bloqueada para evitar troca de ficha.', 'err');
+        return false;
+      }
       W.__thiaOpenOSState = { token, at: now };
       try {
-        if (typeof W.prepOS === 'function') W.prepOS(mode, id || null);
+        const preparado = typeof W.prepOS === 'function' ? W.prepOS(mode, id || null) : false;
+        if (preparado === false || (mode === 'edit' &&
+            String(D.getElementById('osId')?.value || '').trim() !== id)) {
+          W.toast?.('Identidade da O.S. divergente. Abertura interrompida.', 'err');
+          return false;
+        }
         if (typeof W.abrirModal === 'function') W.abrirModal('modalOS');
         return true;
       } catch (err) {
