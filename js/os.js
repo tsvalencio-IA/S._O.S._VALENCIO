@@ -2618,6 +2618,21 @@ window.atualizarEquipeMecanicosOS = function() {
 
 
 window.prepOS = function(mode, id = null) {
+  // Validar o destino ANTES de limpar qualquer campo ou descartar a base
+  // de concorrência. Uma O.S. ausente jamais pode abrir ficha vazia.
+  const _idSolicitadoOS = String(id || '').trim();
+  const _osSolicitadaOS = mode === 'edit' ?
+    (Array.isArray(J?.os) ? J.os.find(o => String(o?.id || '') === _idSolicitadoOS) : null) : null;
+  if (mode === 'edit' && !_osSolicitadaOS) {
+    window.toast?.('O.S. não encontrada na lista carregada. A ficha atual foi preservada.', 'err');
+    return false;
+  }
+  const _modalOSAberto = document.getElementById('modalOS')?.classList.contains('open');
+  const _idFichaAtualOS = String($('osId')?.value || '').trim();
+  if (_modalOSAberto && _idFichaAtualOS && (mode !== 'edit' || _idFichaAtualOS !== _idSolicitadoOS)) {
+    window.toast?.('Feche ou salve a O.S. atual antes de abrir outra. Nenhum dado foi descartado.', 'warn');
+    return false;
+  }
   window.OSOperacional.open(null);
   window._osSessaoReabertura = null;
   ['osId', 'osPlaca', 'osPlacaView', 'osPrefixo', 'osVeiculo', 'osCliente', 'osCelular', 'osCpf', 'osDiagnostico', 'osRelato', 'osDescricao', 'chkObs', 'osKm', 'osData', 'osPrisma'].forEach(f => { if ($(f)) $(f).value = ''; });
@@ -2688,8 +2703,8 @@ window.prepOS = function(mode, id = null) {
   }
 
   if (mode === 'edit' && id) {
-    const o = J.os.find(x => x.id === id);
-    if (!o) return;
+    const o = _osSolicitadaOS;
+    if (!o) return false;
     // Marcador local, sem escrita ao apenas visualizar. Ao SALVAR, registra
     // a reabertura de uma O.S. encerrada sem apagar peças/serviços existentes.
     window._osSessaoReabertura = /^(entregue|concluido|concluído|finalizado|faturado|pronto)$/i.test(String(o.status || '').trim())
@@ -2713,6 +2728,8 @@ window.prepOS = function(mode, id = null) {
     }
     if ($('osVeiculo')) $('osVeiculo').dataset.osVeiculoSalvo = _veiculoVinculadoOS;
     setTimeout(() => {
+      // Uma resposta tardia da O.S. A não pode preencher a ficha da O.S. B.
+      if (String($('osId')?.value || '') !== String(o.id)) return;
       if ($('osCliente') && _clienteVinculadoOS && !$('osCliente').value) $('osCliente').value = _clienteVinculadoOS;
       if (typeof window.filtrarVeiculosOS === 'function') window.filtrarVeiculosOS({ preservarVeiculoId: _veiculoVinculadoOS, osFallback: o, origem: 'abrirOSEditFallback' });
       if ($('osVeiculo') && _veiculoVinculadoOS) $('osVeiculo').value = _veiculoVinculadoOS;
