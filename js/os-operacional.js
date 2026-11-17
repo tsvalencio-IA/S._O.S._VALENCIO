@@ -47,6 +47,31 @@
     }
     return {patch,conflicts};
   }
+  // Evita perda de dados em gravacoes de fichas parciais ou importacoes CILIA.
+  // A remocao intencional requer fluxo distinto, autorizado e auditavel.
+  function preservarRegistrosOS(current, proposed) {
+    const erros = [];
+    const chave = (campo, item) => {
+      if (campo === 'media') return String(typeof item === 'string' ? item : item?.url || item?.secure_url || item?.name || '').trim();
+      const descricao = String(item?.desc || item?.descricao || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+      const codigo = String(item?.codigo || item?.codigoInterno || item?.codigoTabela || '').trim();
+      return [codigo,descricao,String(item?.ciliaPieceIndex ?? '')].join('|');
+    };
+    for (const campo of ['pecas','servicos','media']) {
+      const anterior = current?.[campo], novo = proposed?.[campo];
+      if (!Array.isArray(anterior) || !Array.isArray(novo) || !anterior.length) continue;
+      const contagem = new Map();
+      for (const item of novo) { const id=chave(campo,item); contagem.set(id,(contagem.get(id)||0)+1); }
+      let removidos=0;
+      for (const item of anterior) {
+        const id=chave(campo,item), quantidade=contagem.get(id)||0;
+        if (quantidade>0) contagem.set(id,quantidade-1); else removidos+=1;
+      }
+      if (removidos) erros.push({campo,rotulo:'Integridade: '+campo,base:{quantidade:anterior.length},atual:{quantidade:anterior.length},proposta:{quantidade:novo.length,perdas:removidos}});
+    }
+    return erros;
+  }
+
   function notice(tx, ref, ctx, osId, conflicts, kind) {
     const a = actor(ctx.session);
     const value = {tenantId:ctx.session.tid,tipo:'conflito_os',estado:'pendente',osId,origem:ctx.kind || 'jarvis',tipoConflito:kind,
@@ -197,6 +222,11 @@
           if (!op) throw Error('Gravação sem O.S.');
           if (!snapshot.exists) { for(const x of ops) x.method==='set' ? tx.set(x.ref,x.data,x.options || {}) : tx.update(x.ref,x.data); return {os:{id:osRef.id,...op.data}}; }
           const ignored = equal(op.data.execucaoItens,base.execucaoItens) ? ['execucaoItens'] : [];
+          const perdas = preservarRegistrosOS(current,op.data);
+          if (perdas.length) {
+            notice(tx,alert,ctx,osRef.id,perdas,'integridade');
+            return {integridadeBloqueada:true};
+          }
           const m = merge(base,current,op.data,ignored);
           if (m.conflicts.length) { notice(tx,alert,ctx,osRef.id,m.conflicts,'ficha'); return {conflict:true}; }
           if(ctx.prepare)Object.assign(m.patch,ctx.prepare({...current,...m.patch}));
@@ -216,6 +246,7 @@
           }
           return {os:{id:osRef.id,...current,...m.patch,timeline:[...(current.timeline || []),...additions]}};
         });
+        if (result.integridadeBloqueada) { const e=Error('Gravação bloqueada: peças, serviços ou fotos já cadastrados seriam removidos. Confira a ficha com o gestor.');e.code='os-integridade';throw e; }
         if (result.conflict) throw conflictError();
         const osWrite=ops.find(x=>x.ref.path===osRef.path);
         if(ctx.isSentinel && Object.values(osWrite?.data||{}).some(ctx.isSentinel)){
